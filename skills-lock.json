@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "dsp": {
+      "source": "shortwavlabs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/dsp/SKILL.md",
+      "computedHash": "d47c813510de3c5f13cfba78e55fbc0f39af324befe9ea662a09cff27bbd61c6"
+    },
+    "juce-build-release": {
+      "source": "danielraffel/juce-agent-toolkit",
+      "sourceType": "github",
+      "skillPath": "skills/juce-build-release/SKILL.md",
+      "computedHash": "ba8ce08d83a167d4786ef7102717a7668967609a5dd09955d4f71d4735b08d06"
+    },
+    "juce-ci-release": {
+      "source": "danielraffel/juce-agent-toolkit",
+      "sourceType": "github",
+      "skillPath": "skills/juce-ci-release/SKILL.md",
+      "computedHash": "9b6be9b4adeebba840d9b14bf5499ef3168fb301f693d62cbf056f9b543c0b4d"
+    },
+    "juce-plugin": {
+      "source": "shortwavlabs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/juce-plugin/SKILL.md",
+      "computedHash": "ed52d906ec17959d3549c44c52e974e8523acb578c440368d601d659127ab506"
+    }
+  }
+}
