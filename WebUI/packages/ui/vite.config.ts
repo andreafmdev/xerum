@@ -12,7 +12,7 @@ export default defineConfig({
       tsconfigPath: "./tsconfig.json",
       bundleTypes: false,
       entryRoot: "src",
-      exclude: ["**/*.test.*", "**/*.stories.*", "src/test/**", ".storybook/**", "vite.config.ts"],
+      exclude: ["**/*.test.*", "**/*.stories.*", "src/test/**", ".storybook/**", "vite.config.ts", "vitest.config.ts"],
     }),
   ],
   resolve: { alias: { "@": resolve(__dirname, "src") } },
