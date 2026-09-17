@@ -16,15 +16,15 @@ add_subdirectory(external/JUCE)
 include(cmake/CompilerWarnings.cmake)
 
 juce_add_plugin(SerumStyleSynth
-    COMPANY_NAME "TestJuce"
-    BUNDLE_ID "com.testjuce.serumstylesynth"
+    COMPANY_NAME "Xerum"
+    BUNDLE_ID "com.xerum.serumstylesynth"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD TRUE
-    PLUGIN_MANUFACTURER_CODE Tjuc
+    PLUGIN_MANUFACTURER_CODE Xeru
     PLUGIN_CODE Ss01
     FORMATS AU VST3 Standalone
     PRODUCT_NAME "SerumStyleSynth"
