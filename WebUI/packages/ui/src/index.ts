@@ -11,3 +11,4 @@ export { Select, type SelectOption, type SelectProps } from "@/components/Select
 export { Tabs, type TabItem, type TabsProps } from "@/components/Tabs/Tabs";
 export { SectionHeader, type SectionHeaderProps } from "@/components/SectionHeader/SectionHeader";
 export { Panel, type PanelProps } from "@/components/Panel/Panel";
+export { WavetableDisplay, frameIndex, type WavetableDisplayProps } from "@/components/WavetableDisplay/WavetableDisplay";
