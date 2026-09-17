@@ -20,7 +20,7 @@ export function Panel({ title, tone, actions, children, className }: PanelProps)
       data-slot="panel"
       size="sm"
       className={cn(
-        "gap-2 rounded-lg border-t-2 border-t-(--tone) bg-surface-1 py-2 ring-border",
+        "gap-2 overflow-visible rounded-lg border-t-2 border-t-(--tone) bg-surface-1 py-2 ring-border",
         className,
       )}
       style={toneStyle(tone)}

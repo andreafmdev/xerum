@@ -53,3 +53,11 @@ export const Tones: Story = {
   ),
 };
 export const Untitled: Story = { args: { title: undefined }, render: (args) => <Panel {...args}><span className="text-xs">no header</span></Panel> };
+export const UntitledWithKnob: Story = {
+  args: { title: undefined },
+  render: (args) => (
+    <Panel {...args}>
+      <Knob value={0.5} onChange={() => {}} label="amt" />
+    </Panel>
+  ),
+};

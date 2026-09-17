@@ -23,4 +23,10 @@ describe("Panel", () => {
     render(<Panel title="Env" actions={<button>reset</button>}>x</Panel>);
     expect(screen.getByRole("button", { name: "reset" })).toBeInTheDocument();
   });
+
+  it("allows children to overflow the panel bounds", () => {
+    render(<Panel>x</Panel>);
+    expect(screen.getByTestId("panel")).toHaveClass("overflow-visible");
+    expect(screen.getByTestId("panel")).not.toHaveClass("overflow-hidden");
+  });
 });
