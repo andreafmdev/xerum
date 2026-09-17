@@ -20,7 +20,7 @@ export function Toggle({ checked, onChange, label, tone, disabled = false, class
     <div
       data-testid="toggle"
       data-slot="toggle"
-      className={cn("inline-flex items-center gap-2", disabled && "opacity-50", className)}
+      className={cn("inline-flex items-center gap-2", className)}
       style={toneStyle(tone)}
     >
       <Switch
@@ -38,6 +38,7 @@ export function Toggle({ checked, onChange, label, tone, disabled = false, class
           className={cn(
             "cursor-pointer text-2xs uppercase tracking-wider select-none",
             checked ? "text-(--tone)" : "text-muted-foreground",
+            disabled && "opacity-50",
           )}
         >
           {label}

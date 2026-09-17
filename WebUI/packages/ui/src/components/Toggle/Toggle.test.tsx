@@ -29,6 +29,8 @@ describe("Toggle", () => {
     render(<Toggle checked={false} onChange={onChange} label="Sync" disabled />);
     await userEvent.click(screen.getByRole("switch"));
     expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByTestId("toggle")).not.toHaveClass("opacity-50");
+    expect(screen.getByText("Sync")).toHaveClass("opacity-50");
   });
 
   it("sets --tone", () => {
