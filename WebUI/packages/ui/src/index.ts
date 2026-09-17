@@ -8,3 +8,4 @@ export { Button, buttonVariants, type ButtonProps } from "@/components/Button/Bu
 export { Toggle, type ToggleProps } from "@/components/Toggle/Toggle";
 export { ValueReadout, type ValueReadoutProps } from "@/components/ValueReadout/ValueReadout";
 export { Select, type SelectOption, type SelectProps } from "@/components/Select/Select";
+export { Tabs, type TabItem, type TabsProps } from "@/components/Tabs/Tabs";
