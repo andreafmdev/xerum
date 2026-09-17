@@ -25,6 +25,31 @@ function Harness({ initial = 0.5, onChange, ...opts }: HarnessProps) {
   );
 }
 
+function LateMountHarness({ initial = 0.5, onChange, ...opts }: HarnessProps) {
+  const [show, setShow] = useState(false);
+  const [value, setValue] = useState(initial);
+  const { ref, handlers, dragging } = useDragValue({
+    value,
+    onChange: (v) => {
+      setValue(v);
+      onChange?.(v);
+    },
+    ...opts,
+  });
+  return (
+    <div>
+      <button type="button" onClick={() => setShow(true)}>
+        mount
+      </button>
+      {show && (
+        <div ref={ref} data-testid="target" data-dragging={dragging} tabIndex={0} {...handlers}>
+          {value.toFixed(4)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const target = () => screen.getByTestId("target");
 const drag = (fromY: number, toY: number, extra: Record<string, unknown> = {}) => {
   fireEvent.pointerDown(target(), { clientY: fromY, clientX: 0, button: 0, pointerId: 1 });
@@ -157,5 +182,13 @@ describe("useDragValue", () => {
     fireEvent.pointerDown(target(), { clientY: 100, clientX: 0, button: 2, pointerId: 1 });
     fireEvent.pointerMove(target(), { clientY: 0, clientX: 0, pointerId: 1 });
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("attaches the wheel listener to an element mounted later", () => {
+    const onChange = vi.fn();
+    render(<LateMountHarness initial={0.5} onChange={onChange} step={0.05} />);
+    fireEvent.click(screen.getByRole("button", { name: "mount" }));
+    fireEvent.wheel(target(), { deltaY: -100 });
+    expect(onChange).toHaveBeenLastCalledWith(expect.closeTo(0.55, 5));
   });
 });

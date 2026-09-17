@@ -51,7 +51,7 @@ export function useDragValue({
 }: UseDragValueOptions): UseDragValueResult {
   const [dragging, setDragging] = useState(false);
   const origin = useRef<Origin | null>(null);
-  const elRef = useRef<HTMLElement | null>(null);
+  const [node, setNode] = useState<HTMLElement | null>(null);
 
   // Ultimi valori senza rifare i listener a ogni render.
   const latest = useRef({ value, onChange, disabled, step });
@@ -133,22 +133,24 @@ export function useDragValue({
 
   // Wheel come listener nativo non-passive: React registra `wheel` passive e
   // preventDefault non fermerebbe lo scroll della pagina.
+  // Il nodo è tenuto in state (non in un ref semplice) così l'effetto sotto
+  // riparte quando l'elemento cambia identità (mount tardivo, remount per
+  // `key`, rendering condizionale), anziché leggere una volta sola.
   const ref = useCallback((el: HTMLElement | null) => {
-    elRef.current = el;
+    setNode(el);
   }, []);
 
   useEffect(() => {
-    const el = elRef.current;
-    if (!el) return;
+    if (!node) return;
     const onWheel = (e: WheelEvent) => {
       if (latest.current.disabled) return;
       e.preventDefault();
       const s = e.shiftKey ? latest.current.step / 10 : latest.current.step;
       emit(latest.current.value + (e.deltaY < 0 ? s : -s));
     };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [emit]);
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
+  }, [node, emit]);
 
   return {
     ref,
