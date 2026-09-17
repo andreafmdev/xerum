@@ -232,3 +232,14 @@ Il piano dettagliato viene scritto con la skill `writing-plans` dopo l'approvazi
 - **shadcn CLI in monorepo pnpm**: `components.json` deve stare in `packages/ui`; alias `@/` risolto da `tsconfig.json` del package. Se il CLI non riconosce la struttura, `init --monorepo` non serve (non è un monorepo Next); si configura `components.json` a mano.
 - **Tailwind v4 in lib mode**: `@tailwindcss/vite` deve scansionare solo `packages/ui/src`. Se genera utility non usate o manca qualche classe dinamica, si aggiunge `@source` esplicito in `index.css`.
 - **Font licenza**: IBM Plex è OFL, redistribuzione in `fonts/` ammessa.
+
+## 10. Addendum 2026-09-18 — decisioni fissate dai probe di fattibilità
+
+Verificate in un progetto usa-e-getta prima di scrivere il piano (`docs/superpowers/plans/2026-09-17-ui-library.md`):
+
+- **Fader custom** (track + `useDragValue`), non Base UI Slider: Base UI usa Shift = passo grande, opposto a §5.1. Chiude il rischio in §9.
+- `useDragValue` espone anche `ref` (listener `wheel` nativo non-passive: React registra `wheel` come passive) e `onPointerMove/Up/Cancel`; opzione `axis: "y" | "x"` per il Fader orizzontale.
+- I token estensione (§4.2) stanno in `@theme static`: Tailwind v4 omette dal CSS le variabili non usate, design-sync deve vederle tutte.
+- I font stanno in `src/fonts/` e vengono inlineati base64 in `dist/ui.css` (Vite lib mode inlinea sempre gli asset). Sostituisce `packages/ui/fonts/` + `dist/fonts/` di §3 e §6.
+- `pnpm-workspace.yaml` richiede `onlyBuiltDependencies: [esbuild]`, altrimenti `shadcn add` fallisce (`ERR_PNPM_IGNORED_BUILDS`).
+- `components.json` scritto a mano (non `shadcn init --template`, che creerebbe un progetto nuovo); il CLI v4 usa il package `cn` per `cn()` e richiede `@import "shadcn/tailwind.css"` (custom variant `data-checked` ecc.) e `tw-animate-css`.
