@@ -1,0 +1,26 @@
+# Build
+build/
+cmake-build-*/
+out/
+.cache/
+
+# IDE / OS
+.idea/
+.vscode/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+*.user
+*.suo
+
+# JUCE / plugins
+*_artefacts/
+*.dSYM/
+
+# WebUI
+WebUI/node_modules/
+WebUI/dist/
+
+# Misc
+*.log
+compile_commands.json
