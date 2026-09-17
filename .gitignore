@@ -18,8 +18,11 @@ xcuserdata/
 *.dSYM/
 
 # WebUI
+node_modules/
 WebUI/node_modules/
 WebUI/dist/
+WebUI/packages/ui/dist/
+WebUI/packages/ui/storybook-static/
 
 # Misc
 *.log

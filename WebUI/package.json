@@ -3,19 +3,26 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.15.1",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ui:build": "pnpm --filter @xerum/ui build",
+    "ui:test": "pnpm --filter @xerum/ui test",
+    "ui:storybook": "pnpm --filter @xerum/ui storybook"
   },
   "dependencies": {
+    "@xerum/ui": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "~5.7.2",
     "vite": "^6.0.0"
   }
