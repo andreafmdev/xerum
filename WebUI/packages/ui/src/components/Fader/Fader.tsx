@@ -44,6 +44,7 @@ export function Fader({
   return (
     <div
       data-slot="fader"
+      data-dragging={dragging}
       className={cn("group/fader flex items-center gap-2", vertical ? "flex-col" : "flex-row", disabled && "opacity-50", className)}
       style={toneStyle(tone)}
     >

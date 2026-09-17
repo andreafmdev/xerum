@@ -43,4 +43,14 @@ describe("Fader", () => {
     fireEvent.keyDown(screen.getByRole("slider"), { key: "End" });
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("marks the root as dragging while the pointer is down", () => {
+    render(<Fader value={0.5} onChange={() => {}} />);
+    const slider = screen.getByRole("slider");
+    const root = slider.parentElement as HTMLElement;
+    fireEvent.pointerDown(slider, { clientY: 0, clientX: 0, button: 0, pointerId: 1 });
+    expect(root).toHaveAttribute("data-dragging", "true");
+    fireEvent.pointerUp(slider, { clientY: 0, clientX: 0, pointerId: 1 });
+    expect(root).toHaveAttribute("data-dragging", "false");
+  });
 });
