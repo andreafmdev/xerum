@@ -23,6 +23,14 @@ describe("Knob", () => {
     expect(screen.getByTestId("knob-readout")).toHaveTextContent("50%");
   });
 
+  it("keeps the value readable at rest, without a hover-only overlay", () => {
+    render(<Knob value={0.4} onChange={() => {}} label="Cutoff" />);
+    const readout = screen.getByTestId("knob-readout");
+    expect(readout).toBeVisible();
+    expect(readout.className).not.toContain("opacity-0");
+    expect(readout).toHaveTextContent("40%");
+  });
+
   it("changes value with the keyboard", () => {
     const onChange = vi.fn();
     render(<Knob value={0.5} onChange={onChange} label="Cutoff" />);

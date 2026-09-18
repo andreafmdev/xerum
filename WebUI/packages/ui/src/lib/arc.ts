@@ -9,7 +9,8 @@ export function knobAngles(value: number, bipolar: boolean): { start: number; en
   return at >= KNOB_CENTRE ? { start: KNOB_CENTRE, end: at } : { start: at, end: KNOB_CENTRE };
 }
 
-function polar(cx: number, cy: number, r: number, deg: number): [number, number] {
+/** Punto sul cerchio (cx, cy, r) all'angolo `deg`, arrotondato a 3 decimali. */
+export function polar(cx: number, cy: number, r: number, deg: number): [number, number] {
   const a = (deg * Math.PI) / 180;
   return [round(cx + r * Math.cos(a)), round(cy + r * Math.sin(a))];
 }
