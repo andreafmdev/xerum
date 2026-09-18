@@ -1,6 +1,13 @@
 #include "plugin/PluginProcessor.h"
 #include "plugin/PluginEditor.h"
 
+namespace
+{
+// Headroom di +6 dB in guadagno lineare. Calcolato una sola volta all'avvio perché
+// decibelsToGain() usa std::pow: niente libm sul thread audio.
+const float kHeadroomGain = juce::Decibels::decibelsToGain (6.0f);
+} // namespace
+
 SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
@@ -48,7 +55,7 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     if (volumeParam_ != nullptr)
     {
         const float v = volumeParam_->load (std::memory_order_relaxed);
-        engine_->setMasterGainLinear (v <= 0.0f ? 0.0f : v * juce::Decibels::decibelsToGain (6.0f)); // v è lineare 0..1; +6 dB di headroom
+        engine_->setMasterGainLinear (v <= 0.0f ? 0.0f : v * kHeadroomGain); // v è lineare 0..1; +6 dB di headroom
     }
 
     // "level" è riservato al mix degli oscillatori (fase 3): lo leggiamo già qui per tenere il puntatore vivo.
