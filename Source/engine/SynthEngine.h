@@ -51,6 +51,7 @@ private:
     EngineSpec spec_ {};
     EngineParams params_ {};
     float masterGain_ { 1.0f };
+    float previousMasterGain_ { 1.0f }; // per rampare il gain fra un blocco e l'altro, vedi process()
     std::atomic<const dsp::MipTable*> pendingWavetable_ { nullptr };
 };
 } // namespace engine

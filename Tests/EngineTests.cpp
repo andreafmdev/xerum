@@ -348,6 +348,51 @@ struct EngineParamsTests final : juce::UnitTest
             expect (maxJump < 0.25f, "salto massimo fra campioni " + juce::String (maxJump));
         }
 
+        beginTest ("un salto di volume non produce un gradino nel segnale");
+        {
+            // Stesso schema del test di cutoff sopra, stessa trappola: il confine da guardare
+            // e' fra l'ultimo campione del blocco vecchio e il primo del blocco nuovo, non un
+            // punto qualunque dentro il blocco rampato.
+            engine::SynthEngine synth;
+            prepareEngine (synth, store);
+
+            auto p = defaultParams();
+            synth.setParams (p);
+            synth.setMasterGainLinear (0.2f);
+
+            juce::AudioBuffer<float> buffer (2, 128);
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            buffer.clear();
+            synth.process (buffer, midi);
+            midi.clear();
+
+            float lastSampleBeforeJump = buffer.getSample (0, buffer.getNumSamples() - 1);
+            for (int b = 0; b < 20; ++b)
+            {
+                buffer.clear();
+                synth.process (buffer, midi);
+                lastSampleBeforeJump = buffer.getSample (0, buffer.getNumSamples() - 1);
+            }
+
+            // Salto di guadagno grosso apposta (0.2 -> 1.0, x5): senza rampa il gradino al
+            // confine di blocco e' proporzionale all'ampiezza del segnale in quel punto per la
+            // differenza di gain: misurato disattivando temporaneamente applyGainRamp (sostituita
+            // con applyGain(masterGain_) come nel codice originale), il salto al confine arriva a
+            // ~0.065; con la rampa reale resta sotto ~0.004 (dominato dalla pendenza naturale
+            // dell'onda, non dal gradino di volume). La soglia sta a meta' strada.
+            synth.setMasterGainLinear (1.0f);
+
+            buffer.clear();
+            synth.process (buffer, midi);
+
+            float maxJump = std::abs (buffer.getSample (0, 0) - lastSampleBeforeJump);
+            for (int i = 1; i < buffer.getNumSamples(); ++i)
+                maxJump = juce::jmax (maxJump, std::abs (buffer.getSample (0, i) - buffer.getSample (0, i - 1)));
+
+            expect (maxJump < 0.03f, "salto massimo fra campioni " + juce::String (maxJump));
+        }
+
         beginTest ("oct/semi: il valore normalizzato si arrotonda, non si tronca");
         {
             // Combinazioni segnalate dalla review come sbagliate con un cast troncante

@@ -98,8 +98,12 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
     if (samplePos < numSamples)
         voices_.render (left + samplePos, right + samplePos, numSamples - samplePos);
 
-    if (masterGain_ != 1.0f)
-        buffer.applyGain (masterGain_);
+    // Rampato, non applicato di scatto: spec 6.4 elenca volume fra i cinque bersagli di
+    // smoothing (cutoff, wtpos, level, volume, pan). Un salto a gain di blocco produrrebbe lo
+    // stesso zipper noise che gli altri quattro evitano gia' — muovere il fader master o
+    // automatizzarlo con lo step precedente avrebbe prodotto un gradino udibile a ogni blocco.
+    buffer.applyGainRamp (0, numSamples, previousMasterGain_, masterGain_);
+    previousMasterGain_ = masterGain_;
 
     for (int ch = 2; ch < numChannels; ++ch)
         buffer.clear (ch, 0, numSamples);
