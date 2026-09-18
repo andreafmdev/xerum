@@ -1,7 +1,7 @@
 // Hook che collegano l'UI React al Backend: un ParamHandle per ogni parametro
 // (float/bool/choice/int), lo stato condiviso della mod matrix/arp e i meter.
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { PARAM_SPECS, type ParamId } from "../synth/params.generated";
 import { formatValue, fromIndex, fromInt, paramLabel, toIndex, toInt } from "../synth/mapping";
 import type { BridgeState, MeterFrame, ModAssignment, ModSource } from "./backend";
@@ -9,7 +9,10 @@ import { useBackend } from "./provider";
 
 function useHandle(id: ParamId) {
   const h = useBackend().param(id);
-  const value = useSyncExternalStore(h.subscribe.bind(h), h.get.bind(h));
+  // Bind memoizzati per handle: senza useMemo, subscribe/get sarebbero nuove funzioni
+  // ad ogni render e useSyncExternalStore si ri-sottoscriverebbe ad ogni commit.
+  const store = useMemo(() => ({ subscribe: (cb: () => void) => h.subscribe(cb), get: () => h.get() }), [h]);
+  const value = useSyncExternalStore(store.subscribe, store.get);
   return { h, value };
 }
 
@@ -98,10 +101,21 @@ export function useBridgeState() {
 export function useMeters(): MeterFrame {
   const backend = useBackend();
   const [frame, setFrame] = useState<MeterFrame>({ in: 0, out: 0, lfo: 0, arpStep: 0 });
+  // Istante dell'ultimo frame applicato: il decay dipende dal tempo trascorso (in
+  // "tick" da 1000/30 ms), non dal numero di eventi ricevuti. Così due copie dello
+  // stesso frame consegnate nello stesso istante (gli unsubscribe sono no-op contro
+  // il backend JUCE vero, i listener possono duplicarsi dopo un remount) applicano
+  // lo stesso decay (≈1, tempo trascorso ≈0) invece di comprimere 0.85 due volte.
+  const at = useRef<number | null>(null);
   useEffect(
-    // Idempotente: riapplicare lo stesso frame due volte (listener duplicati dopo
-    // un remount, bug noto del backend JUCE) lascia il peak hold invariato.
-    () => backend.onMeters((m) => setFrame((p) => ({ in: Math.max(m.in, p.in * 0.85), out: Math.max(m.out, p.out * 0.85), lfo: m.lfo, arpStep: m.arpStep }))),
+    () =>
+      backend.onMeters((m) => {
+        const now = Date.now();
+        const elapsedTicks = at.current === null ? Infinity : (now - at.current) / (1000 / 30);
+        const decay = Math.min(1, Math.pow(0.85, elapsedTicks));
+        at.current = now;
+        setFrame((p) => ({ in: Math.max(m.in, p.in * decay), out: Math.max(m.out, p.out * decay), lfo: m.lfo, arpStep: m.arpStep }));
+      }),
     [backend],
   );
   return frame;

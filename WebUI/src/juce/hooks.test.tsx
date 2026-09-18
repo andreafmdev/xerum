@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { FakeBackend } from "./fake-backend";
@@ -55,13 +55,27 @@ describe("useBridgeState", () => {
 });
 
 describe("useMeters", () => {
-  it("returns the last frame with peak hold", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("returns the last frame with peak hold, decaying by elapsed time", () => {
     const b = new FakeBackend();
     const { result } = renderHook(() => useMeters(), { wrapper: wrap(b) });
     act(() => b.emitMeters({ in: 0.8, out: 0.6, lfo: 0.1, arpStep: 2 }));
     expect(result.current.out).toBe(0.6);
+    act(() => vi.advanceTimersByTime(1000 / 30));   // un tick a 30 Hz
     act(() => b.emitMeters({ in: 0, out: 0, lfo: 0, arpStep: 3 }));
     expect(result.current.out).toBeCloseTo(0.51);   // 0.6 · 0.85
     expect(result.current.arpStep).toBe(3);
+  });
+
+  it("applying the same frame twice at the same instant leaves the hold unchanged", () => {
+    const b = new FakeBackend();
+    const { result } = renderHook(() => useMeters(), { wrapper: wrap(b) });
+    act(() => b.emitMeters({ in: 0.8, out: 0.6, lfo: 0.1, arpStep: 2 }));
+    act(() => b.emitMeters({ in: 0, out: 0, lfo: 0, arpStep: 3 }));   // nessun tempo trascorso
+    const afterFirst = result.current.out;
+    act(() => b.emitMeters({ in: 0, out: 0, lfo: 0, arpStep: 3 }));   // stesso frame, stesso istante
+    expect(result.current.out).toBe(afterFirst);
   });
 });
