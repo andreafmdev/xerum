@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bridge/StateChannel.h"
 #include "bridge/WebRelays.h"
 #include "plugin/PluginProcessor.h"
 
@@ -10,7 +11,7 @@ class SerumStyleSynthAudioProcessorEditor final : public juce::AudioProcessorEdi
 {
 public:
     explicit SerumStyleSynthAudioProcessorEditor (SerumStyleSynthAudioProcessor&);
-    ~SerumStyleSynthAudioProcessorEditor() override = default;
+    ~SerumStyleSynthAudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -23,6 +24,9 @@ private:
     /** Relay dei parametri verso la WebView: dichiarati prima di webView_ perché le
         Options della WebView vengono costruite a partire da loro. */
     bridge::WebRelays relays_;
+
+    /** Canale per lo stato non parametrico (mod matrix, arp): anche lui prima di webView_. */
+    bridge::StateChannel stateChannel_;
 
     juce::WebBrowserComponent webView_;
 

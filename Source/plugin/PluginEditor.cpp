@@ -45,7 +45,8 @@ juce::WebBrowserComponent::Resource makeFallbackIndexHtml()
     return resource;
 }
 
-juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& relays)
+juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& relays,
+                                                  bridge::StateChannel& state)
 {
     auto options = juce::WebBrowserComponent::Options {}
                        .withNativeIntegrationEnabled()
@@ -70,6 +71,9 @@ juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& rela
     // I relay aggiungono a initialisationData la voce di ogni parametro.
     options = relays.applyTo (options);
 
+    // Il canale di stato aggiunge getState / setMods / setArpSteps.
+    options = state.applyTo (options);
+
     return options;
 }
 } // namespace
@@ -78,11 +82,13 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
     SerumStyleSynthAudioProcessor& p)
     : AudioProcessorEditor (&p),
       processorRef_ (p),
-      webView_ (makeWebOptions (relays_)),
+      stateChannel_ (p.getAPVTS(), p.getStateReplacedBroadcaster()),
+      webView_ (makeWebOptions (relays_, stateChannel_)),
       keyboard_ (p.getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard)
 {
     // Gli attachment vanno creati dopo la WebView, mai prima.
     relays_.attach (processorRef_.getAPVTS());
+    stateChannel_.setWebView (&webView_);
 
     addAndMakeVisible (webView_);
     addAndMakeVisible (keyboard_);
@@ -121,6 +127,12 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
     }
     else
         webView_.goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
+}
+
+SerumStyleSynthAudioProcessorEditor::~SerumStyleSynthAudioProcessorEditor()
+{
+    // stateChannel_ è distrutto dopo webView_ (è dichiarato prima): sgancia il puntatore qui.
+    stateChannel_.setWebView (nullptr);
 }
 
 void SerumStyleSynthAudioProcessorEditor::paint (juce::Graphics& g)

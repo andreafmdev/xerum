@@ -14,6 +14,8 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
       apvts_ (*this, nullptr, "PARAMS", params::createParameterLayout()),
       engine_ (std::make_unique<engine::SynthEngine>())
 {
+    state::ensureChildren (apvts_.state);
+
     volumeParam_ = apvts_.getRawParameterValue ("volume");
     levelParam_ = apvts_.getRawParameterValue ("level");
 }
@@ -95,7 +97,13 @@ void SerumStyleSynthAudioProcessor::setStateInformation (const void* data, int s
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts_.state.getType()))
+        {
             apvts_.replaceState (juce::ValueTree::fromXml (*xml));
+
+            // Siamo sul message thread: ricreare i figli mancanti e notificare è sicuro.
+            state::ensureChildren (apvts_.state);
+            stateReplaced_.sendChangeMessage();
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

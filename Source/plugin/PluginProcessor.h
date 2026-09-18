@@ -3,6 +3,7 @@
 #include "engine/MeterFrame.h"
 #include "engine/SynthEngine.h"
 #include "parameters/ParameterLayout.h"
+#include "parameters/StateTree.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -46,11 +47,15 @@ public:
     /** Picchi per blocco pubblicati dal thread audio; letti dal timer dell'editor (task successivo). */
     engine::MeterFrame& getMeters() noexcept { return meters_; }
 
+    /** Notifica che replaceState() ha sostituito l'albero: chi ascolta il ValueTree deve riagganciarsi. */
+    juce::ChangeBroadcaster& getStateReplacedBroadcaster() noexcept { return stateReplaced_; }
+
 private:
     juce::AudioProcessorValueTreeState apvts_;
     juce::MidiKeyboardState keyboardState_;
     std::unique_ptr<engine::SynthEngine> engine_;
     engine::MeterFrame meters_;
+    juce::ChangeBroadcaster stateReplaced_;
 
     // Puntatori grezzi ai valori normalizzati 0..1 dell'APVTS: letti solo con load() sul thread audio.
     std::atomic<float>* volumeParam_ { nullptr };
