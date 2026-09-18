@@ -1,3 +1,7 @@
+/* Ordine dei layer: senza questa riga il @layer base dichiarato più sotto vincerebbe sulle utility
+   quando ui.css è usato da solo (Storybook, Claude Design). Stesso ordine di `@import "tailwindcss"`. */
+@layer theme, base, components, utilities;
+
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";
