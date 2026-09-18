@@ -18,14 +18,20 @@ void SynthEngine::setMasterGainLinear (float gain) noexcept
     masterGain_ = gain;
 }
 
+void SynthEngine::setParams (const EngineParams& p) noexcept
+{
+    params_ = p;
+    voices_.setParams (p);
+}
+
 void SynthEngine::setWavetable (const dsp::MipTable* table) noexcept
 {
     voices_.setWavetable (table);
 }
 
-void SynthEngine::setFramePosition (float normalised) noexcept
+void SynthEngine::setPendingWavetable (const dsp::MipTable* table) noexcept
 {
-    voices_.setFramePosition (normalised);
+    pendingWavetable_.store (table, std::memory_order_release);
 }
 
 void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
@@ -50,6 +56,20 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
 
 void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) noexcept
 {
+    if (params_.bypass)
+    {
+        // E' un sintetizzatore, non c'e' un ingresso da far passare: bypass significa silenzio
+        // e nessuna voce che continua a suonare sotto sotto.
+        voices_.allSoundOff();
+        buffer.clear();
+        return;
+    }
+
+    // Se il message thread ha pubblicato una nuova tavola (wtIndex cambiato), applicarla
+    // qui: siamo sul thread audio, l'unico che può mutare in sicurezza lo stato delle voci.
+    if (const auto* table = pendingWavetable_.exchange (nullptr, std::memory_order_acquire); table != nullptr)
+        voices_.setWavetable (table);
+
     const int numSamples = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
 

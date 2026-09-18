@@ -1,11 +1,36 @@
 #include "plugin/PluginProcessor.h"
 #include "plugin/PluginEditor.h"
+#include "parameters/ParameterMapping.h"
 
 namespace
 {
 // Headroom di +6 dB in guadagno lineare. Calcolato una sola volta all'avvio perché
 // decibelsToGain() usa std::pow: niente libm sul thread audio.
 const float kHeadroomGain = juce::Decibels::decibelsToGain (6.0f);
+
+// Ogni quanto il timer del processore controlla se wtIndex e' cambiato.
+constexpr int kWavetablePollHz = 25;
+
+/** Valore denormalizzato di un parametro, usando la spec già risolta in ParameterTable. */
+float realValue (const params::Spec* spec, const std::atomic<float>* raw) noexcept
+{
+    if (raw == nullptr || spec == nullptr)
+        return 0.0f;
+
+    return params::denormalise (*spec, raw->load (std::memory_order_relaxed));
+}
+
+/** `ftype` è un AudioParameterChoice: il valore grezzo è già l'indice 0/1/2. */
+dsp::StateVariableFilter::Type filterTypeFromChoice (const std::atomic<float>* raw) noexcept
+{
+    const int index = raw != nullptr ? (int) raw->load (std::memory_order_relaxed) : 0;
+    switch (index)
+    {
+        case 1:  return dsp::StateVariableFilter::Type::highPass;
+        case 2:  return dsp::StateVariableFilter::Type::bandPass;
+        default: return dsp::StateVariableFilter::Type::lowPass;
+    }
+}
 } // namespace
 
 SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
@@ -16,25 +41,141 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
 {
     state::ensureChildren (apvts_.state);
 
-    volumeParam_ = apvts_.getRawParameterValue ("volume");
-    levelParam_ = apvts_.getRawParameterValue ("level");
-    wtIndexParam_ = apvts_.getRawParameterValue ("wtIndex");
-    wtposParam_ = apvts_.getRawParameterValue ("wtpos");
+    paramOscOn_ = apvts_.getRawParameterValue ("oscOn");
+    paramWtIndex_ = apvts_.getRawParameterValue ("wtIndex");
+    paramWtpos_ = apvts_.getRawParameterValue ("wtpos");
+
+    paramOct_ = apvts_.getRawParameterValue ("oct");
+    specOct_ = params::find ("oct");
+    paramSemi_ = apvts_.getRawParameterValue ("semi");
+    specSemi_ = params::find ("semi");
+    paramFine_ = apvts_.getRawParameterValue ("fine");
+    specFine_ = params::find ("fine");
+
+    paramLevel_ = apvts_.getRawParameterValue ("level");
+
+    paramFiltOn_ = apvts_.getRawParameterValue ("filtOn");
+    paramFtype_ = apvts_.getRawParameterValue ("ftype");
+    paramSlope_ = apvts_.getRawParameterValue ("slope");
+
+    paramCutoff_ = apvts_.getRawParameterValue ("cutoff");
+    specCutoff_ = params::find ("cutoff");
+    paramRes_ = apvts_.getRawParameterValue ("res");
+    specRes_ = params::find ("res");
+    paramDrive_ = apvts_.getRawParameterValue ("drive");
+    specDrive_ = params::find ("drive");
+    paramKeytrk_ = apvts_.getRawParameterValue ("keytrk");
+    specKeytrk_ = params::find ("keytrk");
+
+    paramAtt_ = apvts_.getRawParameterValue ("att");
+    specAtt_ = params::find ("att");
+    paramDec_ = apvts_.getRawParameterValue ("dec");
+    specDec_ = params::find ("dec");
+    paramSus_ = apvts_.getRawParameterValue ("sus");
+    specSus_ = params::find ("sus");
+    paramRel_ = apvts_.getRawParameterValue ("rel");
+    specRel_ = params::find ("rel");
+    paramEnvVel_ = apvts_.getRawParameterValue ("envVel");
+    specEnvVel_ = params::find ("envVel");
+
+    paramVolume_ = apvts_.getRawParameterValue ("volume");
+    paramPan_ = apvts_.getRawParameterValue ("pan");
+    specPan_ = params::find ("pan");
+    paramBypass_ = apvts_.getRawParameterValue ("bypass");
+
+    jassert (specOct_ != nullptr && specSemi_ != nullptr && specFine_ != nullptr
+             && specCutoff_ != nullptr && specRes_ != nullptr && specDrive_ != nullptr
+             && specKeytrk_ != nullptr && specAtt_ != nullptr && specDec_ != nullptr
+             && specSus_ != nullptr && specRel_ != nullptr && specEnvVel_ != nullptr
+             && specPan_ != nullptr);
+
+    apvts_.addParameterListener ("wtIndex", this);
+    startTimerHz (kWavetablePollHz);
+}
+
+SerumStyleSynthAudioProcessor::~SerumStyleSynthAudioProcessor()
+{
+    stopTimer();
+    apvts_.removeParameterListener ("wtIndex", this);
 }
 
 int SerumStyleSynthAudioProcessor::wavetableIndexFromParam() const noexcept
 {
-    if (wtIndexParam_ == nullptr)
+    if (paramWtIndex_ == nullptr)
         return 0;
 
     // `wtIndex` è un AudioParameterChoice: il valore grezzo è già l'indice.
     return juce::jlimit (0, wavetables_.getNumTables() - 1,
-                         (int) wtIndexParam_->load (std::memory_order_relaxed));
+                         (int) paramWtIndex_->load (std::memory_order_relaxed));
+}
+
+engine::EngineParams SerumStyleSynthAudioProcessor::collectParams() const noexcept
+{
+    engine::EngineParams p;
+
+    p.oscOn = paramOscOn_ != nullptr && paramOscOn_->load (std::memory_order_relaxed) >= 0.5f;
+    p.framePosition = paramWtpos_ != nullptr ? paramWtpos_->load (std::memory_order_relaxed) : 0.0f;
+    p.octave = (int) realValue (specOct_, paramOct_);
+    p.semitones = (int) realValue (specSemi_, paramSemi_);
+    p.fineCents = realValue (specFine_, paramFine_);
+
+    // `level` ha mappa Db, ma il valore grezzo è già il guadagno lineare (vedi ParameterMapping.h).
+    p.level = paramLevel_ != nullptr ? paramLevel_->load (std::memory_order_relaxed) : 1.0f;
+
+    p.filterOn = paramFiltOn_ != nullptr && paramFiltOn_->load (std::memory_order_relaxed) >= 0.5f;
+    p.filterType = filterTypeFromChoice (paramFtype_);
+    p.filterStages = paramSlope_ != nullptr && paramSlope_->load (std::memory_order_relaxed) >= 0.5f ? 2 : 1;
+    p.cutoffHz = realValue (specCutoff_, paramCutoff_);
+
+    // res 0..100 % → Q 0.707 (Butterworth) … 20 (autoscillante quasi).
+    p.resonanceQ = juce::jmap (realValue (specRes_, paramRes_) * 0.01f, 0.707f, 20.0f);
+
+    // drive 0..24 dB → guadagno lineare pre-saturazione.
+    p.driveGain = juce::Decibels::decibelsToGain (realValue (specDrive_, paramDrive_));
+    p.keyTrack = realValue (specKeytrk_, paramKeytrk_) * 0.01f;
+
+    p.attackSeconds = realValue (specAtt_, paramAtt_) * 0.001f;   // la mappa è in ms
+    p.decaySeconds = realValue (specDec_, paramDec_) * 0.001f;
+    p.sustain = realValue (specSus_, paramSus_) * 0.01f;
+    p.releaseSeconds = realValue (specRel_, paramRel_) * 0.001f;
+    p.velocityAmount = realValue (specEnvVel_, paramEnvVel_) * 0.01f;
+
+    p.pan = realValue (specPan_, paramPan_) * 0.02f;              // -50..50 → -1..1
+    p.bypass = paramBypass_ != nullptr && paramBypass_->load (std::memory_order_relaxed) >= 0.5f;
+
+    return p;
+}
+
+void SerumStyleSynthAudioProcessor::parameterChanged (const juce::String& id, float)
+{
+    // Può arrivare dal thread audio (automazione host): qui si marca soltanto.
+    if (id == "wtIndex")
+        wavetableDirty_.store (true, std::memory_order_release);
+}
+
+void SerumStyleSynthAudioProcessor::timerCallback()
+{
+    if (! wavetableDirty_.exchange (false, std::memory_order_acquire))
+        return;
+
+    const auto index = wavetableIndexFromParam();
+
+    if (index == lastWavetableIndex_)
+        return;
+
+    wavetables_.setActive (index); // alloca: message thread
+    lastWavetableIndex_ = index;
+
+    // Pubblica solo il puntatore: l'applicazione alle voci avviene sul thread audio dentro
+    // SynthEngine::process(), l'unico che può mutare quello stato in sicurezza.
+    if (const auto* table = wavetables_.active())
+        engine_->setPendingWavetable (table);
 }
 
 void SerumStyleSynthAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    // Costruire la tavola alloca: qui è lecito, in processBlock no.
+    // Costruire la tavola alloca: qui è lecito, in processBlock no. Il thread audio non gira
+    // ancora, quindi applicarla direttamente alle voci è sicuro.
     const auto index = wavetableIndexFromParam();
     wavetables_.setActive (index);
     lastWavetableIndex_ = index;
@@ -72,9 +213,12 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     buffer.clear();
 
-    if (volumeParam_ != nullptr)
+    const auto params = collectParams();
+    engine_->setParams (params);
+
+    if (paramVolume_ != nullptr)
     {
-        const float v = volumeParam_->load (std::memory_order_relaxed);
+        const float v = paramVolume_->load (std::memory_order_relaxed);
         engine_->setMasterGainLinear (v <= 0.0f ? 0.0f : v * kHeadroomGain); // v è lineare 0..1; +6 dB di headroom
     }
 
@@ -82,9 +226,6 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     // MidiKeyboardState takes a brief CriticalSection internally (JUCE's standard pattern);
     // contention only happens on UI note on/off, never on the steady-state path.
     keyboardState_.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
-
-    if (wtposParam_ != nullptr)
-        engine_->setFramePosition (wtposParam_->load (std::memory_order_relaxed));
 
     engine_->process (buffer, midi);
 

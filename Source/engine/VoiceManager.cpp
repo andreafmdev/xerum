@@ -87,9 +87,9 @@ void VoiceManager::setWavetable (const dsp::MipTable* table) noexcept
         voice.setWavetable (table);
 }
 
-void VoiceManager::setFramePosition (float normalised) noexcept
+void VoiceManager::setParams (const EngineParams& p) noexcept
 {
     for (auto& voice : voices_)
-        voice.setFramePosition (normalised);
+        voice.setParams (p);
 }
 } // namespace engine

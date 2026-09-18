@@ -229,6 +229,41 @@ struct StateVariableFilterTests final : juce::UnitTest
                 expect (peak < 100.0f, "picco " + juce::String (peak) + " a cutoff " + juce::String (cutoff));
             }
         }
+
+        beginTest ("switching stages back on does not resurrect old state");
+        {
+            dsp::StateVariableFilter filter;
+            filter.prepare (sampleRate);
+            filter.setType (dsp::StateVariableFilter::Type::lowPass);
+            filter.setResonance (12.0f); // alta risonanza: lo stadio 2 accumula parecchia energia
+            filter.setCutoffHz (300.0f);
+            filter.setNumStages (2);
+
+            // Fa girare un segnale attraverso due stadi cosi' lo stadio 2 accumula stato.
+            double phase = 0.0;
+            const auto increment = 2.0 * juce::MathConstants<double>::pi * 300.0 / sampleRate;
+            for (int i = 0; i < 4800; ++i, phase += increment)
+                filter.processSample ((float) std::sin (phase));
+
+            // Passa a un solo stadio: lo stadio 2 smette di essere processato ma il suo stato resta.
+            filter.setNumStages (1);
+
+            // Silenzio con un solo stadio attivo, abbastanza a lungo da lasciare che anche lo
+            // stadio 1 (che a questa risonanza continua a squillare) si spenga completamente:
+            // quello che sopravvive dopo e' solo lo stato congelato dello stadio 2, non ancora
+            // riattivato.
+            for (int i = 0; i < 20000; ++i)
+                filter.processSample (0.0f);
+
+            // Riaccende lo stadio 2: se non e' stato azzerato, la vecchia energia rientra nel segnale.
+            filter.setNumStages (2);
+
+            float peak = 0.0f;
+            for (int i = 0; i < 480; ++i)
+                peak = juce::jmax (peak, std::abs (filter.processSample (0.0f)));
+
+            expect (peak < 1.0e-4f, "picco dopo il riavvio dello stadio 2 " + juce::String (peak));
+        }
     }
 };
 

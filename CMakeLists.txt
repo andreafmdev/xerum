@@ -87,12 +87,16 @@ target_sources(XerumTests
         Tests/main.cpp
         Tests/WavetableTests.cpp
         Tests/EnvelopeFilterTests.cpp
+        Tests/EngineTests.cpp
         Source/dsp/WavetableBlob.cpp
         Source/dsp/MipTable.cpp
         Source/dsp/WavetableStore.cpp
         Source/dsp/WavetableOscillator.cpp
         Source/dsp/ADSREnvelope.cpp
-        Source/dsp/StateVariableFilter.cpp)
+        Source/dsp/StateVariableFilter.cpp
+        Source/engine/SynthEngine.cpp
+        Source/engine/VoiceManager.cpp
+        Source/engine/SynthVoice.cpp)
 
 target_include_directories(XerumTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
 

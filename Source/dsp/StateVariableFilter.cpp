@@ -37,7 +37,16 @@ void StateVariableFilter::setResonance (float q) noexcept
 
 void StateVariableFilter::setNumStages (int stages) noexcept
 {
-    numStages_ = std::clamp (stages, 1, 2);
+    const auto clamped = std::clamp (stages, 1, 2);
+
+    // Il secondo stadio, mentre e' spento, non viene mai processato: puo' restare a covare
+    // lo stato lasciato dall'ultima volta che era attivo. Se non lo si azzera qui, riaccenderlo
+    // (12 -> 24 dB a metà nota) reinietta quello stato vecchio nel segnale, udibile come un clic.
+    if (clamped > numStages_)
+        for (int i = numStages_; i < clamped; ++i)
+            stages_[i] = {};
+
+    numStages_ = clamped;
 }
 
 void StateVariableFilter::updateCoefficients() noexcept
