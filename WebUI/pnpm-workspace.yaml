@@ -1,9 +1,14 @@
 packages:
   - "packages/*"
 
+# pnpm 11 richiede allowBuilds; onlyBuiltDependencies per compat
+# (verificato: senza allowBuilds, `pnpm install` fallisce con
+# ERR_PNPM_IGNORED_BUILDS su esbuild).
 allowBuilds:
   esbuild: true
 
+# Bypassa la policy di minimum-release-age di pnpm per jsdom 30.1.0
+# (pubblicato di recente, altrimenti pnpm lo rifiuta come "troppo nuovo").
 minimumReleaseAgeExclude:
   - jsdom@30.1.0
 
