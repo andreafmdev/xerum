@@ -1,25 +1,14 @@
 #include "parameters/ParameterLayout.h"
-#include "parameters/ParameterIDs.h"
+#include "parameters/ParameterMapping.h"
 
 namespace params
 {
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 {
-    std::vector<std::unique_ptr<juce::RangedAudioParameter>> paramsList;
-
-    paramsList.push_back (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { masterGain, 1 },
-        "Master Gain",
-        juce::NormalisableRange<float> { -60.0f, 0.0f, 0.1f },
-        -6.0f,
-        juce::AudioParameterFloatAttributes().withLabel ("dB")));
-
-    paramsList.push_back (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { osc1Level, 1 },
-        "Osc 1 Level",
-        juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f },
-        0.8f));
-
-    return { paramsList.begin(), paramsList.end() };
+    std::vector<std::unique_ptr<juce::RangedAudioParameter>> list;
+    list.reserve ((size_t) kNumParams);
+    for (const auto& spec : kTable)
+        list.push_back (makeParameter (spec));
+    return { list.begin(), list.end() };
 }
 } // namespace params

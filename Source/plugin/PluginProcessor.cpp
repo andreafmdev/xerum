@@ -1,6 +1,5 @@
 #include "plugin/PluginProcessor.h"
 #include "plugin/PluginEditor.h"
-#include "parameters/ParameterIDs.h"
 
 SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
     : AudioProcessor (BusesProperties()
@@ -8,8 +7,8 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
       apvts_ (*this, nullptr, "PARAMS", params::createParameterLayout()),
       engine_ (std::make_unique<engine::SynthEngine>())
 {
-    masterGainParam_ = apvts_.getRawParameterValue (params::masterGain);
-    osc1LevelParam_ = apvts_.getRawParameterValue (params::osc1Level);
+    volumeParam_ = apvts_.getRawParameterValue ("volume");
+    levelParam_ = apvts_.getRawParameterValue ("level");
 }
 
 void SerumStyleSynthAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -46,15 +45,15 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     buffer.clear();
 
-    if (masterGainParam_ != nullptr)
+    if (volumeParam_ != nullptr)
     {
-        const float gainDb = masterGainParam_->load();
-        engine_->setMasterGainLinear (juce::Decibels::decibelsToGain (gainDb));
+        const float v = volumeParam_->load (std::memory_order_relaxed);
+        engine_->setMasterGainLinear (v <= 0.0f ? 0.0f : v * juce::Decibels::decibelsToGain (6.0f)); // v è lineare 0..1; +6 dB di headroom
     }
 
-    // osc1_level reserved for phase 3 oscillator mix; read to keep linker happy / future use.
-    if (osc1LevelParam_ != nullptr)
-        (void) osc1LevelParam_->load();
+    // "level" è riservato al mix degli oscillatori (fase 3): lo leggiamo già qui per tenere il puntatore vivo.
+    if (levelParam_ != nullptr)
+        (void) levelParam_->load (std::memory_order_relaxed);
 
     // Merge notes played on the editor's on-screen keyboard into the host MIDI stream.
     // MidiKeyboardState takes a brief CriticalSection internally (JUCE's standard pattern);

@@ -47,8 +47,9 @@ private:
     juce::MidiKeyboardState keyboardState_;
     std::unique_ptr<engine::SynthEngine> engine_;
 
-    std::atomic<float>* masterGainParam_ { nullptr };
-    std::atomic<float>* osc1LevelParam_ { nullptr };
+    // Puntatori grezzi ai valori normalizzati 0..1 dell'APVTS: letti solo con load() sul thread audio.
+    std::atomic<float>* volumeParam_ { nullptr };
+    std::atomic<float>* levelParam_ { nullptr };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SerumStyleSynthAudioProcessor)
 };
