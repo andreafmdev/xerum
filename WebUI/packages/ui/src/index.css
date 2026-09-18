@@ -66,4 +66,25 @@
   [role="button"] {
     cursor: pointer;
   }
+
+  /* Superfici del browser: selezione e scrollbar appartengono al pannello, non al sistema. */
+  ::selection {
+    background: color-mix(in oklab, var(--color-primary) 30%, transparent);
+    color: var(--foreground);
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-well);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-surface-3);
+    border: 2px solid var(--color-well);
+    border-radius: 5px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-line-strong);
+  }
 }

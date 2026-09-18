@@ -11,6 +11,10 @@ const semantic = [
 
 const surfaces = ["surface-0", "surface-1", "surface-2", "surface-3", "line-strong", "text-dim", "warning"] as const;
 
+const materials = [
+  "cap-hi", "cap-lo", "cap-rim", "edge-light", "edge-dark", "well", "tick", "led-off",
+] as const;
+
 function Swatch({ name }: { name: string }) {
   return (
     <div className="flex flex-col gap-1">
@@ -30,6 +34,10 @@ export const Colors: StoryObj = {
       <section className="flex flex-col gap-2">
         <h2 className="text-xs uppercase tracking-widest text-muted-foreground">Surfaces</h2>
         <div className="flex flex-wrap gap-3">{surfaces.map((n) => <Swatch key={n} name={n} />)}</div>
+      </section>
+      <section className="flex flex-col gap-2">
+        <h2 className="text-xs uppercase tracking-widest text-muted-foreground">Materials</h2>
+        <div className="flex flex-wrap gap-3">{materials.map((n) => <Swatch key={n} name={n} />)}</div>
       </section>
       <section className="flex flex-col gap-2">
         <h2 className="text-xs uppercase tracking-widest text-muted-foreground">Tones</h2>
