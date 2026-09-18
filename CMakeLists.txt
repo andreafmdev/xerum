@@ -44,6 +44,9 @@ target_sources(SerumStyleSynth
         Source/dsp/WavetableOscillator.cpp
         Source/dsp/StateVariableFilter.cpp
         Source/dsp/ADSREnvelope.cpp
+        Source/dsp/WavetableBlob.cpp
+        Source/dsp/MipTable.cpp
+        Source/dsp/WavetableStore.cpp
         Source/parameters/ParameterLayout.cpp
         Source/ui/XerumKeyboard.cpp
 )
@@ -62,6 +65,18 @@ target_compile_definitions(SerumStyleSynth
 
 serum_style_synth_set_warnings(SerumStyleSynth)
 
+# --- Wavetables ------------------------------------------------------------
+# Sempre incorporate (a differenza del bundle web, che è solo in Release):
+# senza tavole il sintetizzatore non ha niente da suonare.
+file(GLOB XERUM_WAVETABLES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Resources/wavetables/*.xwt)
+if(NOT XERUM_WAVETABLES)
+    message(FATAL_ERROR "Nessuna tavola in Resources/wavetables. Generale con: node scripts/fetch-wavetables.mjs")
+endif()
+# HEADER_NAME esplicito: il default (BinaryData.h) collide con il target
+# WebUIAssets, che genera già un BinaryData.h proprio per l'embedding web.
+juce_add_binary_data(WavetableAssets SOURCES ${XERUM_WAVETABLES} NAMESPACE WavetableAssets HEADER_NAME WavetableData.h)
+target_link_libraries(SerumStyleSynth PRIVATE WavetableAssets)
+
 # --- Unit tests -----------------------------------------------------------
 # Console app: gira juce::UnitTestRunner su dsp/ ed engine/. Non tocca la UI
 # né l'host, quindi niente juce_gui_extra e niente WebView.
@@ -71,7 +86,9 @@ target_sources(XerumTests
     PRIVATE
         Tests/main.cpp
         Tests/WavetableTests.cpp
-        Source/dsp/WavetableBlob.cpp)
+        Source/dsp/WavetableBlob.cpp
+        Source/dsp/MipTable.cpp
+        Source/dsp/WavetableStore.cpp)
 
 target_include_directories(XerumTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
 
@@ -87,6 +104,7 @@ serum_style_synth_set_warnings(XerumTests)
 target_link_libraries(XerumTests
     PRIVATE
         juce::juce_dsp
+        WavetableAssets
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
