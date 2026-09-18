@@ -1,6 +1,7 @@
 #include "bridge/StateChannel.h"
 
 #include "parameters/ParameterTable.h"
+#include "parameters/PresetValue.h"
 #include "parameters/StateTree.h"
 
 namespace bridge
@@ -57,10 +58,11 @@ juce::WebBrowserComponent::Options StateChannel::applyTo (juce::WebBrowserCompon
         });
 }
 
-// Rispecchiata in WebUI/src/juce/fake-backend.ts::loadPreset (stesso fallback al default
-// di spec per un parametro non menzionato). Le due implementazioni possono divergere senza
-// che nessun test se ne accorga (XerumTests non compila questo file): se cambi questa
-// logica, cambia anche l'altra.
+// La regola "quale valore normalizzato riceve questo parametro da questo preset" vive in
+// params::presetValue (Source/parameters/PresetValue.h), testata in XerumTests: qui e' solo
+// una chiamata. E' rispecchiata a mano in WebUI/src/juce/fake-backend.ts::loadPreset (stesso
+// fallback al default di spec per un parametro non menzionato) — due file, due linguaggi,
+// nessun modo di condividere il codice, quindi se cambi questa logica cambia anche l'altra.
 void StateChannel::applyPreset (int index)
 {
     if (index < 0 || index >= params::kNumPresets)
@@ -75,16 +77,8 @@ void StateChannel::applyPreset (int index)
         if (parameter == nullptr)
             continue;
 
-        // Un parametro non elencato nel preset torna al suo default di spec:
-        // altrimenti i preset ereditano pezzi del suono precedente.
-        float value = spec.def;
-
-        for (int i = 0; i < preset.numValues; ++i)
-            if (juce::String (preset.values[i].id) == spec.id)
-                value = preset.values[i].value;
-
         parameter->beginChangeGesture();
-        parameter->setValueNotifyingHost (value);
+        parameter->setValueNotifyingHost (params::presetValue (preset, spec));
         parameter->endChangeGesture();
     }
 

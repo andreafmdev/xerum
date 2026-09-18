@@ -88,6 +88,7 @@ target_sources(XerumTests
         Tests/WavetableTests.cpp
         Tests/EnvelopeFilterTests.cpp
         Tests/EngineTests.cpp
+        Tests/PresetValueTests.cpp
         Source/dsp/WavetableBlob.cpp
         Source/dsp/MipTable.cpp
         Source/dsp/WavetableStore.cpp
