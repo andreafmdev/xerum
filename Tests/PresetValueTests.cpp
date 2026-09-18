@@ -4,6 +4,9 @@
 
 #include <juce_core/juce_core.h>
 
+#include <cmath>
+#include <iterator>
+
 // Task finale, item 1: applyPreset() passava spec.def (grezzo) a setValueNotifyingHost()
 // (che vuole un valore normalizzato 0..1), quindi ogni parametro Kind::Int assente da un
 // preset (oct, semi: nessun preset li elenca) cadeva sul default di spec letto come se fosse
@@ -17,52 +20,76 @@ struct PresetValueTests final : juce::UnitTest
 
     void runTest() override
     {
+        // I tre casi qui sotto usano preset costruiti a mano invece di pescare dalla tabella
+        // generata: la regola da esercitare e' presetValue(), non il contenuto di presets.json.
+        // Legandoli a un preset reale (com'era prima) bastava ritarare un preset per far
+        // fallire test che con quel preset non c'entrano niente.
         beginTest ("un parametro elencato nel preset riceve il suo valore, non il default");
         {
             const auto* cutoffSpec = params::find ("cutoff");
             expect (cutoffSpec != nullptr, "spec di cutoff non trovata");
+            expect (std::abs (cutoffSpec->def - 0.35f) > 1.0e-6f,
+                    "il test e' significativo solo se 0.35 non e' gia' il default di cutoff");
 
-            // Preset 1 ("Sub Pulse") elenca esplicitamente cutoff a 0.35.
-            const auto& preset = params::kPresetTable[1];
+            static constexpr params::PresetValue values[] = { { "cutoff", 0.35f } };
+            const params::Preset preset { "test", "test", values, (int) std::size (values) };
+
             expectWithinAbsoluteError (params::presetValue (preset, *cutoffSpec), 0.35f, 1.0e-6f);
         }
 
         beginTest ("un parametro impostato a 0 dal preset resta 0, non cade sul default");
         {
-            // Preset 1 elenca "att" a 0.0f: se il fallback-al-default scattasse per errore
-            // (es. un controllo "value != 0" invece che "id assente"), att tornerebbe al suo
-            // default di spec (0.12), non a zero.
+            // Se il fallback-al-default scattasse per errore (es. un controllo "value != 0"
+            // invece che "id assente"), att tornerebbe al suo default di spec, non a zero.
             const auto* attSpec = params::find ("att");
             expect (attSpec != nullptr, "spec di att non trovata");
             expect (attSpec->def != 0.0f, "att deve avere un default diverso da zero perche' il test sia significativo");
 
-            const auto& preset = params::kPresetTable[1];
+            static constexpr params::PresetValue values[] = { { "att", 0.0f } };
+            const params::Preset preset { "test", "test", values, (int) std::size (values) };
+
             expectWithinAbsoluteError (params::presetValue (preset, *attSpec), 0.0f, 1.0e-6f);
         }
 
         beginTest ("un parametro Int assente dal preset torna al default normalizzato, non al grezzo");
         {
-            // Questo e' esattamente il caso che ha rotto ogni preset: nessun preset elenca
-            // "oct" o "semi", ed entrambi sono Kind::Int con spec.def grezzo (0), non
-            // normalizzato. Il vecchio codice passava 0.0f a setValueNotifyingHost() come se
-            // fosse gia' normalizzato: per oct (range -3..3) 0.0f normalizzato e' il minimo,
-            // cioe' oct=-3, non oct=0. Con questo helper deve tornare il centro del range.
+            // Questo e' esattamente il caso che ha rotto ogni preset: "oct" e "semi" sono
+            // Kind::Int con spec.def grezzo (0), non normalizzato. Il vecchio codice passava
+            // 0.0f a setValueNotifyingHost() come se fosse gia' normalizzato: per oct
+            // (range -3..3) 0.0f normalizzato e' il minimo, cioe' oct=-3, non oct=0.
             const auto* octSpec = params::find ("oct");
-            expect (octSpec != nullptr, "spec di oct non trovata");
+            const auto* semiSpec = params::find ("semi");
+            expect (octSpec != nullptr && semiSpec != nullptr, "spec di oct/semi non trovate");
             expectEquals (octSpec->def, 0.0f, "il default grezzo di oct e' 0 in parameters.json");
 
-            // Nessun preset elenca "oct": qualunque preset con valori va bene per il fallback.
-            const auto& preset = params::kPresetTable[1];
-            const auto value = params::presetValue (preset, *octSpec);
+            // Un preset che non elenca ne' oct ne' semi.
+            static constexpr params::PresetValue values[] = { { "cutoff", 0.5f } };
+            const params::Preset preset { "test", "test", values, (int) std::size (values) };
 
             // oct: min=-3, max=3, default grezzo 0 -> normalizzato atteso 0.5 (centro range).
-            expectWithinAbsoluteError (value, 0.5f, 1.0e-6f);
-
-            const auto* semiSpec = params::find ("semi");
-            expect (semiSpec != nullptr, "spec di semi non trovata");
-            const auto semiValue = params::presetValue (preset, *semiSpec);
+            expectWithinAbsoluteError (params::presetValue (preset, *octSpec), 0.5f, 1.0e-6f);
             // semi: min=-12, max=12, default grezzo 0 -> normalizzato atteso 0.5.
-            expectWithinAbsoluteError (semiValue, 0.5f, 1.0e-6f);
+            expectWithinAbsoluteError (params::presetValue (preset, *semiSpec), 0.5f, 1.0e-6f);
+        }
+
+        beginTest ("ogni preset di presets.json produce valori normalizzati validi");
+        {
+            // Il controllo che prima esisteva solo per "Init": ogni preset, per ogni
+            // parametro, deve dare un valore in 0..1 — un preset con un valore fuori range
+            // (o con un id che nessuno spec riconosce, quindi silenziosamente ignorato)
+            // arriverebbe fino all'APVTS.
+            for (int i = 0; i < params::kNumPresets; ++i)
+            {
+                const auto& preset = params::kPresetTable[i];
+
+                for (const auto& spec : params::kTable)
+                {
+                    const auto value = params::presetValue (preset, spec);
+                    expect (value >= 0.0f && value <= 1.0f,
+                            juce::String (preset.name) + " / " + juce::String (spec.id)
+                                + ": valore normalizzato fuori da 0..1, e' " + juce::String (value));
+                }
+            }
         }
 
         beginTest ("Init (preset senza valori): ogni parametro torna al suo default normalizzato");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PARAM_SPECS } from "./params.generated";
+import { PARAM_SPECS, type ParamSpec } from "./params.generated";
 import { denormalise, normalise, formatValue, toIndex, fromIndex, toInt, fromInt, paramLabel } from "./mapping";
 
 const S = PARAM_SPECS;
@@ -11,10 +11,19 @@ describe("denormalise", () => {
     expect(denormalise(S.cutoff, 0.5)).toBeCloseTo(632.46, 1);
     expect(denormalise(S.cutoff, 1)).toBeCloseTo(20000);
   });
-  it("db with offset", () => {
-    expect(denormalise(S.volume, 1)).toBeCloseTo(6);
+  it("db", () => {
+    expect(denormalise(S.volume, 1)).toBeCloseTo(0);
+    expect(denormalise(S.volume, 0.8)).toBeCloseTo(-1.94, 2);
     expect(denormalise(S.level, 0.5)).toBeCloseTo(-6.02, 1);
     expect(denormalise(S.level, 0)).toBe(-Infinity);
+  });
+  it("db con offset", () => {
+    // Nessun parametro reale usa piu' `offset` (`volume` lo aveva a +6, ma mostrava un
+    // valore che non corrispondeva al guadagno davvero applicato): la mappa lo supporta
+    // ancora, quindi si esercita su uno spec sintetico invece che su un parametro vero.
+    const withOffset: ParamSpec = { ...S.volume, map: { type: "db", min: 0, max: 1, offset: 6 } };
+    expect(denormalise(withOffset, 1)).toBeCloseTo(6);
+    expect(denormalise(withOffset, 0.5)).toBeCloseTo(-0.02, 1);
   });
   it("ms-squared", () => {
     expect(denormalise(S.att, 0)).toBe(1);
@@ -38,7 +47,8 @@ describe("formatValue", () => {
   });
   it("db -inf", () => {
     expect(formatValue(S.level, 0)).toBe("-inf");
-    expect(formatValue(S.volume, 0.8)).toBe("4.1 dB");
+    expect(formatValue(S.volume, 0.8)).toBe("-1.9 dB");
+    expect(formatValue(S.volume, 1)).toBe("0.0 dB");
   });
   it("hz switches to kHz", () => {
     expect(formatValue(S.cutoff, 0)).toBe("20 Hz");

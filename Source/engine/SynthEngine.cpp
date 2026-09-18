@@ -1,7 +1,42 @@
 #include "engine/SynthEngine.h"
 
+#include <algorithm>
+#include <cmath>
+
+
 namespace engine
 {
+namespace
+{
+/** Sopra questa soglia l'uscita smette di essere lineare e comincia a piegare. */
+constexpr float kSoftClipThreshold = 0.8f;
+
+/**
+ * Rete di sicurezza sull'uscita: identica all'ingresso fino a 0.8, poi piega dolcemente e
+ * non supera mai 1.0. Serve perche' il guadagno per voce e' una costante (vedi
+ * SynthVoice::kVoiceHeadroomGain): un accordo abbastanza fitto, o un volume master alto,
+ * possono comunque superare il fondo scala, e senza questo l'host riceverebbe campioni
+ * troncati a zero decibel — il clipping digitale netto, quello che si sente come strappo.
+ *
+ * Lineare sotto soglia: niente distorsione aggiunta al segnale normale, a differenza di un
+ * soft clipper polinomiale attivo su tutta la corsa. La derivata vale 1 alla soglia, quindi
+ * non c'e' spigolo nel punto di innesto. Nessuna libm: un confronto, una divisione.
+ */
+float softClip (float x) noexcept
+{
+    const auto magnitude = std::abs (x);
+
+    if (magnitude <= kSoftClipThreshold)
+        return x;
+
+    const auto headroom = 1.0f - kSoftClipThreshold;
+    const auto over = (magnitude - kSoftClipThreshold) / headroom;
+    const auto bent = kSoftClipThreshold + headroom * (over / (1.0f + over));
+
+    return x < 0.0f ? -bent : bent;
+}
+} // namespace
+
 void SynthEngine::prepare (const EngineSpec& spec) noexcept
 {
     spec_ = spec;
@@ -104,6 +139,17 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
     // automatizzarlo con lo step precedente avrebbe prodotto un gradino udibile a ogni blocco.
     buffer.applyGainRamp (0, numSamples, previousMasterGain_, masterGain_);
     previousMasterGain_ = masterGain_;
+
+    // Dopo il volume master, mai prima: e' il livello che esce davvero dal plugin quello da
+    // proteggere. Si passa sui canali reali del buffer (non su left/right, che in mono sono
+    // lo stesso puntatore e verrebbe clippato due volte).
+    for (int ch = 0; ch < std::min (numChannels, 2); ++ch)
+    {
+        auto* data = buffer.getWritePointer (ch);
+
+        for (int i = 0; i < numSamples; ++i)
+            data[i] = softClip (data[i]);
+    }
 
     for (int ch = 2; ch < numChannels; ++ch)
         buffer.clear (ch, 0, numSamples);

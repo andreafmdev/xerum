@@ -31,7 +31,7 @@ void StateVariableFilter::setCutoffHz (float hz) noexcept
 
 void StateVariableFilter::setResonance (float q) noexcept
 {
-    resonance_ = std::max (0.1f, q);
+    resonance_ = std::max (kButterworthQ, q);
     updateCoefficients();
 }
 
@@ -56,13 +56,28 @@ void StateVariableFilter::updateCoefficients() noexcept
     const auto cutoff = std::clamp (cutoffHz_, 10.0f, limit);
 
     g_ = std::tan (kPi * cutoff / (float) sampleRate_);
-    twoR_ = 1.0f / resonance_;
-    denominator_ = 1.0f + twoR_ * g_ + g_ * g_;
+
+    const auto denominatorFor = [this] (float twoR) noexcept
+    {
+        return 1.0f + twoR * g_ + g_ * g_;
+    };
+
+    butterworth_.twoR = 1.0f / kButterworthQ;
+    butterworth_.denominator = denominatorFor (butterworth_.twoR);
+
+    resonant_.twoR = 1.0f / resonance_;
+    resonant_.denominator = denominatorFor (resonant_.twoR);
+
+    // Compensazione: il picco di uno stadio risonante vale ~Q. Attenuando l'ingresso di
+    // sqrt(Qbutter/Q) il picco diventa ~sqrt(Q·Qbutter) — a Q 12, +9 dB invece di +22 dB —
+    // e la banda passante scende dello stesso fattore. std::sqrt gira solo qui, una volta
+    // per blocco, mai per campione.
+    inputGain_ = std::sqrt (kButterworthQ / resonance_);
 }
 
-float StateVariableFilter::processStage (Stage& stage, float input) const noexcept
+float StateVariableFilter::processStage (Stage& stage, const Coefficients& c, float input) const noexcept
 {
-    const auto highPass = (input - (twoR_ + g_) * stage.s1 - stage.s2) / denominator_;
+    const auto highPass = (input - (c.twoR + g_) * stage.s1 - stage.s2) / c.denominator;
     const auto bandPass = g_ * highPass + stage.s1;
     stage.s1 = g_ * highPass + bandPass;
     const auto lowPass = g_ * bandPass + stage.s2;
@@ -80,11 +95,12 @@ float StateVariableFilter::processStage (Stage& stage, float input) const noexce
 
 float StateVariableFilter::processSample (float input) noexcept
 {
-    auto out = processStage (stages_[0], input);
-
+    // La risonanza sta sull'ultimo stadio, il primo (se c'è) resta Butterworth: vedi il
+    // commento di classe. L'attenuazione d'ingresso si applica una volta sola, all'inizio
+    // della catena, non per stadio.
     if (numStages_ > 1)
-        out = processStage (stages_[1], out);
+        return processStage (stages_[1], resonant_, processStage (stages_[0], butterworth_, input * inputGain_));
 
-    return out;
+    return processStage (stages_[0], resonant_, input * inputGain_);
 }
 } // namespace dsp

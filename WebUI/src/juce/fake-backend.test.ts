@@ -67,18 +67,18 @@ describe("FakeBackend loadPreset", () => {
     const preset = PRESETS[index]!;
     // Guardia: questo test si appoggia a queste due proprietà del preset "Sub Pulse".
     expect(preset.values.att).toBe(0);
-    expect(preset.values.level).toBeUndefined();
+    expect(preset.values.envVel).toBeUndefined();
 
     // Allontana entrambi i parametri dal loro default prima di caricare il preset.
     b.param("att").set(0.9);
-    b.param("level").set(0.2);
+    b.param("envVel").set(0.2);
 
     await b.loadPreset(index);
 
     // Valore esplicito 0 nel preset: deve restare 0, non ricadere sul default di spec (0.12).
     expect(b.param("att").get()).toBe(0);
-    // Parametro non menzionato: torna al default di spec di "level" (0.85 in parameters.json).
-    expect(b.param("level").get()).toBeCloseTo(Number(PARAM_SPECS.level.default));
+    // Parametro non menzionato: torna al default di spec di "envVel" (0.6 in parameters.json).
+    expect(b.param("envVel").get()).toBeCloseTo(Number(PARAM_SPECS.envVel.default));
   });
 
   it("un indice fuori range non tocca i parametri", async () => {

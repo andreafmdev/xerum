@@ -205,6 +205,57 @@ struct StateVariableFilterTests final : juce::UnitTest
             expect (filterGainAt (steep, 4000.0f, sampleRate) < filterGainAt (gentle, 4000.0f, sampleRate) * 0.5f);
         }
 
+        beginTest ("la risonanza non moltiplica il picco stadio per stadio");
+        {
+            // Il difetto che questo test blocca: con la risonanza su entrambi gli stadi e
+            // nessuna compensazione, a Q 12 il passa-basso a 24 dB dava un picco di ~Q^2
+            // (oltre +40 dB) e qualunque preset con `res` alto mandava l'uscita in clipping.
+            // Ora la risonanza sta solo sull'ultimo stadio e l'ingresso e' attenuato di
+            // sqrt(Qbutter/Q), quindi il picco cresce come sqrt(Q * Qbutter): ~2.9, non ~144.
+            constexpr float q = 12.0f;
+            const auto expectedPeak = std::sqrt (q * dsp::StateVariableFilter::kButterworthQ);
+
+            dsp::StateVariableFilter twelve, twentyFour;
+            for (auto* f : { &twelve, &twentyFour })
+            {
+                f->prepare (sampleRate);
+                f->setType (dsp::StateVariableFilter::Type::lowPass);
+                f->setResonance (q);
+                f->setCutoffHz (1000.0f);
+            }
+            twelve.setNumStages (1);
+            twentyFour.setNumStages (2);
+
+            const auto peak12 = filterGainAt (twelve, 1000.0f, sampleRate);
+            const auto peak24 = filterGainAt (twentyFour, 1000.0f, sampleRate);
+
+            expectWithinAbsoluteError (peak12, expectedPeak, expectedPeak * 0.15f,
+                    "picco a 12 dB: " + juce::String (peak12) + ", atteso ~" + juce::String (expectedPeak));
+            expect (peak24 < expectedPeak * 1.15f,
+                    "il secondo stadio non deve moltiplicare il picco: 12 dB " + juce::String (peak12)
+                        + ", 24 dB " + juce::String (peak24));
+
+            // L'altra faccia della compensazione: la banda passante perde livello quando la
+            // risonanza sale, come in un filtro analogico risonante.
+            const auto passband = filterGainAt (twelve, 100.0f, sampleRate);
+            expect (passband < 0.5f, "a Q 12 la banda passante deve calare, misurata " + juce::String (passband));
+        }
+
+        beginTest ("a Q di Butterworth la compensazione non tocca niente");
+        {
+            // La compensazione deve sparire del tutto al minimo della corsa di `res`:
+            // altrimenti il filtro attenuerebbe anche quando non risuona.
+            dsp::StateVariableFilter filter;
+            filter.prepare (sampleRate);
+            filter.setType (dsp::StateVariableFilter::Type::lowPass);
+            filter.setNumStages (1);
+            filter.setResonance (dsp::StateVariableFilter::kButterworthQ);
+            filter.setCutoffHz (1000.0f);
+
+            expect (filterGainAt (filter, 100.0f, sampleRate) > 0.95f,
+                    "in banda passante deve restare a guadagno unitario");
+        }
+
         beginTest ("risonanza alta su tutto il range: nessun NaN, nessuna esplosione");
         {
             dsp::StateVariableFilter filter;

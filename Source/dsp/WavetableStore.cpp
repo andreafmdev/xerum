@@ -2,6 +2,7 @@
 
 #include <juce_dsp/juce_dsp.h>
 
+#include <algorithm>
 #include <cstring>
 
 // L'header generato si chiama WavetableData.h e non BinaryData.h: quest'ultimo
@@ -62,22 +63,23 @@ std::optional<BlobView> lookupBlob (const char* fileName, std::vector<float>& st
 
 std::unique_ptr<MipTable> buildMipTable (const BlobView& blob)
 {
-    // MipTable::kMaxLevel è fisso: al livello più alto la dimensione è frameSize >> kMaxLevel.
-    // Sotto 2^kMaxLevel campioni quella dimensione scende a zero (o l'ordine della FFT
-    // diventerebbe negativo, undefined behaviour), e comunque un livello "esistente ma mai
-    // scritto" sarebbe peggio di nessun livello: si rifiuta prima di costruire qualunque cosa.
-    // Le vere wavetable sono sempre da 2048 campioni, quindi questo non tocca l'uso reale.
-    if (blob.frameSize < (1 << MipTable::kMaxLevel))
+    // MipTable::kMaxLevel è fisso: al livello più alto restano (frameSize >> kMaxLevel) / 2
+    // armoniche. Sotto 2^(kMaxLevel + 1) campioni quel conto scende a zero e il livello
+    // sarebbe silenzio, peggio di nessun livello: si rifiuta prima di costruire qualunque
+    // cosa. Le vere wavetable sono sempre da 2048 campioni, quindi non tocca l'uso reale.
+    if (blob.frameSize < (1 << (MipTable::kMaxLevel + 1)))
         return nullptr;
 
     auto table = std::make_unique<MipTable> (blob.frames, blob.frameSize);
 
     // Costruzione tavola: solo message thread (buildMipTable non è mai chiamata dal thread audio),
-    // quindi calcolare l'ordine qui non viola le regole real-time.
+    // quindi allocare e calcolare qui non viola le regole real-time.
     const int fftOrder = fftOrderFor (blob.frameSize);
-    juce::dsp::FFT forward { fftOrder };
+    juce::dsp::FFT fft { fftOrder };
     std::vector<juce::dsp::Complex<float>> timeDomain ((size_t) blob.frameSize);
     std::vector<juce::dsp::Complex<float>> spectrum ((size_t) blob.frameSize);
+    std::vector<juce::dsp::Complex<float>> bandLimited ((size_t) blob.frameSize);
+    std::vector<juce::dsp::Complex<float>> result ((size_t) blob.frameSize);
 
     for (int frame = 0; frame < blob.frames; ++frame)
     {
@@ -86,34 +88,34 @@ std::unique_ptr<MipTable> buildMipTable (const BlobView& blob)
         for (int i = 0; i < blob.frameSize; ++i)
             timeDomain[(size_t) i] = { source[i], 0.0f };
 
-        forward.perform (timeDomain.data(), spectrum.data(), false);
+        fft.perform (timeDomain.data(), spectrum.data(), false);
 
         for (int level = 0; level <= MipTable::kMaxLevel; ++level)
         {
-            const int size = blob.frameSize >> level;
-            const int harmonics = size / 2;
+            const int harmonics = table->harmonicsAtLevel (level);
 
-            juce::dsp::FFT inverse { fftOrder - level };
-            std::vector<juce::dsp::Complex<float>> shortSpectrum ((size_t) size, { 0.0f, 0.0f });
-            std::vector<juce::dsp::Complex<float>> shortTime ((size_t) size);
+            // Si azzera tutto sopra `harmonics` in entrambe le metà dello spettro: il buffer
+            // resta lungo frameSize, quindi la trasformata inversa è dello stesso ordine della
+            // diretta e il suo 1/N annulla esattamente quello della diretta — nessun fattore
+            // di scala da rimettere a mano. Mantenere il gemello negativo (bin frameSize - h)
+            // è ciò che tiene il risultato reale: senza, l'antitrasformata avrebbe una parte
+            // immaginaria e la forma d'onda uscirebbe deformata.
+            std::fill (bandLimited.begin(), bandLimited.end(), juce::dsp::Complex<float> { 0.0f, 0.0f });
 
-            // Si tengono le armoniche 0..harmonics-1 e i loro gemelli negativi:
-            // tutto quello che sta sopra produrrebbe aliasing a questa lunghezza.
-            for (int bin = 0; bin < harmonics; ++bin)
-                shortSpectrum[(size_t) bin] = spectrum[(size_t) bin];
+            bandLimited[0] = spectrum[0];
 
             for (int bin = 1; bin < harmonics; ++bin)
-                shortSpectrum[(size_t) (size - bin)] = spectrum[(size_t) (blob.frameSize - bin)];
+            {
+                bandLimited[(size_t) bin] = spectrum[(size_t) bin];
+                bandLimited[(size_t) (blob.frameSize - bin)] = spectrum[(size_t) (blob.frameSize - bin)];
+            }
 
-            inverse.perform (shortSpectrum.data(), shortTime.data(), true);
+            fft.perform (bandLimited.data(), result.data(), true);
 
-            // L'antitrasformata divide per `size`, ma i bin vengono da una FFT
-            // lunga `frameSize`: il fattore di scala rimette le cose a posto.
-            const auto scale = (float) size / (float) blob.frameSize;
             auto* destination = table->writePointer (frame, level);
 
-            for (int i = 0; i < size; ++i)
-                destination[i] = shortTime[(size_t) i].real() * scale;
+            for (int i = 0; i < blob.frameSize; ++i)
+                destination[i] = result[(size_t) i].real();
         }
     }
 

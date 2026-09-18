@@ -9,18 +9,18 @@ namespace
 {
 constexpr double kSmoothingSeconds = 0.02;
 
-// Headroom fisso per voce: senza di questo, una singola nota a level=1.0 con il volume di
-// default satura gia' da sola, e un accordo satura pesantemente (vedi task-7-report.md,
-// Finding 4). E' una costante fissa, non un divisore sul numero di voci attive: un divisore
-// farebbe "respirare" il volume ogni volta che una nota parte o finisce, un difetto peggiore
-// del clipping che risolve. -20 dB, misurato con HeadroomHarness (vedi report) all'uscita del
-// *motore* (masterGain a guadagno unitario, non il volume del plugin): una nota singola a
-// level=1.0 arriva a -19.04 dBFS, un accordo di 16 voci simultanee (caso pessimistico: nessuna
-// cancellazione di fase) arriva a -4.19 dBFS. Misurato di nuovo all'uscita del *plugin* (motore
-// + volume di default, 0.8 lineare, senza il +6 dB fisso che PluginProcessor applicava prima
-// e che raddoppiava questo stesso headroom): nota singola -25.97 dBFS, accordo a 16 voci
-// -11.24 dBFS — mai in clip, con margine per unison ed FX ancora da aggiungere.
-constexpr float kVoiceHeadroomGain = 0.1f; // 10^(-20/20)
+// Headroom fisso per voce. E' una costante, non un divisore sul numero di voci attive: un
+// divisore farebbe "respirare" il volume ogni volta che una nota parte o finisce, un difetto
+// peggiore del clipping che risolve. -8 dB: con il pan centrale (0.707), il volume di default
+// (0.8) e la compensazione di risonanza in StateVariableFilter, una nota singola a level 1.0
+// esce a -13.8 dBFS e un accordo di quattro note a -6.0 dBFS (misurati da EngineTests,
+// "gain staging: una nota e un accordo normale stanno sotto il soft clipper"). Il valore precedente
+// (-20 dB) era stato scelto quando il filtro poteva da solo aggiungere +30 dB di picco e la
+// saturazione ne aggiungeva altri 3.5 anche a drive zero: tolte quelle due sorgenti di
+// guadagno incontrollato, -20 dB lasciava lo strumento inutilizzabilmente piano (-26 dBFS
+// su una nota singola). Cio' che resta oltre il fondo scala lo prende il soft clipper di
+// SynthEngine::process, quindi salire qui non puo' produrre clipping digitale netto.
+constexpr float kVoiceHeadroomGain = 0.4f; // 10^(-8/20)
 
 float midiNoteToHz (int note, float offsetSemitones) noexcept
 {
@@ -28,11 +28,19 @@ float midiNoteToHz (int note, float offsetSemitones) noexcept
     return 440.0f * std::pow (2.0f, ((float) note + offsetSemitones - 69.0f) / 12.0f);
 }
 
-/** Saturazione polinomiale: unitaria a fondo scala, liscia, senza tanh() per campione. */
+/**
+ * Soft clipper polinomiale: guadagno unitario sul piccolo segnale, satura dolcemente e si
+ * ferma a 1.0 quando l'ingresso raggiunge 1.5. Niente tanh() per campione.
+ *
+ * La versione precedente, `1.5 * (x - x^3/3)`, era unitaria a fondo scala ma aveva pendenza
+ * **1.5 nell'origine**: applicava +3.5 dB a tutto il segnale anche a drive minimo. Insieme al
+ * default di `drive` (che era 0.15, cioe' 3.6 dB) significava +7 dB non richiesti sulla catena.
+ */
 float saturate (float x) noexcept
 {
-    const auto clamped = std::clamp (x, -1.0f, 1.0f);
-    return 1.5f * (clamped - (clamped * clamped * clamped) / 3.0f);
+    // y = c - c^3/6.75 -> y'(0) = 1, y(1.5) = 1, y'(1.5) = 0.
+    const auto c = std::clamp (x, -1.5f, 1.5f);
+    return c - (c * c * c) / 6.75f;
 }
 } // namespace
 
@@ -68,6 +76,12 @@ void SynthVoice::start (int midiNote, float velocity) noexcept
     frequencyHz_ = midiNoteToHz (midiNote, tuningSemitones_);
     oscillator_.setFrequencyHz (frequencyHz_);
     updateCutoff (true);
+
+    // Lo slot del pool puo' arrivare dalla nota precedente con i due integratori dell'SVF
+    // ancora carichi: alla prima nota nuova quello stato viene reiniettato nel segnale, udibile
+    // come un clic (piu' forte quanto piu' e' alta la risonanza). reset() non e' ridondante con
+    // SynthVoice::reset(): quello gira solo su kill(), non a ogni note-on.
+    filter_.reset();
 
     // Una nota nuova parte subito ai valori correnti: niente rampa "ereditata" dalla
     // voce precedentemente occupata da questo slot del pool.

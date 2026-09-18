@@ -30,6 +30,16 @@ export type SynthWindowProps = {
 const W = 900;
 const H = 600;
 
+// `zoom` e non `transform: scale()`: transform rasterizza il sottoalbero alla dimensione di
+// layout (900×600) e poi stira il bitmap, quindi sopra 1× testo, bordi da 1 px e ombre
+// escono sfocati — proprio il caso in cui l'host JUCE apre la finestra grande (fino a 1.5×,
+// vedi kMaxScale in PluginEditor.cpp). `zoom` rifa' il **layout**: tutto viene ridisegnato
+// alla risoluzione finale e resta nitido a qualunque scala. In cambio lo chassis occupa
+// spazio reale (transform non lo faceva), cosa che qui va bene: `.sx-root` lo centra con
+// flex e il fit sotto calcola comunque la scala a partire dal contenitore, non da lui.
+// L'unica superficie che `zoom` non puo' salvare da sola e' il <canvas> di WaveDisplay:
+// il suo backing store va moltiplicato per la scala a mano (vedi WaveDisplay.tsx).
+
 /** Finestra del plugin: 900×600 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
 export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixedScale, gutter = 16 }: SynthWindowProps) {
   const s = useSynth(initialTab);
@@ -85,7 +95,7 @@ export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixed
 
   return (
     <div className="sx-root" ref={rootRef}>
-      <div data-testid="chassis" className="sx-chassis" data-variant={variant} data-attached={gutter === 0 ? "" : undefined} style={{ transform: `scale(${sc})`, opacity: bypass.checked ? 0.9 : 1 }}>
+      <div data-testid="chassis" className="sx-chassis" data-variant={variant} data-attached={gutter === 0 ? "" : undefined} style={{ zoom: sc, opacity: bypass.checked ? 0.9 : 1 }}>
         <SynthContext.Provider value={ctx}>
           <MetersProvider>
             <Header

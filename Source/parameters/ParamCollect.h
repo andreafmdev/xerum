@@ -8,6 +8,8 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
 
+#include <cmath>
+
 namespace params
 {
 /**
@@ -99,8 +101,15 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.filterStages = rawFor (ParamSlot::slope) >= 0.5f ? 2 : 1;
     p.cutoffHz = params::denormalise (*specCutoff, rawFor (ParamSlot::cutoff));
 
-    // res 0..100 % -> Q 0.707 (Butterworth) ... 20 (autoscillante quasi).
-    p.resonanceQ = juce::jmap (params::denormalise (*specRes, rawFor (ParamSlot::res)) * 0.01f, 0.707f, 20.0f);
+    // res 0..100 % -> Q, esponenziale da Butterworth (0.707) a 12. Esponenziale e non
+    // lineare perche' Q e' percepito in rapporti: con una mappa lineare la meta' bassa della
+    // corsa era gia' tutta risonante (a res 30 % il vecchio jmap dava Q 6.5, +16 dB di picco)
+    // e la meta' alta non cambiava quasi nulla. Il tetto scende da 20 a 12: sopra, il filtro
+    // e' di fatto un oscillatore e il picco non e' piu' governabile dalla compensazione in
+    // StateVariableFilter. std::pow gira una volta per blocco, non per campione.
+    p.resonanceQ = dsp::StateVariableFilter::kButterworthQ
+                       * std::pow (12.0f / dsp::StateVariableFilter::kButterworthQ,
+                                   params::denormalise (*specRes, rawFor (ParamSlot::res)) * 0.01f);
 
     // drive 0..24 dB -> guadagno lineare pre-saturazione.
     p.driveGain = juce::Decibels::decibelsToGain (params::denormalise (*specDrive, rawFor (ParamSlot::drive)));

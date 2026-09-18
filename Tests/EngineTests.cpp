@@ -529,11 +529,15 @@ struct EngineRobustnessTests final : juce::UnitTest
                 synth.process (buffer, midi);
             }
 
-            // Bound generoso ma non arbitrario: con headroom -20 dB/voce il caso peggiore (nessuna
-            // cancellazione di fase fra le 16 voci) misurato a mano arriva a circa -4.2 dBFS
-            // (~0.62 lineare); 1.0 lascia comodo margine senza nascondere un vero clipping.
+            // Sedici note tenute a fondo scala sono il caso estremo: con headroom -8 dB/voce
+            // la loro somma supera il fondo scala, ed e' esattamente il lavoro del soft
+            // clipper in SynthEngine::process tenerla dentro. Quello che si verifica qui e'
+            // il suo contratto: mai oltre 0 dBFS, mai un campione non finito (renderPeak
+            // controlla isfinite su ognuno). Che un accordo *normale* resti sotto la soglia
+            // del clipper, cioe' che non ci sia distorsione nell'uso reale, e' il test
+            // successivo.
             const auto peak = renderPeak (synth, 50, *this);
-            expect (peak < 1.0f, "picco " + juce::String (peak) + ": la somma delle voci deve restare sotto 0 dBFS");
+            expect (peak <= 1.0f, "picco " + juce::String (peak) + ": il soft clipper deve tenere l'uscita entro 0 dBFS");
 
             midi.clear();
             for (int note = 48; note < 64; ++note)
@@ -548,6 +552,90 @@ struct EngineRobustnessTests final : juce::UnitTest
             // incluso, fallirebbe sempre: non sarebbe un voice leak, sarebbe il release che lavora.
             renderPeak (synth, 30, *this);
             expect (renderPeak (synth, 20, *this) < 1.0e-4f, "nessuna voce deve restare appesa");
+        }
+
+        beginTest ("gain staging: una nota e un accordo normale stanno sotto il soft clipper");
+        {
+            // Il contrappeso del test precedente. Li' si verifica che il caso estremo (16 note
+            // a fondo scala) venga contenuto; qui che l'uso *normale* non lo sfiori nemmeno,
+            // cioe' che il soft clipper sia una rete di sicurezza e non un compressore sempre
+            // acceso. La soglia del clipper e' 0.8: sotto quella l'uscita e' bit-identica a
+            // quella non clippata.
+            //
+            // Le soglie inferiori sono l'altra meta' del problema: con l'headroom precedente
+            // (-20 dB per voce) una nota singola usciva a -26 dBFS, cioe' uno strumento
+            // inutilizzabilmente piano, e il difetto non veniva preso da nessun test.
+            engine::SynthEngine synth;
+            prepareEngine (synth, store);
+            synth.setParams (defaultParams());
+            synth.setMasterGainLinear (0.8f); // il default di `volume`
+
+            {
+                juce::MidiBuffer midi;
+                midi.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+                juce::AudioBuffer<float> buffer (2, 128);
+                buffer.clear();
+                synth.process (buffer, midi);
+            }
+
+            const auto singleNote = renderPeak (synth, 20, *this);
+            expect (singleNote < 0.8f, "una nota sola non deve arrivare al soft clipper, picco "
+                                           + juce::String (singleNote));
+            expect (singleNote > 0.1f, "una nota sola non deve essere inudibile, picco "
+                                           + juce::String (singleNote));
+
+            {
+                juce::MidiBuffer midi;
+                for (int note : { 64, 67, 72 })
+                    midi.addEvent (juce::MidiMessage::noteOn (1, note, 1.0f), 0);
+                juce::AudioBuffer<float> buffer (2, 128);
+                buffer.clear();
+                synth.process (buffer, midi);
+            }
+
+            const auto chord = renderPeak (synth, 20, *this);
+            expect (chord < 0.8f, "un accordo di quattro note non deve arrivare al soft clipper, picco "
+                                      + juce::String (chord));
+
+            const auto dbfs = [] (float peak) { return juce::String (juce::Decibels::gainToDecibels (peak), 1) + " dBFS"; };
+            logMessage ("nota singola: " + dbfs (singleNote) + " | accordo di 4: " + dbfs (chord));
+        }
+
+        beginTest ("il soft clipper d'uscita non tocca il segnale sotto soglia");
+        {
+            // Che sia davvero trasparente sotto 0.8 e' la proprieta' che rende accettabile
+            // averlo sempre in catena: si confronta lo stesso segnale a due volumi diversi e
+            // si verifica che il rapporto fra i picchi sia esattamente quello dei due gain.
+            engine::SynthEngine synth;
+            prepareEngine (synth, store);
+            synth.setParams (defaultParams());
+            synth.setMasterGainLinear (0.25f);
+
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            juce::AudioBuffer<float> buffer (2, 128);
+            buffer.clear();
+            synth.process (buffer, midi);
+
+            const auto quiet = renderPeak (synth, 20, *this);
+
+            engine::SynthEngine louder;
+            prepareEngine (louder, store);
+            louder.setParams (defaultParams());
+            louder.setMasterGainLinear (0.5f);
+
+            juce::MidiBuffer midi2;
+            midi2.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            juce::AudioBuffer<float> buffer2 (2, 128);
+            buffer2.clear();
+            louder.process (buffer2, midi2);
+
+            const auto loud = renderPeak (louder, 20, *this);
+
+            expect (loud < 0.8f, "il test ha senso solo se entrambi restano sotto soglia, picco " + juce::String (loud));
+            expectWithinAbsoluteError (loud, quiet * 2.0f, quiet * 0.01f,
+                    "raddoppiando il volume il picco deve raddoppiare: " + juce::String (quiet)
+                        + " -> " + juce::String (loud));
         }
 
         beginTest ("every parameter at its extremes: no NaN, no explosion");
@@ -587,15 +675,14 @@ struct EngineRobustnessTests final : juce::UnitTest
                     synth.process (buffer, midi);
                 }
 
-                // Bound largo ma non arbitrario: Q=20 su due stadi in cascata puo' legittimamente
-                // risuonare parecchio (StateVariableFilterTests tollera fino a 100x l'ingresso per
-                // un singolo stadio), moltiplicato per l'headroom di voce (0.1x) e il guadagno di
-                // pan (~0.7x) da' un ordine di grandezza intorno a 10. Misurato: il picco peggiore
-                // di tutte le 256 varianti e' 6.61 (variante 63: risonanza+2 stadi+cutoff alto+
-                // drive+ottava estrema tutti insieme). Non e' silenzio ne' un timbro "giusto",
-                // e' solo "non e' esploso".
+                // Il soft clipper d'uscita tiene tutte le varianti entro 0 dBFS, quindi la
+                // soglia di prima (10.0) non discriminerebbe piu' niente. Quello che questo
+                // test cerca non e' comunque il livello: e' NaN/inf e instabilita', e li
+                // prende renderPeak, che chiama isfinite su ogni campione — un NaN attraversa
+                // il soft clipper intatto (il confronto con la soglia e' falso e l'aritmetica
+                // successiva lo propaga), quindi resta visibile.
                 const auto peak = renderPeak (synth, 4, *this);
-                expect (peak < 10.0f, "variante " + juce::String (variant) + ": picco " + juce::String (peak));
+                expect (peak <= 1.0f, "variante " + juce::String (variant) + ": picco " + juce::String (peak));
 
                 midi.clear();
                 midi.addEvent (juce::MidiMessage::noteOff (1, note), 0);
@@ -697,9 +784,14 @@ struct ParamCollectTests final : juce::UnitTest
             const auto p = params::collectEngineParams (raw);
 
             expectWithinAbsoluteError (p.sustain, 0.7f, 1.0e-5f);
-            // res passa anche per il jmap 0.707..20 dopo la denormalizzazione: si verifica la
-            // formula intera, non solo denormalise().
-            expectWithinAbsoluteError (p.resonanceQ, juce::jmap (0.4f, 0.707f, 20.0f), 1.0e-4f);
+            // res passa anche per la mappa esponenziale 0.707..12 dopo la denormalizzazione:
+            // si verifica la formula intera, non solo denormalise(). Esponenziale e non
+            // lineare: con la vecchia jmap, res 40 % dava gia' Q 8.4 (+18 dB di picco).
+            const auto expectedQ = dsp::StateVariableFilter::kButterworthQ
+                                       * std::pow (12.0f / dsp::StateVariableFilter::kButterworthQ, 0.4f);
+            expectWithinAbsoluteError (p.resonanceQ, expectedQ, 1.0e-4f);
+            expect (expectedQ < 2.5f, "a res 40 % la risonanza deve essere ancora moderata, Q "
+                                          + juce::String (expectedQ));
             expectWithinAbsoluteError (p.keyTrack, 0.25f, 1.0e-5f);
             expectWithinAbsoluteError (p.velocityAmount, 0.6f, 1.0e-5f);
         }

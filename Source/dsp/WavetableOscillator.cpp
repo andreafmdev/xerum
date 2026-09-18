@@ -85,7 +85,10 @@ float WavetableOscillator::getSample() noexcept
     if (table_ == nullptr)
         return 0.0f;
 
-    const int size = table_->sizeAtLevel (level_);
+    // Tutti i livelli sono lunghi frameSize: cambia il contenuto (armoniche), non la
+    // lunghezza del buffer, quindi l'interpolazione lineare lavora sempre su una
+    // tavola largamente sovracampionata.
+    const int size = table_->getFrameSize();
     const double position = phase_ * (double) size;
     const int index = juce::jlimit (0, size - 1, (int) position);
     const auto fraction = (float) (position - (double) index);

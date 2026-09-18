@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { toneStyle } from "@xerum/ui";
 import { sampleWave, spectrum } from "../curves";
 import { formatValue } from "../mapping";
@@ -20,16 +20,23 @@ export function WaveDisplay({ position, warp, level, name }: Props) {
   const { lfo: lfoLevel } = useMeterFrame();
   const lfo = modsFor(mods, "wtpos").reduce((a, m) => a + (m.src === "lfo" ? m.depth * lfoLevel : 0), 0);
 
-  useEffect(() => {
+  const draw = useCallback(() => {
     const cv = ref.current;
     const ctx = cv?.getContext("2d");
     if (!cv || !ctx) return;
     const W = cv.clientWidth;
     const H = cv.clientHeight;
-    const dpr = window.devicePixelRatio || 1;
-    if (cv.width !== W * dpr) {
-      cv.width = W * dpr;
-      cv.height = H * dpr;
+    // Lo chassis e' scalato con `zoom` (SynthWindow.tsx): clientWidth resta in px di layout
+    // mentre il rect e' gia' in px di viewport, quindi il loro rapporto e' la scala effettiva.
+    // Senza moltiplicarla nel backing store il canvas resterebbe l'unica superficie a bassa
+    // risoluzione della finestra — nitido tutto il resto, sfocato solo lo schermo dell'onda.
+    const rect = cv.getBoundingClientRect();
+    const zoom = W > 0 && rect.width > 0 ? rect.width / W : 1;
+    const dpr = (window.devicePixelRatio || 1) * zoom;
+    const backingWidth = Math.round(W * dpr);
+    if (cv.width !== backingWidth) {
+      cv.width = backingWidth;
+      cv.height = Math.round(H * dpr);
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
@@ -88,6 +95,15 @@ export function WaveDisplay({ position, warp, level, name }: Props) {
     ctx.arc(px, py + amp * 0.6 + 8, 2, 0, 7);
     ctx.fill();
   }, [position, warp, level, lfo]);
+
+  // Ridisegna anche quando cambia solo la scala: l'host puo' ridimensionare la finestra
+  // senza che nessuna delle dipendenze qui sopra si muova, e il backing store resterebbe
+  // alla risoluzione precedente.
+  useEffect(() => {
+    draw();
+    window.addEventListener("resize", draw);
+    return () => window.removeEventListener("resize", draw);
+  }, [draw]);
 
   return (
     <div
