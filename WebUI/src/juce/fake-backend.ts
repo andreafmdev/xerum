@@ -1,0 +1,69 @@
+// Backend in memoria: gira nel browser senza JUCE e nei test. Riproduce il
+// contratto di Backend con uno stato locale, un log di gesture per i test e,
+// opzionalmente, un clock rAF che simula meter e LFO (ex useClock).
+
+import { PARAM_IDS, type ParamId } from "../synth/params.generated";
+import { defaultNormalised, specOf, type Backend, type BridgeState, type MeterFrame, type ModAssignment, type ParamHandle } from "./backend";
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+type Op = { id: ParamId; op: "begin" | "set" | "end"; v?: number };
+
+class FakeHandle implements ParamHandle {
+  readonly orphan = false;
+  private value: number;
+  private subs = new Set<() => void>();
+  constructor(private id: ParamId, initial: number, private log: Op[]) { this.value = initial; }
+  get() { return this.value; }
+  set(v: number) { this.value = clamp01(v); this.log.push({ id: this.id, op: "set", v: this.value }); this.notify(); }
+  begin() { this.log.push({ id: this.id, op: "begin" }); }
+  end() { this.log.push({ id: this.id, op: "end" }); }
+  subscribe(cb: () => void) { this.subs.add(cb); return () => { this.subs.delete(cb); }; }
+  /** Simula un cambio dall'host. */
+  push(v: number) { this.value = clamp01(v); this.notify(); }
+  private notify() { for (const s of this.subs) s(); }
+}
+
+export class FakeBackend implements Backend {
+  readonly kind = "fake" as const;
+  readonly log: Op[] = [];
+  private handles = new Map<ParamId, FakeHandle>();
+  private state: BridgeState;
+  private stateSubs = new Set<(s: BridgeState & { origin: string }) => void>();
+  private meterSubs = new Set<(m: MeterFrame) => void>();
+  private raf = 0;
+
+  constructor(opts: { demo?: boolean; state?: Partial<BridgeState>; values?: Partial<Record<ParamId, number>> } = {}) {
+    this.state = { version: 1, mods: [], arpSteps: [0.8, 0, 0.6, 0.9, 0, 0.7, 0, 0.5, 0.8, 0, 0.6, 0, 0.9, 0.4, 0, 0.7], ...opts.state };
+    for (const id of PARAM_IDS) this.handles.set(id, new FakeHandle(id, opts.values?.[id] ?? defaultNormalised(specOf(id)), this.log));
+    if (opts.demo && typeof requestAnimationFrame === "function") this.startDemo();
+  }
+
+  param(id: ParamId): ParamHandle { return this.handles.get(id)!; }
+  /** Per i test: cambio "dall'host". */
+  push(id: ParamId, v: number) { this.handles.get(id)!.push(v); }
+
+  async getState() { return structuredClone(this.state); }
+  async setMods(mods: ModAssignment[], origin: string) { this.state = { ...this.state, mods: [...mods] }; this.emitStateChanged(this.state, origin); }
+  async setArpSteps(steps: number[], origin: string) { this.state = { ...this.state, arpSteps: [...steps] }; this.emitStateChanged(this.state, origin); }
+  onStateChanged(cb: (s: BridgeState & { origin: string }) => void) { this.stateSubs.add(cb); return () => { this.stateSubs.delete(cb); }; }
+  onMeters(cb: (m: MeterFrame) => void) { this.meterSubs.add(cb); return () => { this.meterSubs.delete(cb); }; }
+  emitStateChanged(s: BridgeState, origin: string) { for (const cb of this.stateSubs) cb({ ...structuredClone(s), origin }); }
+  emitMeters(m: MeterFrame) { for (const cb of this.meterSubs) cb(m); }
+
+  /** Clock finto per browser/Storybook: LFO, meter che respirano, step arp. */
+  private startDemo() {
+    let last = 0;
+    const tick = (now: number) => {
+      if (now - last > 33) {
+        last = now;
+        const t = now / 1000;
+        const env = 0.55 + 0.25 * Math.sin(t * 1.7) + 0.1 * Math.sin(t * 7.3);
+        const rate = 0.05 * Math.pow(400, this.param("lrate").get());
+        this.emitMeters({ in: env * this.param("level").get(), out: env * this.param("volume").get(), lfo: Math.sin(t * rate * 2 * Math.PI), arpStep: Math.floor(t * 8) % 16 });
+      }
+      this.raf = requestAnimationFrame(tick);
+    };
+    this.raf = requestAnimationFrame(tick);
+  }
+  dispose() { if (this.raf) cancelAnimationFrame(this.raf); }
+}
