@@ -248,3 +248,4 @@ Verificate in un progetto usa-e-getta prima di scrivere il piano (`docs/superpow
 - `pnpm-workspace.yaml` richiede `onlyBuiltDependencies: [esbuild]`, altrimenti `shadcn add` fallisce (`ERR_PNPM_IGNORED_BUILDS`).
 - `components.json` scritto a mano (non `shadcn init --template`, che creerebbe un progetto nuovo); il CLI v4 usa il package `cn` per `cn()` e richiede `@import "shadcn/tailwind.css"` (custom variant `data-checked` ecc.) e `tw-animate-css`.
 - `index.css` include un reset base scoped (box-sizing, border 0, form controls `font/color: inherit`) perché `ui.css` deve bastare da solo a Storybook e a Claude Design; il preflight completo resta all'app.
+- **Keyboard**: resta fuori dalla libreria React. Decisione 2026-09-18: tastiera on-screen nativa `juce::MidiKeyboardComponent` sotto la WebView (vedi `docs/architecture.md`, sezione "On-screen keyboard").

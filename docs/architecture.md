@@ -20,7 +20,8 @@ DAW MIDI ──► PluginProcessor ──► SynthEngine ──► VoiceManager 
                     │                                      │
                  APVTS                              dsp stubs (silence)
                     │
-             PluginEditor (WebView) ◄── React (localhost:5173 / fallback HTML)
+             PluginEditor ─┬─ WebView ◄── React (localhost:5173 / fallback HTML)
+                           └─ MidiKeyboardComponent (native strip) ──► MidiKeyboardState ──► processBlock MIDI
 ```
 
 ## Real-time rules
@@ -33,6 +34,10 @@ On the audio thread (`processBlock` → `SynthEngine::process`):
 - No logging
 
 Cross-thread assets (wavetables, presets) must use lock-free handoff — double buffer, `AbstractFifo`, or atomic pointer swap (`WavetableStore`, phase 2).
+
+## On-screen keyboard
+
+The editor is a `WebBrowserComponent` with a native `juce::MidiKeyboardComponent` strip (72 px) underneath, Serum/Vital style. It drives a `MidiKeyboardState` owned by the processor, merged into the host MIDI buffer at the top of `processBlock` (`processNextMidiBuffer`). QWERTY mapping (A W S E D F T G Y H U J K …) plays from middle C; click height sets velocity. Colours mirror `WebUI/packages/ui/src/theme.css`. The keyboard is plugin chrome, not part of `@xerum/ui`, so it does not go through design-sync.
 
 ## Phase 1 behaviour
 

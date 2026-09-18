@@ -31,7 +31,7 @@ juce::WebBrowserComponent::Resource makeFallbackIndexHtml()
   <main>
     <h1>SerumStyleSynth</h1>
     <p>Web UI scaffold. Start the Vite dev server:</p>
-    <p><code>cd WebUI && npm run dev</code></p>
+    <p><code>cd WebUI && pnpm dev</code></p>
     <p>then reopen the editor.</p>
   </main>
 </body>
@@ -75,18 +75,23 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
     SerumStyleSynthAudioProcessor& p)
     : AudioProcessorEditor (&p),
       processorRef_ (p),
-      webView_ (makeWebOptions())
+      webView_ (makeWebOptions()),
+      keyboard_ (p.getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard)
 {
-    juce::ignoreUnused (processorRef_);
-
     addAndMakeVisible (webView_);
+    addAndMakeVisible (keyboard_);
+    configureKeyboard();
 
     setSize (kDefaultWidth, kDefaultHeight);
     setResizable (true, true);
-    setResizeLimits (640, 400, 1920, 1200);
+    setResizeLimits (640, 400 + kKeyboardHeight, 1920, 1200);
 
     if (kUseDevServer)
-        webView_.goToURL (kDevServerUrl);
+    {
+        // XERUM_WEBUI_URL overrides the dev server (e.g. when 5173 is taken).
+        const auto url = juce::SystemStats::getEnvironmentVariable ("XERUM_WEBUI_URL", kDevServerUrl);
+        webView_.goToURL (url);
+    }
     else
         webView_.goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
 }
@@ -96,7 +101,45 @@ void SerumStyleSynthAudioProcessorEditor::paint (juce::Graphics& g)
     g.fillAll (juce::Colour (0xff12141a));
 }
 
+void SerumStyleSynthAudioProcessorEditor::configureKeyboard()
+{
+    using KC = juce::MidiKeyboardComponent;
+
+    // Theme colours mirror WebUI/packages/ui/src/theme.css (dark only).
+    const auto background = juce::Colour (0xff0e1016);
+    const auto surface0 = juce::Colour (0xff12151d);
+    const auto surface1 = juce::Colour (0xff171a24);
+    const auto line = juce::Colour (0xff2a3144);
+    const auto text = juce::Colour (0xffe9ecf5);
+    const auto muted = juce::Colour (0xff9aa3b8);
+    const auto accent = juce::Colour (0xff6ee7c5);
+
+    keyboard_.setColour (KC::whiteNoteColourId, text);
+    keyboard_.setColour (KC::blackNoteColourId, surface0);
+    keyboard_.setColour (KC::keySeparatorLineColourId, line);
+    keyboard_.setColour (KC::mouseOverKeyOverlayColourId, accent.withAlpha (0.35f));
+    keyboard_.setColour (KC::keyDownOverlayColourId, accent.withAlpha (0.85f));
+    keyboard_.setColour (KC::textLabelColourId, muted);
+    keyboard_.setColour (KC::shadowColourId, background.withAlpha (0.4f));
+    keyboard_.setColour (KC::upDownButtonBackgroundColourId, surface1);
+    keyboard_.setColour (KC::upDownButtonArrowColourId, text);
+
+    // Five octaves fit the window width; no scroll buttons needed.
+    keyboard_.setAvailableRange (kLowestNote, kHighestNote);
+    keyboard_.setLowestVisibleKey (kLowestNote);
+    keyboard_.setScrollButtonsVisible (false);
+    keyboard_.setOctaveForMiddleC (4);
+    keyboard_.setKeyPressBaseOctave (5);          // QWERTY row (A W S E D ...) plays from middle C
+    keyboard_.setVelocity (0.8f, true);           // click height sets velocity
+    keyboard_.setBlackNoteLengthProportion (0.62f);
+}
+
 void SerumStyleSynthAudioProcessorEditor::resized()
 {
-    webView_.setBounds (getLocalBounds());
+    auto bounds = getLocalBounds();
+    auto keyboardArea = bounds.removeFromBottom (kKeyboardHeight);
+
+    keyboard_.setKeyWidth (static_cast<float> (keyboardArea.getWidth()) / kWhiteKeysVisible);
+    keyboard_.setBounds (keyboardArea);
+    webView_.setBounds (bounds);
 }

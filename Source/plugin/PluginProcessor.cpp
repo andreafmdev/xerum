@@ -23,6 +23,7 @@ void SerumStyleSynthAudioProcessor::prepareToPlay (double sampleRate, int sample
 
 void SerumStyleSynthAudioProcessor::releaseResources()
 {
+    keyboardState_.reset();
     engine_->reset();
 }
 
@@ -54,6 +55,11 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     // osc1_level reserved for phase 3 oscillator mix; read to keep linker happy / future use.
     if (osc1LevelParam_ != nullptr)
         (void) osc1LevelParam_->load();
+
+    // Merge notes played on the editor's on-screen keyboard into the host MIDI stream.
+    // MidiKeyboardState takes a brief CriticalSection internally (JUCE's standard pattern);
+    // contention only happens on UI note on/off, never on the steady-state path.
+    keyboardState_.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
 
     engine_->process (buffer, midi);
 }

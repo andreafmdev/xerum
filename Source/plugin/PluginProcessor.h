@@ -39,8 +39,12 @@ public:
 
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts_; }
 
+    /** Shared with the editor's on-screen keyboard; merged into the MIDI stream in processBlock(). */
+    juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState_; }
+
 private:
     juce::AudioProcessorValueTreeState apvts_;
+    juce::MidiKeyboardState keyboardState_;
     std::unique_ptr<engine::SynthEngine> engine_;
 
     std::atomic<float>* masterGainParam_ { nullptr };
