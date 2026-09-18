@@ -1,5 +1,6 @@
 #include "dsp/MipTable.h"
 #include "dsp/WavetableBlob.h"
+#include "dsp/WavetableOscillator.h"
 #include "dsp/WavetableStore.h"
 
 #include <juce_core/juce_core.h>
@@ -214,3 +215,89 @@ struct WavetableStoreTests final : juce::UnitTest
 };
 
 static WavetableStoreTests wavetableStoreTests;
+
+struct OscillatorTests final : juce::UnitTest
+{
+    OscillatorTests() : juce::UnitTest ("WavetableOscillator", "dsp") {}
+
+    void runTest() override
+    {
+        beginTest ("il livello scelto non contiene armoniche sopra Nyquist");
+        {
+            // A 44.1 kHz, un La4 (440 Hz) ammette ~50 armoniche → serve un livello
+            // da 128 campioni (64 armoniche) o più corto.
+            expectEquals (dsp::levelForFrequency (440.0f, 44100.0, 2048), 5);
+            // Un La1 (55 Hz) ammette ~400 armoniche → livello 2 (512 campioni, 256 armoniche).
+            expectEquals (dsp::levelForFrequency (55.0f, 44100.0, 2048), 2);
+            // Frequenze assurde non devono uscire dai limiti.
+            expectEquals (dsp::levelForFrequency (0.0f, 44100.0, 2048), dsp::MipTable::kMaxLevel);
+            expectEquals (dsp::levelForFrequency (20000.0f, 44100.0, 2048), dsp::MipTable::kMaxLevel);
+        }
+
+        beginTest ("senza tavola l'oscillatore tace invece di dereferenziare");
+        {
+            dsp::WavetableOscillator osc;
+            osc.prepare (44100.0);
+            osc.setTable (nullptr);
+            osc.setFrequencyHz (440.0f);
+            for (int i = 0; i < 64; ++i)
+                expectWithinAbsoluteError (osc.getSample(), 0.0f, 0.0f);
+        }
+
+        beginTest ("un seno in tavola esce come un seno");
+        {
+            const auto bytes = makeHarmonicBlob (2048, 1); // una sola armonica
+            const auto view = dsp::parseXwt (bytes.data(), bytes.size());
+            const auto table = dsp::buildMipTable (*view);
+
+            dsp::WavetableOscillator osc;
+            osc.prepare (44100.0);
+            osc.setTable (table.get());
+            osc.setFramePosition (0.0f);
+            osc.setFrequencyHz (441.0f); // 100 campioni per ciclo esatti
+
+            std::vector<float> rendered (100);
+            for (auto& s : rendered)
+                s = osc.getSample();
+
+            float maxError = 0.0f;
+            for (int i = 0; i < 100; ++i)
+                maxError = juce::jmax (maxError, std::abs (rendered[(size_t) i]
+                                                           - std::sin (2.0f * juce::MathConstants<float>::pi * (float) i / 100.0f)));
+
+            expect (maxError < 0.02f, "errore massimo " + juce::String (maxError));
+        }
+
+        beginTest ("la posizione fra due frame interpola invece di saltare");
+        {
+            // Due frame: costante -1 e costante +1 (l'interpolazione è leggibile a occhio).
+            const uint32_t frames = 2, frameSize = 64;
+            std::vector<char> bytes (12 + (size_t) frames * frameSize * sizeof (float));
+            std::memcpy (bytes.data(), "XWT1", 4);
+            std::memcpy (bytes.data() + 4, &frames, 4);
+            std::memcpy (bytes.data() + 8, &frameSize, 4);
+            for (uint32_t i = 0; i < frameSize; ++i)
+            {
+                const float lo = -1.0f, hi = 1.0f;
+                std::memcpy (bytes.data() + 12 + i * sizeof (float), &lo, sizeof (float));
+                std::memcpy (bytes.data() + 12 + (frameSize + i) * sizeof (float), &hi, sizeof (float));
+            }
+
+            const auto view = dsp::parseXwt (bytes.data(), bytes.size());
+            const auto table = dsp::buildMipTable (*view);
+
+            dsp::WavetableOscillator osc;
+            osc.prepare (44100.0);
+            osc.setTable (table.get());
+            osc.setFrequencyHz (100.0f);
+            osc.setFramePosition (0.5f);
+
+            expectWithinAbsoluteError (osc.getSample(), 0.0f, 0.05f);
+
+            osc.setFramePosition (0.0f);
+            expectWithinAbsoluteError (osc.getSample(), -1.0f, 0.05f);
+        }
+    }
+};
+
+static OscillatorTests oscillatorTests;

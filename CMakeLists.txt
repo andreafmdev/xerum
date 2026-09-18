@@ -88,7 +88,8 @@ target_sources(XerumTests
         Tests/WavetableTests.cpp
         Source/dsp/WavetableBlob.cpp
         Source/dsp/MipTable.cpp
-        Source/dsp/WavetableStore.cpp)
+        Source/dsp/WavetableStore.cpp
+        Source/dsp/WavetableOscillator.cpp)
 
 target_include_directories(XerumTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
 

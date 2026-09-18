@@ -14,7 +14,14 @@ namespace dsp
 {
 namespace
 {
-constexpr int kFftOrder = 11; // 2048
+/** Ordine della FFT per un frame lungo `frameSize` campioni (potenza di due garantita da parseXwt). */
+int fftOrderFor (int frameSize) noexcept
+{
+    int order = 0;
+    while ((1 << order) < frameSize)
+        ++order;
+    return order;
+}
 
 /** I file .xwt nell'ordine delle opzioni di `wtIndex` in parameters.json. */
 const char* const kTableFiles[] = { "basic.xwt", "saws.xwt", "grit.xwt", "vocal.xwt", "bells.xwt", "pwm.xwt" };
@@ -55,7 +62,10 @@ std::unique_ptr<MipTable> buildMipTable (const BlobView& blob)
 {
     auto table = std::make_unique<MipTable> (blob.frames, blob.frameSize);
 
-    juce::dsp::FFT forward { kFftOrder };
+    // Costruzione tavola: solo message thread (buildMipTable non è mai chiamata dal thread audio),
+    // quindi calcolare l'ordine qui non viola le regole real-time.
+    const int fftOrder = fftOrderFor (blob.frameSize);
+    juce::dsp::FFT forward { fftOrder };
     std::vector<juce::dsp::Complex<float>> timeDomain ((size_t) blob.frameSize);
     std::vector<juce::dsp::Complex<float>> spectrum ((size_t) blob.frameSize);
 
@@ -73,7 +83,7 @@ std::unique_ptr<MipTable> buildMipTable (const BlobView& blob)
             const int size = blob.frameSize >> level;
             const int harmonics = size / 2;
 
-            juce::dsp::FFT inverse { kFftOrder - level };
+            juce::dsp::FFT inverse { fftOrder - level };
             std::vector<juce::dsp::Complex<float>> shortSpectrum ((size_t) size, { 0.0f, 0.0f });
             std::vector<juce::dsp::Complex<float>> shortTime ((size_t) size);
 
