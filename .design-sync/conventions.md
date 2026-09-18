@@ -24,7 +24,7 @@ Tokens (all defined in `styles.css` → `_ds_bundle.css`):
 - Fonts: no CSS variable is exposed; use the classes `font-sans` (IBM Plex Sans) and `font-mono` (IBM Plex Mono).
 
 ### Where the truth lives
-Read `styles.css` and its import `_ds_bundle.css` for the exact classes and tokens, and `components/<group>/<Name>/<Name>.prompt.md` + `<Name>.d.ts` for each component's props and story JSX. Groups: `controls` (Button, Fader, Knob, Select, Toggle), `layout` (Panel, SectionHeader, Tabs), `display` (ValueReadout, WavetableDisplay).
+Read `styles.css` and its import `_ds_bundle.css` for the exact classes and tokens, and `components/<group>/<Name>/<Name>.prompt.md` + `<Name>.d.ts` for each component's props and story JSX. Groups: `controls` (Button, Fader, Knob, Segmented, Select, Stepper, Toggle), `layout` (Panel, SectionHeader, Tabs), `display` (Meter, ValueReadout, WavetableDisplay).
 
 ### One idiomatic panel
 ```jsx
@@ -39,3 +39,13 @@ const { Panel, Knob, Toggle, Select } = window.XerumUI;
 </Panel>
 ```
 Panels sit side by side in a `flex gap-4` or `grid grid-cols-3 gap-4` row on the `bg-background` chassis.
+
+### Newer controls and the types the `.d.ts` files leave undeclared
+- `Segmented` — one exclusive choice (a radiogroup): `value`, `onChange`, `options=[{ value, label }]`, required `label`, optional `tone`/`disabled`. Use it for wave shape, filter type, voice mode — never a hand-built row of `Button`s.
+- `Stepper` — integer values with `<`/`>` buttons: `value`, `onChange`, `min`, `max`, required `label`, optional `unit` ("OCT", "SEMI"), `format`, `tone`.
+- `Meter` — an LED level bar, display only: `level` 0..1, required `label`, `segments` (default 24), `tone`.
+- `Knob` modulation: `mods=[{ tone, depth, bipolar? }]` draws one ring per source outside the value arc (`tone` = the source's section colour, `depth` 0..1, `bipolar: true` for LFO-like sources); `liveValue` (0..1) adds the moving dot and is only shown with `mods`; `onDropMod(source)` makes the knob a drop target for a draggable chip that calls `e.dataTransfer.setData("text/x-mod", "lfo")`; `hideValue` hides the readout.
+- `Tabs` `variant="bar"`: a full-width bar with an underline on the active item. Each item may carry its own `tone` (`items=[{ value, label, tone? }]`) so every page lights up in its section colour. Default `variant="plate"`.
+- `Panel` / `SectionHeader` `on` + `onToggle`: with `onToggle` the header LED becomes the section's on/off switch (a `role="switch"`); without it the LED is a status light (`on` defaults to true). Prefer this over a separate `Toggle` in `actions` for enabling a section.
+- Helper types referenced by the props but not declared in the `.d.ts` files: `Tone = "osc" | "filter" | "env" | "lfo" | "fx" | "master"`, `KnobMod = { tone: Tone; depth: number; bipolar?: boolean }`, `TabItem = { value: string; label: string; tone?: Tone }`, `SegmentedOption = { value: string; label: string }`.
+- Optional glow: the components read `--glow` (an SVG `filter` on the value arc) and `--tglow` (a `text-shadow` on lit labels), both defaulting to none — they are NOT tokens in `styles.css`. Set them on a wrapper with inline style for the lit look: `style={{ "--glow": "drop-shadow(0 0 4px var(--tone))", "--tglow": "0 0 8px var(--tone)" }}`.

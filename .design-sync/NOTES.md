@@ -22,3 +22,21 @@
 - Fonts are inlined base64 in `ui.css` (Vite lib mode); `[FONT_MISSING]` never fired. If the font setup moves to files, `fonts/` handling changes.
 - Toolchain: converter deps in `.ds-sync/` (esbuild, ts-morph, playwright 1.5x with chromium-1200 in `~/Library/Caches/ms-playwright`). pnpm 11 / Node 24.
 - No remote assets in any story (no `[ASSETS_BLOCKED]` exposure).
+
+## 2026-09-18 — SynthWindow implemented from the design
+- The Claude Design template `templates/synth-window/SynthWindow.dc.html` (prototype with its own `sx-*` primitives) was implemented in `WebUI/src/synth/` on top of `@xerum/ui`.
+- Library extended to cover what the prototype needed: `Knob` (`mods`, `liveValue`, `onDropMod`, `hideValue`, glow via `--glow`), `Tabs` (`variant="bar"`, per-item `tone`), new `Segmented`, `Stepper`, `Meter`. All have stories → **re-sync required** (rebuild `sb-reference`, run the driver) so the design project gets the new cards and `conventions.md` can list them.
+- `conventions.md` should mention: `Segmented` for exclusive choices (radiogroup), `Stepper` for integers, `Meter` for levels, `Knob` mod rings (`mods=[{tone,depth,bipolar}]`), and that `--glow`/`--tglow` are opt-in chassis variables (default `none`).
+
+## 2026-09-18 — second sync (first re-sync)
+- Driver verdict on the extended library: 3 changed (Knob, Panel, Tabs), 3 added (Meter, Segmented, Stepper), 7 unchanged; all 6 graded `match` from the sheets/raw shots; the driver-triggered `[SPOT_CHECK]` (Button, Toggle, ValueReadout, WavetableDisplay, Select) confirmed the recorded grades. Framing scale (~1.19× on the storybook side) is the same as on the first sync — not a delta.
+- `[GRID_OVERFLOW]` Tabs (Bar story) → `overrides.Tabs.cardMode = "column"` (presentation-only; targeted `preview-rebuild.mjs --components Tabs`, no re-grade).
+- `[STORY_CAP]` Knob has 8 stories (Modulated, Drop Target sit beyond the default cap of 6). Run the driver with `--max-stories 8` (it forwards the flag to compare) so those stories are captured and graded; a run without it re-keys Knob to the 6-story set.
+- The dts extractor drops exported helper types: the emitted `Knob.d.ts`/`Tabs.d.ts`/`Segmented.d.ts` reference `KnobMod`, `TabItem`, `SegmentedOption` (and `Tone`) without declaring them. `conventions.md` declares their shapes — update it whenever those types change in `src/components/*/`.
+- `--glow` / `--tglow` are consumed by Knob/SectionHeader/Segmented/Tabs as `var(--glow, none)` but never defined in `ui.css` — they are opt-in wrapper variables, not tokens; conventions.md documents them as such (do not list them under tokens).
+- `SectionHeader` re-ships (new `on`/`onToggle` props → `.d.ts` hash) although its stories didn't change: the driver reports it under `upload.components` but not under `verification.changed`. Expected.
+
+## Re-sync risks (added 2026-09-18, second sync)
+- Helper-type drift: `KnobMod`/`TabItem`/`SegmentedOption`/`Tone` live only in `conventions.md` for the design agent — a change in source silently desyncs the header until re-validated.
+- Knob story cap: always pass `--max-stories 8` (or higher as stories grow) to the driver, otherwise the modulation stories drop out of the verified set.
+
