@@ -1,13 +1,9 @@
 #include "plugin/PluginEditor.h"
 
+#include "bridge/WebAssets.h"
+
 namespace
 {
-#if JUCE_DEBUG
-constexpr bool kUseDevServer = true;
-#else
-constexpr bool kUseDevServer = false;
-#endif
-
 constexpr const char* kDevServerUrl = "http://localhost:5173";
 
 juce::WebBrowserComponent::Resource makeFallbackIndexHtml()
@@ -53,8 +49,14 @@ juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& rela
                        .withResourceProvider ([] (const auto& url)
                                               -> std::optional<juce::WebBrowserComponent::Resource>
                        {
-                           if (url == "/" || url == "/index.html"
-                               || url.endsWithIgnoreCase ("index.html"))
+                           // In Release il bundle Vite è dentro il binario: serve quello.
+                           if (auto resource = bridge::webAssets::lookup (url))
+                               return resource;
+
+                           // Senza bundle embedded resta la pagina di cortesia per "/".
+                           if (! bridge::webAssets::embedded()
+                               && (url == "/" || url == "/index.html"
+                                   || url.endsWithIgnoreCase ("index.html")))
                                return makeFallbackIndexHtml();
 
                            return std::nullopt;
@@ -120,14 +122,16 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
     }
    #endif
 
-    if (kUseDevServer)
+    if (bridge::webAssets::embedded())
+    {
+        webView_.goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
+    }
+    else
     {
         // XERUM_WEBUI_URL overrides the dev server (e.g. when 5173 is taken).
         const auto url = juce::SystemStats::getEnvironmentVariable ("XERUM_WEBUI_URL", kDevServerUrl);
         webView_.goToURL (url);
     }
-    else
-        webView_.goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
 }
 
 SerumStyleSynthAudioProcessorEditor::~SerumStyleSynthAudioProcessorEditor()

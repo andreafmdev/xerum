@@ -21,7 +21,8 @@
       "generator": "Xcode",
       "binaryDir": "${sourceDir}/build/macos-release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "XERUM_EMBED_WEBUI": "ON"
       }
     },
     {

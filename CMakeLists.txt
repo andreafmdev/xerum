@@ -37,6 +37,7 @@ target_sources(SerumStyleSynth
         Source/bridge/StateChannel.cpp
         Source/bridge/WebRelays.cpp
         Source/bridge/MeterChannel.cpp
+        Source/bridge/WebAssets.cpp
         Source/engine/SynthEngine.cpp
         Source/engine/VoiceManager.cpp
         Source/engine/SynthVoice.cpp
@@ -70,3 +71,25 @@ target_link_libraries(SerumStyleSynth
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+# --- Web UI embedding (Release) -------------------------------------------
+option(XERUM_EMBED_WEBUI "Embed WebUI/dist into the plugin binary (Release)" OFF)
+
+find_program(XERUM_PNPM pnpm)
+if(XERUM_PNPM)
+    add_custom_target(webui
+        COMMAND ${XERUM_PNPM} --dir ${CMAKE_CURRENT_SOURCE_DIR}/WebUI ui:build
+        COMMAND ${XERUM_PNPM} --dir ${CMAKE_CURRENT_SOURCE_DIR}/WebUI build
+        COMMENT "Building the Web UI bundle (WebUI/dist)")
+endif()
+
+if(XERUM_EMBED_WEBUI)
+    set(XERUM_WEBUI_DIST ${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist)
+    if(NOT EXISTS ${XERUM_WEBUI_DIST}/index.html)
+        message(FATAL_ERROR "XERUM_EMBED_WEBUI=ON but ${XERUM_WEBUI_DIST}/index.html is missing.\nBuild it first: cd WebUI && pnpm ui:build && pnpm build   (or: cmake --build --preset macos-release --target webui)")
+    endif()
+    file(GLOB_RECURSE XERUM_WEBUI_FILES CONFIGURE_DEPENDS ${XERUM_WEBUI_DIST}/*)
+    juce_add_binary_data(WebUIAssets SOURCES ${XERUM_WEBUI_FILES} NAMESPACE WebUIAssets)
+    target_link_libraries(SerumStyleSynth PRIVATE WebUIAssets)
+    target_compile_definitions(SerumStyleSynth PRIVATE XERUM_EMBED_WEBUI=1)
+endif()
