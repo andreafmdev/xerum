@@ -56,6 +56,8 @@ WebUI/
                                <Name>.test.tsx (se logica)
 ```
 
+Nota: font e Fader sono descritti come implementati in §10 (src/fonts inline; Fader custom).
+
 Regole:
 
 - I file in `src/components/ui/` sono quelli generati dal CLI shadcn; modifiche locali ammesse ma documentate in testa al file con un commento `// xerum:` per rendere possibile `shadcn add --diff` in futuro.
@@ -200,6 +202,8 @@ Comportamento:
 - `pnpm --filter @xerum/ui storybook` → dev server; `build-storybook` → `storybook-static/` (usato da design-sync come riferimento locale).
 - App shell: `pnpm --filter serum-style-synth-webui dev` invariato su porta 5173.
 
+Nota: font e Fader sono descritti come implementati in §10 (src/fonts inline; Fader custom).
+
 ## 7. Test
 
 | Unità | Cosa si verifica |
@@ -243,3 +247,4 @@ Verificate in un progetto usa-e-getta prima di scrivere il piano (`docs/superpow
 - I font stanno in `src/fonts/` e vengono inlineati base64 in `dist/ui.css` (Vite lib mode inlinea sempre gli asset). Sostituisce `packages/ui/fonts/` + `dist/fonts/` di §3 e §6.
 - `pnpm-workspace.yaml` richiede `onlyBuiltDependencies: [esbuild]`, altrimenti `shadcn add` fallisce (`ERR_PNPM_IGNORED_BUILDS`).
 - `components.json` scritto a mano (non `shadcn init --template`, che creerebbe un progetto nuovo); il CLI v4 usa il package `cn` per `cn()` e richiede `@import "shadcn/tailwind.css"` (custom variant `data-checked` ecc.) e `tw-animate-css`.
+- `index.css` include un reset base scoped (box-sizing, border 0, form controls `font/color: inherit`) perché `ui.css` deve bastare da solo a Storybook e a Claude Design; il preflight completo resta all'app.

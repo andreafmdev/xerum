@@ -40,4 +40,26 @@
   html {
     @apply font-sans;
   }
+
+  *,
+  ::before,
+  ::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+    background-color: transparent;
+    margin: 0;
+    padding: 0;
+  }
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
 }
