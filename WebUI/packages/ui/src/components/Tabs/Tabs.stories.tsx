@@ -29,3 +29,22 @@ function Controlled(props: TabsProps) {
 
 export const Default: Story = { render: (args) => <Controlled {...args} /> };
 export const Toned: Story = { args: { tone: "filter" }, render: (args) => <Controlled {...args} /> };
+
+export const Bar: Story = {
+  args: {
+    value: "env",
+    items: [
+      { value: "env", label: "Envelope", tone: "env" },
+      { value: "lfo", label: "LFO", tone: "lfo" },
+      { value: "mod", label: "Mod matrix", tone: "lfo" },
+      { value: "fx", label: "Effects", tone: "fx" },
+      { value: "arp", label: "Arpeggiator", tone: "master" },
+    ],
+    variant: "bar",
+  },
+  render: (args) => (
+    <div className="w-[560px]">
+      <Controlled {...args} />
+    </div>
+  ),
+};

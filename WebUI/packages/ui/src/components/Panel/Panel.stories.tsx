@@ -61,3 +61,14 @@ export const UntitledWithKnob: Story = {
     </Panel>
   ),
 };
+
+export const Switchable: Story = {
+  render: (args) => {
+    const [on, setOn] = useState(true);
+    return (
+      <Panel {...args} title="Filter" tone="filter" on={on} onToggle={setOn}>
+        <span className="text-xs text-muted-foreground">Il LED nell'header accende e spegne la sezione.</span>
+      </Panel>
+    );
+  },
+};

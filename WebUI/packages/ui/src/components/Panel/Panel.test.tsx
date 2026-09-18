@@ -30,3 +30,10 @@ describe("Panel", () => {
     expect(screen.getByTestId("panel")).not.toHaveClass("overflow-hidden");
   });
 });
+
+describe("Panel on/off", () => {
+  it("forwards on/onToggle to the header LED", () => {
+    render(<Panel title="Osc" on={false} onToggle={() => {}}>x</Panel>);
+    expect(screen.getByRole("switch", { name: "Osc on" })).toHaveAttribute("aria-checked", "false");
+  });
+});

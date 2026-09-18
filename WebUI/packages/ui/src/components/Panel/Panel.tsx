@@ -9,11 +9,15 @@ export type PanelProps = {
   /** Colore di sezione: LED e titolo dell'header, `--tone` ereditata da tutti i figli. */
   tone?: Tone;
   actions?: ReactNode;
+  /** Stato della sezione, mostrato dal LED dell'header. */
+  on?: boolean;
+  /** Se presente, il LED dell'header diventa l'interruttore della sezione. */
+  onToggle?: (on: boolean) => void;
   children: ReactNode;
   className?: string;
 };
 
-export function Panel({ title, tone, actions, children, className }: PanelProps) {
+export function Panel({ title, tone, actions, on, onToggle, children, className }: PanelProps) {
   return (
     <Card
       data-testid="panel"
@@ -27,7 +31,7 @@ export function Panel({ title, tone, actions, children, className }: PanelProps)
     >
       {title && (
         <div className="px-3">
-          <SectionHeader title={title} actions={actions} />
+          <SectionHeader title={title} actions={actions} on={on} onToggle={onToggle} />
         </div>
       )}
       <CardContent className="flex flex-1 flex-col gap-3 px-3 pb-3">{children}</CardContent>

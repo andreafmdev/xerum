@@ -37,3 +37,28 @@ describe("Tabs", () => {
     expect(screen.getByTestId("tabs").style.getPropertyValue("--tone")).toBe("var(--color-osc)");
   });
 });
+
+describe("Tabs per-item tone", () => {
+  it("sets --tone on a tab from its item tone", () => {
+    render(
+      <Tabs
+        value="env"
+        onChange={() => {}}
+        items={[
+          { value: "env", label: "ENV", tone: "env" },
+          { value: "lfo", label: "LFO", tone: "lfo" },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("tab", { name: "ENV" }).style.getPropertyValue("--tone")).toBe("var(--color-env)");
+    expect(screen.getByRole("tab", { name: "LFO" }).style.getPropertyValue("--tone")).toBe("var(--color-lfo)");
+  });
+});
+
+describe("Tabs bar variant", () => {
+  it("exposes the variant on the root and stretches the list", () => {
+    render(<Tabs value="osc" onChange={() => {}} items={items} variant="bar" />);
+    expect(screen.getByTestId("tabs")).toHaveAttribute("data-variant", "bar");
+    expect(screen.getByRole("tablist")).toHaveClass("w-full");
+  });
+});

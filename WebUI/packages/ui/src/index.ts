@@ -4,7 +4,10 @@ export { cn } from "@/lib/utils";
 export { TONES, toneStyle, type Tone } from "@/lib/tone";
 export { useDragValue, type UseDragValueOptions, type UseDragValueResult } from "@/hooks/useDragValue";
 
-export { Knob, type KnobProps } from "@/components/Knob/Knob";
+export { Knob, modRange, MOD_DRAG_TYPE, type KnobProps, type KnobMod } from "@/components/Knob/Knob";
+export { Segmented, type SegmentedOption, type SegmentedProps } from "@/components/Segmented/Segmented";
+export { Stepper, type StepperProps } from "@/components/Stepper/Stepper";
+export { Meter, litSegments, type MeterProps } from "@/components/Meter/Meter";
 export { Fader, type FaderProps } from "@/components/Fader/Fader";
 export { Button, buttonVariants, type ButtonProps } from "@/components/Button/Button";
 export { Toggle, type ToggleProps } from "@/components/Toggle/Toggle";

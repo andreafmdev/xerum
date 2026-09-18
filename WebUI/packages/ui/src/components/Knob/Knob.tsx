@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState, type DragEvent } from "react";
 import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import { arcPath, knobAngles, polar, KNOB_START, KNOB_SWEEP } from "@/lib/arc";
@@ -19,9 +19,36 @@ export type KnobProps = {
   /** Arco disegnato dal centro invece che da zero. */
   bipolar?: boolean;
   disabled?: boolean;
+  /** Anelli di modulazione disegnati fuori dall'arco del valore, uno per sorgente. */
+  mods?: KnobMod[];
+  /** Valore modulato istantaneo 0..1: il puntino sull'arco. Mostrato solo con `mods`. */
+  liveValue?: number;
+  /** Rende il knob bersaglio di drop per i chip sorgente (`dataTransfer` "text/x-mod"). */
+  onDropMod?: (source: string) => void;
+  /** Nasconde il readout testuale (aria-valuetext resta). */
+  hideValue?: boolean;
   className?: string;
   id?: string;
 };
+
+export type KnobMod = {
+  /** Colore della sorgente. */
+  tone: Tone;
+  /** Profondità 0..1 rispetto al range del parametro. */
+  depth: number;
+  /** Sorgente bipolare (LFO): l'anello copre entrambi i lati del valore. */
+  bipolar?: boolean;
+};
+
+export const MOD_DRAG_TYPE = "text/x-mod";
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+/** Estremi 0..1 dell'anello di un mod attorno a `value`. */
+export function modRange(value: number, mod: KnobMod): [number, number] {
+  const d = Math.abs(mod.depth);
+  return [clamp01(mod.bipolar ? value - d : value), clamp01(value + d)];
+}
 
 const knobSize = cva("relative shrink-0 rounded-full outline-none select-none touch-none", {
   variants: {
@@ -64,9 +91,32 @@ export function Knob({
   tone,
   bipolar = false,
   disabled = false,
+  mods,
+  liveValue,
+  onDropMod,
+  hideValue = false,
   className,
   id,
 }: KnobProps) {
+  const [dropTarget, setDropTarget] = useState(false);
+  const isModDrag = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes(MOD_DRAG_TYPE);
+  const dropHandlers = onDropMod
+    ? {
+        onDragOver: (e: DragEvent<HTMLDivElement>) => {
+          if (!isModDrag(e)) return;
+          e.preventDefault();
+          setDropTarget(true);
+        },
+        onDragLeave: () => setDropTarget(false),
+        onDrop: (e: DragEvent<HTMLDivElement>) => {
+          if (!isModDrag(e)) return;
+          e.preventDefault();
+          setDropTarget(false);
+          onDropMod(e.dataTransfer.getData(MOD_DRAG_TYPE));
+        },
+      }
+    : undefined;
+  const modulated = (mods?.length ?? 0) > 0;
   const { ref, handlers, dragging } = useDragValue({
     value,
     defaultValue: defaultValue ?? (bipolar ? 0.5 : 0),
@@ -87,8 +137,10 @@ export function Knob({
     <div
       data-testid="knob"
       data-slot="knob"
+      data-drop-target={onDropMod ? dropTarget : undefined}
       className={cn("group/knob flex flex-col items-center gap-1.5", className)}
       style={toneStyle(tone)}
+      {...dropHandlers}
     >
       <div
         ref={ref}
@@ -106,11 +158,13 @@ export function Knob({
         className={cn(
           knobSize({ size }),
           "cursor-ns-resize focus-visible:ring-2 focus-visible:ring-(--tone) focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          // Bersaglio di drop: alone della sorgente attorno al cappuccio.
+          "group-data-[drop-target=true]/knob:ring-2 group-data-[drop-target=true]/knob:ring-lfo",
           disabled && "cursor-not-allowed",
         )}
         {...handlers}
       >
-        <svg viewBox="0 0 40 40" className={cn("size-full", disabled && "opacity-50")}>
+        <svg viewBox="0 0 40 40" className={cn("size-full overflow-visible", disabled && "opacity-50")}>
           <defs>
             {/* Luce da sopra a sinistra: il cappuccio è un solido tornito, non un disco piatto. */}
             <radialGradient id={capFill} cx="34%" cy="26%" r="78%">
@@ -140,13 +194,41 @@ export function Knob({
             strokeWidth={2}
             strokeLinecap="round"
           />
+          {/* Anelli di modulazione: fuori dalla scala, uno per sorgente, colorati dalla sorgente. */}
+          {mods?.map((m, i) => {
+            const [lo, hi] = modRange(value, m);
+            return (
+              <path
+                key={i}
+                data-testid="knob-mod-arc"
+                data-range={`${lo},${hi}`}
+                d={arcPath(C, C, R + 4.5 + i * 2.2, KNOB_START + KNOB_SWEEP * lo, KNOB_START + KNOB_SWEEP * hi)}
+                className="fill-none opacity-80"
+                style={{ stroke: `var(--color-${m.tone})` }}
+                strokeWidth={1.6}
+                strokeLinecap="round"
+              />
+            );
+          })}
           <path
             data-testid="knob-value-arc"
             d={arcPath(C, C, R, start, end)}
-            className="fill-none stroke-(--tone) transition-[d] ease-snap"
+            className="fill-none stroke-(--tone) transition-[d] ease-snap [filter:var(--glow,none)]"
             strokeWidth={2.5}
             strokeLinecap="round"
           />
+          {modulated && liveValue !== undefined && (() => {
+            const [lx, ly] = polar(C, C, R, KNOB_START + KNOB_SWEEP * clamp01(liveValue));
+            return (
+              <circle
+                data-testid="knob-live"
+                cx={lx}
+                cy={ly}
+                r={2.2}
+                style={{ fill: `var(--color-${mods![0]!.tone})` }}
+              />
+            );
+          })()}
 
           {/* Ombra di contatto + cappuccio + rialzo del bordo. */}
           <circle cx={C} cy={C} r={CAP_R + 0.6} className="fill-none stroke-edge-dark" strokeWidth={1} />
@@ -196,16 +278,18 @@ export function Knob({
 
       <div className="flex flex-col items-center">
         <span className={cn("text-(length:--text-label)/4", disabled ? "text-text-dim" : "text-muted-foreground")}>{label}</span>
-        <span
-          data-testid="knob-readout"
-          data-dragging={dragging}
-          className={cn(
-            "font-mono text-(length:--text-label)/4 tabular-nums",
-            disabled ? "text-text-dim" : dragging ? "text-(--tone)" : "text-foreground",
-          )}
-        >
-          {text}
-        </span>
+        {!hideValue && (
+          <span
+            data-testid="knob-readout"
+            data-dragging={dragging}
+            className={cn(
+              "font-mono text-(length:--text-label)/4 tabular-nums",
+              disabled ? "text-text-dim" : dragging ? "text-(--tone)" : "text-foreground",
+            )}
+          >
+            {text}
+          </span>
+        )}
       </div>
     </div>
   );

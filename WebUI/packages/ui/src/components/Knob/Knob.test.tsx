@@ -69,3 +69,82 @@ describe("Knob", () => {
     expect(screen.getByTestId("knob").style.getPropertyValue("--tone")).toBe("var(--color-filter)");
   });
 });
+
+describe("Knob modulation", () => {
+  it("draws one modulation arc per mod, coloured by the mod tone", () => {
+    render(
+      <Knob
+        value={0.5}
+        onChange={() => {}}
+        label="Cutoff"
+        mods={[
+          { tone: "lfo", depth: 0.25, bipolar: true },
+          { tone: "env", depth: 0.3 },
+        ]}
+      />,
+    );
+    const arcs = screen.getAllByTestId("knob-mod-arc");
+    expect(arcs).toHaveLength(2);
+    expect(arcs[0]!.style.getPropertyValue("stroke")).toBe("var(--color-lfo)");
+    expect(arcs[1]!.style.getPropertyValue("stroke")).toBe("var(--color-env)");
+  });
+
+  it("spans a bipolar mod both sides of the value and a unipolar one forward only", () => {
+    render(
+      <Knob
+        value={0.5}
+        onChange={() => {}}
+        label="Cutoff"
+        mods={[
+          { tone: "lfo", depth: 0.25, bipolar: true },
+          { tone: "env", depth: 0.25 },
+        ]}
+      />,
+    );
+    const [bi, uni] = screen.getAllByTestId("knob-mod-arc");
+    // bipolar: 0.25..0.75 → angoli 202.5..337.5 (135 + 270·v)
+    expect(bi!.getAttribute("data-range")).toBe("0.25,0.75");
+    // unipolar: 0.5..0.75
+    expect(uni!.getAttribute("data-range")).toBe("0.5,0.75");
+  });
+
+  it("clamps the modulation range to 0..1", () => {
+    render(<Knob value={0.9} onChange={() => {}} label="Cutoff" mods={[{ tone: "env", depth: 0.5 }]} />);
+    expect(screen.getByTestId("knob-mod-arc").getAttribute("data-range")).toBe("0.9,1");
+  });
+
+  it("shows a live dot at liveValue only when modulated", () => {
+    const { rerender } = render(<Knob value={0.5} onChange={() => {}} label="Cutoff" liveValue={0.6} />);
+    expect(screen.queryByTestId("knob-live")).not.toBeInTheDocument();
+    rerender(<Knob value={0.5} onChange={() => {}} label="Cutoff" liveValue={0.6} mods={[{ tone: "lfo", depth: 0.2 }]} />);
+    const dot = screen.getByTestId("knob-live");
+    expect(dot).toBeInTheDocument();
+    expect(dot.style.getPropertyValue("fill")).toBe("var(--color-lfo)");
+  });
+
+  it("accepts a text/x-mod drop and reports the payload", () => {
+    const onDropMod = vi.fn();
+    render(<Knob value={0.5} onChange={() => {}} label="Cutoff" onDropMod={onDropMod} />);
+    const knob = screen.getByTestId("knob");
+    const dataTransfer = { types: ["text/x-mod"], getData: () => "lfo" };
+    fireEvent.dragOver(knob, { dataTransfer });
+    expect(knob).toHaveAttribute("data-drop-target", "true");
+    fireEvent.drop(knob, { dataTransfer });
+    expect(onDropMod).toHaveBeenCalledWith("lfo");
+    expect(knob).toHaveAttribute("data-drop-target", "false");
+  });
+
+  it("ignores drags that are not modulation sources", () => {
+    const onDropMod = vi.fn();
+    render(<Knob value={0.5} onChange={() => {}} label="Cutoff" onDropMod={onDropMod} />);
+    const knob = screen.getByTestId("knob");
+    fireEvent.dragOver(knob, { dataTransfer: { types: ["text/plain"], getData: () => "x" } });
+    expect(knob).toHaveAttribute("data-drop-target", "false");
+  });
+
+  it("can hide the readout while keeping aria-valuetext", () => {
+    render(<Knob value={0.5} onChange={() => {}} label="Cutoff" hideValue />);
+    expect(screen.queryByTestId("knob-readout")).not.toBeInTheDocument();
+    expect(screen.getByRole("slider")).toHaveAttribute("aria-valuetext", "50%");
+  });
+});
