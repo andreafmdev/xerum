@@ -29,8 +29,9 @@ function drawFrame(
   color: string,
 ) {
   const inset = 6;
+  const depth = Math.abs(offset);
   const midY = h / 2 - offset * 4;
-  const amp = (h / 2 - inset) * (1 - offset * 0.12);
+  const amp = (h / 2 - inset) * (1 - depth * 0.12);
   ctx.beginPath();
   if (!frame || frame.length === 0) {
     ctx.moveTo(inset, midY);
@@ -38,7 +39,7 @@ function drawFrame(
   } else {
     const n = frame.length;
     for (let i = 0; i < n; i++) {
-      const x = inset + offset * 6 + ((w - inset * 2 - offset * 12) * i) / (n - 1);
+      const x = inset + depth * 6 + ((w - inset * 2 - depth * 12) * i) / (n - 1);
       const y = midY - (frame[i] ?? 0) * amp;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
@@ -94,7 +95,7 @@ export function WavetableDisplay({ frames, position, tone, className }: Wavetabl
     const ro = new ResizeObserver(draw);
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [frames, position]);
+  }, [frames, position, tone]);
 
   return (
     <div
