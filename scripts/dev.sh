@@ -2,6 +2,7 @@
 # Avvia tutto in un colpo: @xerum/ui → Vite (5173) → CMake Debug → Standalone.
 # Uso: scripts/dev.sh [--web]     (--web: solo browser, niente build JUCE)
 # Ctrl-C chiude anche il dev server.
+# Questo script builda solo Debug. Le build Release servono XERUM_EMBED_WEBUI (impostato dal preset macos-release) e un WebUI/dist già buildato — vedi docs/build.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${PORT:-5173}"

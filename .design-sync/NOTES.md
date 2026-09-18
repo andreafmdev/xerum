@@ -40,3 +40,7 @@
 - Helper-type drift: `KnobMod`/`TabItem`/`SegmentedOption`/`Tone` live only in `conventions.md` for the design agent — a change in source silently desyncs the header until re-validated.
 - Knob story cap: always pass `--max-stories 8` (or higher as stories grow) to the driver, otherwise the modulation stories drop out of the verified set.
 
+## 2026-09-18 — Knob.onChangeEnd added (JUCE bridge work)
+- `Knob` gained an `onChangeEnd?: () => void` prop (fires when a drag/gesture ends, wired through `useDragValue`), added for the JUCE bridge's parameter gesture reporting (`beginChangeGesture`/`endChangeGesture`). No visual change, no new story — it's a behavioural prop.
+- **Re-sync required**: the `.d.ts` hash for `Knob` changes, so the driver will re-ship it even though its stories/pixels are unchanged (same "expected, not a delta" pattern as `SectionHeader` above). Rebuild `sb-reference` and run the driver; `conventions.md`'s `Knob` prop list should mention `onChangeEnd` alongside the existing `mods`/`liveValue`/`onDropMod` entries.
+
