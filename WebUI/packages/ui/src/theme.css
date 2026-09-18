@@ -1,5 +1,10 @@
 /* Token @xerum/ui — solo dark. Vocabolario semantico shadcn + estensioni synth. */
 
+/* Il tema è dark e basta: le regole `dark:` delle primitive shadcn (pensate per un tema
+   chiaro con opt-in) devono restare inerti invece di accendersi con la preferenza di sistema.
+   Nessun elemento porta `.dark`, quindi la variante non matcha mai. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -40,18 +45,40 @@
   --color-surface-2: #1e2230;
   --color-surface-3: #262b3a;
   --color-line-strong: #3a4258;
-  --color-text-dim: #5f6880;
+  --color-text-dim: #717b96;
   --color-warning: #ffc857;
+
+  /* Materiali: cappucci dei controlli, bordi incisi, incassi. Luce da sopra. */
+  --color-cap-hi: #3a4052;
+  --color-cap-lo: #14171f;
+  --color-cap-rim: #4a5166;
+  --color-cap-sheen: rgb(255 255 255 / 0.1);
+  --color-edge-light: #2f3648;
+  --color-edge-dark: #090b10;
+  --color-well: #0b0d13;
+  --color-tick: #4d5568;
+  --color-led-off: #262b3a;
+
+  --shadow-control: 0 1px 2px rgb(0 0 0 / 0.6), 0 3px 6px rgb(0 0 0 / 0.45);
+  --shadow-cap: 0 1px 0 rgb(255 255 255 / 0.06) inset, 0 2px 4px rgb(0 0 0 / 0.55);
+  --shadow-well: inset 0 1px 3px rgb(0 0 0 / 0.7), inset 0 0 0 1px rgb(0 0 0 / 0.35);
+  --shadow-panel: 0 1px 0 var(--color-edge-light) inset, 0 -1px 0 var(--color-edge-dark) inset,
+    0 2px 6px rgb(0 0 0 / 0.35);
+
+  --radius-plate: 4px;
+  --radius-control: 3px;
 
   --color-osc: #6ee7c5;
   --color-filter: #7aa2ff;
   --color-env: #ffb86b;
   --color-lfo: #d68cff;
   --color-fx: #ff8fb1;
-  --color-master: #e9ecf5;
+  --color-master: #d9c9a8;
 
   --text-2xs: 0.625rem;
   --text-2xs--line-height: 0.875rem;
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1rem;
 
   --spacing-knob-sm: 2rem;
   --spacing-knob-md: 3rem;

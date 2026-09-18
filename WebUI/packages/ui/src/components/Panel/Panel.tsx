@@ -6,7 +6,7 @@ import { toneStyle, type Tone } from "@/lib/tone";
 
 export type PanelProps = {
   title?: string;
-  /** Colore di sezione: bordo superiore e `--tone` ereditata da tutti i figli. */
+  /** Colore di sezione: LED e titolo dell'header, `--tone` ereditata da tutti i figli. */
   tone?: Tone;
   actions?: ReactNode;
   children: ReactNode;
@@ -20,7 +20,7 @@ export function Panel({ title, tone, actions, children, className }: PanelProps)
       data-slot="panel"
       size="sm"
       className={cn(
-        "gap-2 overflow-visible rounded-lg border-t-2 border-t-(--tone) bg-surface-1 py-2 ring-border",
+        "gap-2 overflow-visible rounded-plate bg-surface-1 pt-2 pb-0 shadow-panel ring-0",
         className,
       )}
       style={toneStyle(tone)}
@@ -30,7 +30,7 @@ export function Panel({ title, tone, actions, children, className }: PanelProps)
           <SectionHeader title={title} actions={actions} />
         </div>
       )}
-      <CardContent className="flex flex-col gap-3 px-3">{children}</CardContent>
+      <CardContent className="flex flex-col gap-3 px-3 pb-3">{children}</CardContent>
     </Card>
   );
 }
