@@ -18,7 +18,7 @@ struct ADSRTests final : juce::UnitTest
     {
         constexpr double sampleRate = 48000.0;
 
-        beginTest ("l'attacco arriva a 1 entro il tempo dichiarato, non prima");
+        beginTest ("attack reaches peak within stated time, not before");
         {
             dsp::ADSREnvelope env;
             env.prepare (sampleRate);
@@ -29,13 +29,13 @@ struct ADSRTests final : juce::UnitTest
             env.noteOn (1.0f);
 
             const auto halfway = runFor (env, 2400);  // 50 ms
-            expect (halfway < 0.99f, "a metà attacco non deve essere già finito");
+            expect (halfway < 0.99f, "at midpoint attack not yet complete");
 
-            const auto atEnd = runFor (env, 2400);    // 100 ms in tutto
-            expect (atEnd >= 0.99f, "livello a fine attacco " + juce::String (atEnd));
+            const auto atEnd = runFor (env, 2400);    // 100 ms total
+            expect (atEnd >= 0.99f, "level at attack end " + juce::String (atEnd));
         }
 
-        beginTest ("il decay scende al sustain e ci resta");
+        beginTest ("decay reaches sustain level and holds");
         {
             dsp::ADSREnvelope env;
             env.prepare (sampleRate);
@@ -45,15 +45,35 @@ struct ADSRTests final : juce::UnitTest
             env.setReleaseSeconds (0.1f);
             env.noteOn (1.0f);
 
-            runFor (env, 48);                          // attacco
+            runFor (env, 48);                          // attack
             const auto afterDecay = runFor (env, 2400); // 50 ms
             expectWithinAbsoluteError (afterDecay, 0.4f, 0.02f);
 
-            const auto later = runFor (env, 48000);     // un secondo di sustain
+            const auto later = runFor (env, 48000);     // one second of sustain
             expectWithinAbsoluteError (later, 0.4f, 0.001f);
         }
 
-        beginTest ("il release scende sotto -80 dB e l'inviluppo si spegne");
+        beginTest ("decay timing correct with high sustain level");
+        {
+            // This test pins the decay distance fix: sustain close to peak
+            // should not cause immediate transition to sustain stage.
+            dsp::ADSREnvelope env;
+            env.prepare (sampleRate);
+            env.setAttackSeconds (0.001f);
+            env.setDecaySeconds (0.05f);
+            env.setSustainLevel (0.995f);
+            env.setReleaseSeconds (0.1f);
+            env.noteOn (1.0f);
+
+            runFor (env, 48);                          // attack
+            const auto halfway = runFor (env, 1200);   // 25 ms into decay
+            expect (halfway > 0.995f, "partway through decay level above sustain");
+
+            const auto atEnd = runFor (env, 1200);     // 50 ms total decay
+            expectWithinAbsoluteError (atEnd, 0.995f, 0.005f);
+        }
+
+        beginTest ("release falls below -80 dB and envelope goes inactive");
         {
             dsp::ADSREnvelope env;
             env.prepare (sampleRate);
@@ -65,14 +85,14 @@ struct ADSRTests final : juce::UnitTest
             runFor (env, 480);
 
             env.noteOff();
-            expect (env.isActive(), "durante il release la voce è ancora viva");
+            expect (env.isActive(), "during release voice is still active");
 
             const auto tail = runFor (env, 2400); // 50 ms
-            expect (tail < 1.0e-4f, "coda " + juce::String (tail));
-            expect (! env.isActive(), "a fine release la voce va liberata");
+            expect (tail < 1.0e-4f, "tail level " + juce::String (tail));
+            expect (! env.isActive(), "after release voice is freed");
         }
 
-        beginTest ("la velocity scala il picco quando envVel è attivo");
+        beginTest ("velocity parameter scales the peak");
         {
             dsp::ADSREnvelope env;
             env.prepare (sampleRate);
@@ -86,7 +106,7 @@ struct ADSRTests final : juce::UnitTest
             expectWithinAbsoluteError (peak, 0.5f, 0.02f);
         }
 
-        beginTest ("reset azzera tutto");
+        beginTest ("reset clears all state");
         {
             dsp::ADSREnvelope env;
             env.prepare (sampleRate);

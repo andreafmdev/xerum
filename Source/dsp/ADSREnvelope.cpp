@@ -33,6 +33,7 @@ void ADSREnvelope::reset() noexcept
 {
     stage_ = Stage::idle;
     level_ = 0.0f;
+    decayDistance_ = 0.0f;
 }
 
 void ADSREnvelope::setAttackSeconds (float seconds) noexcept
@@ -89,7 +90,17 @@ float ADSREnvelope::getNextSample() noexcept
             if (level_ >= peak_ * 0.99f)
             {
                 level_ = peak_;
-                stage_ = Stage::decay;
+                const auto target = peak_ * sustain_;
+                decayDistance_ = std::abs (peak_ - target);
+                if (decayDistance_ <= 0.0f)
+                {
+                    level_ = target;
+                    stage_ = Stage::sustain;
+                }
+                else
+                {
+                    stage_ = Stage::decay;
+                }
             }
             break;
 
@@ -97,7 +108,7 @@ float ADSREnvelope::getNextSample() noexcept
         {
             const auto target = peak_ * sustain_;
             level_ += decayCoeff_ * (target - level_);
-            if (std::abs (level_ - target) <= 0.01f * std::max (0.01f, peak_))
+            if (std::abs (level_ - target) <= 0.01f * decayDistance_)
             {
                 level_ = target;
                 stage_ = Stage::sustain;

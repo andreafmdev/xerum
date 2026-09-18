@@ -48,5 +48,6 @@ private:
 
     float peak_ { 1.0f };
     float level_ { 0.0f };
+    float decayDistance_ { 0.0f };
 };
 } // namespace dsp

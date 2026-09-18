@@ -187,7 +187,7 @@ struct WavetableStoreTests final : juce::UnitTest
 
     void runTest() override
     {
-        beginTest ("prima di setActive non c'è nessuna tavola attiva");
+        beginTest ("before setActive no table is active");
         {
             dsp::WavetableStore store;
             expect (store.active() == nullptr);
@@ -204,7 +204,7 @@ struct WavetableStoreTests final : juce::UnitTest
             expectEquals (first->sizeAtLevel (0), 2048);
         }
 
-        beginTest ("tornare su una tavola già costruita restituisce lo stesso puntatore");
+        beginTest ("returning to a previously built table returns same pointer");
         {
             dsp::WavetableStore store;
             store.setActive (0);
