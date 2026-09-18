@@ -1,64 +1,124 @@
 #include "dsp/ADSREnvelope.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace dsp
 {
+namespace
+{
+/** Soglia di spegnimento: -80 dB. Sotto, la coda è inudibile e la voce va liberata. */
+constexpr float kSilence = 1.0e-4f;
+
+/** Quante costanti di tempo servono per considerare finito ogni stadio. */
+constexpr float kAttackTau = 4.605170f;   // 1 - e^-4.605170 ≈ 0.99
+constexpr float kDecayTau = 4.605170f;    // 99 % della distanza
+constexpr float kReleaseTau = 9.210340f; // e^-9.210340 ≈ 1e-4, cioè -80 dB
+
+float coefficientFor (float seconds, float constants, double sampleRate) noexcept
+{
+    const auto samples = std::max (1.0, (double) seconds * sampleRate);
+    return 1.0f - (float) std::exp (-(double) constants / samples);
+}
+} // namespace
+
 void ADSREnvelope::prepare (double sampleRate) noexcept
 {
     sampleRate_ = sampleRate > 0.0 ? sampleRate : 44100.0;
+    updateCoefficients();
     reset();
 }
 
 void ADSREnvelope::reset() noexcept
 {
-    gate_ = false;
+    stage_ = Stage::idle;
     level_ = 0.0f;
 }
 
 void ADSREnvelope::setAttackSeconds (float seconds) noexcept
 {
-    attack_ = seconds;
+    attackSeconds_ = std::max (0.0f, seconds);
+    updateCoefficients();
 }
 
 void ADSREnvelope::setDecaySeconds (float seconds) noexcept
 {
-    decay_ = seconds;
+    decaySeconds_ = std::max (0.0f, seconds);
+    updateCoefficients();
 }
 
 void ADSREnvelope::setSustainLevel (float level) noexcept
 {
-    sustain_ = level;
+    sustain_ = std::clamp (level, 0.0f, 1.0f);
 }
 
 void ADSREnvelope::setReleaseSeconds (float seconds) noexcept
 {
-    release_ = seconds;
+    releaseSeconds_ = std::max (0.0f, seconds);
+    updateCoefficients();
 }
 
-void ADSREnvelope::noteOn() noexcept
+void ADSREnvelope::updateCoefficients() noexcept
 {
-    gate_ = true;
-    level_ = 1.0f;
+    attackCoeff_ = coefficientFor (attackSeconds_, kAttackTau, sampleRate_);
+    decayCoeff_ = coefficientFor (decaySeconds_, kDecayTau, sampleRate_);
+    releaseCoeff_ = coefficientFor (releaseSeconds_, kReleaseTau, sampleRate_);
+}
+
+void ADSREnvelope::noteOn (float peak) noexcept
+{
+    peak_ = std::clamp (peak, 0.0f, 1.0f);
+    stage_ = Stage::attack;
 }
 
 void ADSREnvelope::noteOff() noexcept
 {
-    gate_ = false;
-    level_ = 0.0f;
-}
-
-bool ADSREnvelope::isActive() const noexcept
-{
-    return gate_ || level_ > 0.0f;
+    if (stage_ != Stage::idle)
+        stage_ = Stage::release;
 }
 
 float ADSREnvelope::getNextSample() noexcept
 {
-    // Phase 1: hard gate (no slopes).
-    (void) sampleRate_;
-    (void) attack_;
-    (void) decay_;
-    (void) sustain_;
-    (void) release_;
-    return gate_ ? 1.0f : 0.0f;
+    switch (stage_)
+    {
+        case Stage::idle:
+            return 0.0f;
+
+        case Stage::attack:
+            level_ += attackCoeff_ * (peak_ - level_);
+            if (level_ >= peak_ * 0.99f)
+            {
+                level_ = peak_;
+                stage_ = Stage::decay;
+            }
+            break;
+
+        case Stage::decay:
+        {
+            const auto target = peak_ * sustain_;
+            level_ += decayCoeff_ * (target - level_);
+            if (std::abs (level_ - target) <= 0.01f * std::max (0.01f, peak_))
+            {
+                level_ = target;
+                stage_ = Stage::sustain;
+            }
+            break;
+        }
+
+        case Stage::sustain:
+            level_ = peak_ * sustain_;
+            break;
+
+        case Stage::release:
+            level_ -= releaseCoeff_ * level_;
+            if (level_ < kSilence)
+            {
+                level_ = 0.0f;
+                stage_ = Stage::idle;
+            }
+            break;
+    }
+
+    return level_;
 }
 } // namespace dsp

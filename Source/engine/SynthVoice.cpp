@@ -38,7 +38,7 @@ void SynthVoice::start (int midiNote, float velocity) noexcept
     velocity_ = velocity;
     frequencyHz_ = midiNoteToHz (midiNote);
     oscillator_.setFrequencyHz (frequencyHz_);
-    envelope_.noteOn();
+    envelope_.noteOn (velocity);
     active_ = true;
 }
 
@@ -78,7 +78,7 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
     if (! isActive() || outL == nullptr || outR == nullptr || numSamples <= 0)
         return;
 
-    const float amp = velocity_ * 0.2f;
+    const float amp = 0.2f;
 
     for (int i = 0; i < numSamples; ++i)
     {
