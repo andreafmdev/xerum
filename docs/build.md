@@ -13,6 +13,15 @@ git submodule update --init --recursive
 
 JUCE is pinned under `external/JUCE` (tag `8.0.6`).
 
+## One command
+
+```bash
+scripts/dev.sh          # @xerum/ui build → Vite on 5173 → CMake Debug → opens the Standalone
+scripts/dev.sh --web    # UI only, in the browser
+PORT=5175 scripts/dev.sh
+```
+Ctrl-C stops the Standalone and the dev server together.
+
 ## Configure & build
 
 ```bash

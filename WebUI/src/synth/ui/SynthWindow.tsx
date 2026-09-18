@@ -17,7 +17,7 @@ export type SynthVariant = "deep" | "soft" | "glow";
 export type SynthWindowProps = {
   /** Materiale del pannello. */
   variant?: SynthVariant;
-  /** Clock interno (LFO, meter, arp) acceso. */
+  /** Clock finto (LFO, meter, arp) per demo/Storybook. Default spento: i dati veri arrivano dal bridge JUCE. */
   animate?: boolean;
   initialTab?: TabId;
   /** Scala fissa invece dell'adattamento al contenitore. */
@@ -28,7 +28,7 @@ const W = 900;
 const H = 600;
 
 /** Finestra del plugin: 900×600 scalata per stare nel contenitore. */
-export function SynthWindow({ variant = "deep", animate = true, initialTab = "env", scale: fixedScale }: SynthWindowProps) {
+export function SynthWindow({ variant = "deep", animate = false, initialTab = "env", scale: fixedScale }: SynthWindowProps) {
   const s = useSynth(initialTab);
   const { p, set, mods, addMod, tab, setTab, preset, pick, stepPreset, browse, setBrowse, bypass, setBypass, dirty } = s;
   const t = useClock(animate);
