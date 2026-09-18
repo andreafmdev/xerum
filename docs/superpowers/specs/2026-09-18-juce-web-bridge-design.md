@@ -91,7 +91,7 @@ La build C++ non dipende da Node: legge un header committato. Un test Vitest rig
 | `kind` | `float` \| `int` \| `bool` \| `choice` | decide parametro APVTS e tipo di relay |
 | `map.type` | `linear` \| `log` \| `db` \| `ms-squared` | formula di denormalizzazione, identica in C++ e TS |
 | `map.min/max` | numeri | estremi in unità reali |
-| `default` | 0..1 | sempre normalizzato |
+| `default` | float: 0..1 normalizzato; int: valore; choice: indice; bool: true/false | |
 | `unit` | stringa | suffisso label |
 | `decimals` | intero | cifre nella label |
 | `labelKind` | opzionale: `pan` \| `signed-cents` \| `note-division` \| … | etichette non derivabili da `map` (es. "C / 50 L") |
@@ -104,7 +104,7 @@ Formule (`v` normalizzato):
 - `db`: `v ≤ 0 → −∞`, altrimenti `20·log10(v) + offset` (`offset` in `map`, default 0)
 - `ms-squared`: `min + v²·(max−min)` (tempi di inviluppo e glide)
 
-Lato C++ ogni `map` diventa una `NormalisableRange<float>` con `convertFrom0To1`/`convertTo0To1` espliciti (non skew approssimato), così `getNormalisedValue()` lato web coincide col valore che la UI ha inviato. Lato TS `denormalise(spec, v)` e `formatValue(spec, v)` producono le label. Test TS con valori noti per ogni tipo (20 Hz, 632 Hz, 20 kHz; −6.0 dB; 1 ms, 8.00 s…).
+Lato C++ i parametri `float` conservano nell'APVTS il valore **normalizzato 0..1** (`NormalisableRange<float>{0,1}` lineare): la libreria JS di JUCE calcola `getNormalisedValue()` solo da `start/end/skew` del relay, quindi una range con `convertFrom0To1` custom non sarebbe riprodotta lato web. Le unità reali compaiono nel testo per l'host (`withStringFromValueFunction` → `params::formatValue`) e nel DSP, che denormalizza con le stesse formule. `int` usa `AudioParameterInt` (il relay espone `start/end/interval=1`), `choice` `AudioParameterChoice`, `bool` `AudioParameterBool`. Lato TS `denormalise(spec, v)` e `formatValue(spec, v)` producono le label. Test TS con valori noti per ogni tipo (20 Hz, 632 Hz, 20 kHz; −6.0 dB; 1 ms, 8.00 s…).
 
 ### 4.4 Migrazione dal codice attuale
 
