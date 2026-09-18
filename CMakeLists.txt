@@ -45,6 +45,7 @@ target_sources(SerumStyleSynth
         Source/dsp/StateVariableFilter.cpp
         Source/dsp/ADSREnvelope.cpp
         Source/parameters/ParameterLayout.cpp
+        Source/ui/XerumKeyboard.cpp
 )
 
 target_include_directories(SerumStyleSynth

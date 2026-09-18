@@ -49,13 +49,26 @@ The front panel is `SynthWindow` (`WebUI/src/synth/ui/`): a fixed 900×600 chass
 
 ## On-screen keyboard
 
-The editor is a `WebBrowserComponent` with a native `juce::MidiKeyboardComponent` strip (72 px) underneath, Serum/Vital style. It drives a `MidiKeyboardState` owned by the processor, merged into the host MIDI buffer at the top of `processBlock` (`processNextMidiBuffer`). QWERTY mapping (A W S E D F T G Y H U J K …) plays from middle C; click height sets velocity. Colours mirror `WebUI/packages/ui/src/theme.css`. The keyboard is plugin chrome, not part of `@xerum/ui`, so it does not go through design-sync.
+The editor is a `WebBrowserComponent` with a native keyboard strip underneath, Serum/Vital style. It drives a `MidiKeyboardState` owned by the processor, merged into the host MIDI buffer at the top of `processBlock` (`processNextMidiBuffer`). QWERTY mapping (A W S E D F T G Y H U J K …) plays from middle C; click height sets velocity. The keyboard is plugin chrome, not part of `@xerum/ui`, so it does not go through design-sync.
+
+**Skin** — `ui::XerumKeyboard` (`Source/ui/`) subclasses `juce::MidiKeyboardComponent` and overrides `drawWhiteNote` / `drawBlackNote` / `paintOverChildren`: gradient keys, accent `#6ee7c5` on press, octave labels, bottom corners rounded like `.sx-chassis`. Its palette mirrors `WebUI/packages/ui/src/theme.css` and lives in `XerumKeyboard.cpp`; the editor no longer sets the base `ColourId`s, except the three the `final` `drawKeyboardBackground` reads (set in the keyboard's own constructor).
+
+**Layout contract** — the window's *width* is the only free variable. The editor derives everything from it (`PluginEditor.cpp`):
+
+| | |
+|---|---|
+| scale | `width / 900`, clamped to `0.72 … 1.5` (same ceiling as the web fit) |
+| WebView | full width × `ceil(600 × scale)` |
+| keyboard | full width × `round(78 × scale)`, right below |
+| window height | the sum of the two, enforced by `ChassisConstrainer` |
+
+The editor loads the UI with `?gutter=0`, which tells `SynthWindow` to fit the chassis with no margin (default `16`) and marks it `data-attached` so its bottom corners go square. Chassis and keyboard then share the same width and touch, with no dead band between them. Changing either side of this contract (the 900×600 chassis, the `gutter` default, the fit formula) desyncs the two: keep `SynthWindow.tsx` and `PluginEditor.cpp` in step.
 
 ## Phase 1 behaviour
 
 - Instrument plugin: AU + VST3 + Standalone
 - MIDI note on/off allocates voices (16-voice pool, round-robin steal)
-- Output is **silence** (`util::kEnableTestTone = false`)
+- Output is **silence** (`util::kEnableTestTone = false`): oscillator, envelope and filter are still stubs
 - Parameters: `master_gain`, `osc1_level` (latter unused until oscillator mix)
 
 ## Roadmap

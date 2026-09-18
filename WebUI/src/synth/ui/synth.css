@@ -37,6 +37,14 @@
   --tglow: none;
 }
 
+/* Agganciata alla tastiera nativa JUCE (gutter=0): il bordo inferiore diventa
+   squadrato, così chassis e tastiera leggono come un corpo solo. La tastiera
+   ridisegna lei i propri angoli inferiori arrotondati. */
+.sx-chassis[data-attached] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 /* soft = token di libreria così come sono. */
 
 .sx-chassis[data-variant="deep"],

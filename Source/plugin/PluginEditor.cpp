@@ -2,9 +2,74 @@
 
 #include "bridge/WebAssets.h"
 
+#include <cmath>
+#include <memory>
+
 namespace
 {
 constexpr const char* kDevServerUrl = "http://localhost:5173";
+
+// Lo chassis della WebUI è 900×600 e si scala per riempire la WebView (SynthWindow.tsx).
+// Qui la larghezza della finestra è l'unica variabile libera: da lei derivano la scala,
+// l'altezza della WebView e quella della tastiera, così i due pezzi combaciano sempre.
+constexpr int kChassisWidth = 900;
+constexpr int kChassisHeight = 600;
+constexpr int kKeyboardHeight = 78;   // a scala 1
+constexpr float kChassisCorner = 14.0f;
+constexpr float kMinScale = 0.72f;
+constexpr float kMaxScale = 1.5f;     // stesso tetto del fit lato web
+
+float scaleForWidth (int width) noexcept
+{
+    return juce::jlimit (kMinScale, kMaxScale, static_cast<float> (width) / static_cast<float> (kChassisWidth));
+}
+
+int webHeightForWidth (int width) noexcept
+{
+    // Arrotondato per eccesso: la WebView non deve mai essere più bassa dello chassis,
+    // altrimenti il fit lato web rimpicciolisce e riaprirebbe il margine laterale.
+    return static_cast<int> (std::ceil (kChassisHeight * scaleForWidth (width)));
+}
+
+int heightForWidth (int width) noexcept
+{
+    return webHeightForWidth (width) + juce::roundToInt (kKeyboardHeight * scaleForWidth (width));
+}
+
+int widthForScale (float scale) noexcept
+{
+    return juce::roundToInt (kChassisWidth * scale);
+}
+
+/** L'altezza è funzione della larghezza: qualunque trascinamento la ricalcola. */
+class ChassisConstrainer final : public juce::ComponentBoundsConstrainer
+{
+public:
+    void checkBounds (juce::Rectangle<int>& bounds,
+                      const juce::Rectangle<int>& old,
+                      const juce::Rectangle<int>& limits,
+                      bool isStretchingTop,
+                      bool isStretchingLeft,
+                      bool isStretchingBottom,
+                      bool isStretchingRight) override
+    {
+        juce::ComponentBoundsConstrainer::checkBounds (bounds, old, limits, isStretchingTop,
+                                                       isStretchingLeft, isStretchingBottom, isStretchingRight);
+
+        const auto height = heightForWidth (bounds.getWidth());
+
+        if (isStretchingTop && ! isStretchingBottom)
+            bounds.setTop (bounds.getBottom() - height);
+        else
+            bounds.setHeight (height);
+    }
+};
+
+/** L'host web legge `gutter` dalla query: 0 = chassis a filo, niente margine. */
+juce::String withGutterParam (juce::String url)
+{
+    return url + (url.containsChar ('?') ? "&" : "?") + "gutter=0";
+}
 
 juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& relays,
                                                   bridge::StateChannel& stateChannel)
@@ -40,7 +105,8 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
       stateChannel_ (p.getAPVTS(), p.getStateReplacedBroadcaster()),
       webView_ (makeWebOptions (relays_, stateChannel_)),
       meters_ (p.getMeters(), webView_),
-      keyboard_ (p.getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard)
+      keyboard_ (p.getKeyboardState()),
+      constrainer_ (std::make_unique<ChassisConstrainer>())
 {
     // Gli attachment vanno creati dopo la WebView, mai prima.
     relays_.attach (processorRef_.getAPVTS());
@@ -50,9 +116,11 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
     addAndMakeVisible (keyboard_);
     configureKeyboard();
 
-    setSize (kDefaultWidth, kDefaultHeight);
     setResizable (true, true);
-    setResizeLimits (640, 400 + kKeyboardHeight, 1920, 1200);
+    setConstrainer (constrainer_.get());
+    constrainer_->setSizeLimits (widthForScale (kMinScale), heightForWidth (widthForScale (kMinScale)),
+                                 widthForScale (kMaxScale), heightForWidth (widthForScale (kMaxScale)));
+    setSize (kChassisWidth, heightForWidth (kChassisWidth));
 
    #if JUCE_DEBUG
     // Dev aid: XERUM_SNAPSHOT=/path/out.png writes a snapshot of the JUCE-painted editor
@@ -77,13 +145,13 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
 
     if (bridge::webAssets::embedded())
     {
-        webView_.goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
+        webView_.goToURL (withGutterParam (juce::WebBrowserComponent::getResourceProviderRoot()));
     }
     else
     {
         // XERUM_WEBUI_URL overrides the dev server (e.g. when 5173 is taken).
         const auto url = juce::SystemStats::getEnvironmentVariable ("XERUM_WEBUI_URL", kDevServerUrl);
-        webView_.goToURL (url);
+        webView_.goToURL (withGutterParam (url));
     }
 }
 
@@ -95,33 +163,12 @@ SerumStyleSynthAudioProcessorEditor::~SerumStyleSynthAudioProcessorEditor()
 
 void SerumStyleSynthAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff12141a));
+    g.fillAll (juce::Colour (0xff0e1016)); // --background (theme.css)
 }
 
 void SerumStyleSynthAudioProcessorEditor::configureKeyboard()
 {
-    using KC = juce::MidiKeyboardComponent;
-
-    // Theme colours mirror WebUI/packages/ui/src/theme.css (dark only).
-    const auto background = juce::Colour (0xff0e1016);
-    const auto surface0 = juce::Colour (0xff12151d);
-    const auto surface1 = juce::Colour (0xff171a24);
-    const auto line = juce::Colour (0xff2a3144);
-    const auto text = juce::Colour (0xffe9ecf5);
-    const auto muted = juce::Colour (0xff9aa3b8);
-    const auto accent = juce::Colour (0xff6ee7c5);
-
-    keyboard_.setColour (KC::whiteNoteColourId, text);
-    keyboard_.setColour (KC::blackNoteColourId, surface0);
-    keyboard_.setColour (KC::keySeparatorLineColourId, line);
-    keyboard_.setColour (KC::mouseOverKeyOverlayColourId, accent.withAlpha (0.35f));
-    keyboard_.setColour (KC::keyDownOverlayColourId, accent.withAlpha (0.85f));
-    keyboard_.setColour (KC::textLabelColourId, muted);
-    keyboard_.setColour (KC::shadowColourId, background.withAlpha (0.4f));
-    keyboard_.setColour (KC::upDownButtonBackgroundColourId, surface1);
-    keyboard_.setColour (KC::upDownButtonArrowColourId, text);
-
-    // Five octaves fit the window width; no scroll buttons needed.
+    // La pelle (colori, gradienti, angoli) sta in ui::XerumKeyboard: qui solo il comportamento.
     keyboard_.setAvailableRange (kLowestNote, kHighestNote);
     keyboard_.setLowestVisibleKey (kLowestNote);
     keyboard_.setScrollButtonsVisible (false);
@@ -133,10 +180,13 @@ void SerumStyleSynthAudioProcessorEditor::configureKeyboard()
 
 void SerumStyleSynthAudioProcessorEditor::resized()
 {
-    auto bounds = getLocalBounds();
-    auto keyboardArea = bounds.removeFromBottom (kKeyboardHeight);
+    const auto bounds = getLocalBounds();
+    const auto scale = scaleForWidth (bounds.getWidth());
+    const auto webHeight = webHeightForWidth (bounds.getWidth());
 
-    keyboard_.setKeyWidth (static_cast<float> (keyboardArea.getWidth()) / kWhiteKeysVisible);
-    keyboard_.setBounds (keyboardArea);
-    webView_.setBounds (bounds);
+    webView_.setBounds (bounds.withHeight (webHeight));
+
+    keyboard_.setKeyWidth (static_cast<float> (bounds.getWidth()) / static_cast<float> (kWhiteKeysVisible));
+    keyboard_.setBottomCornerRadius (kChassisCorner * scale);
+    keyboard_.setBounds (bounds.withTop (webHeight));
 }

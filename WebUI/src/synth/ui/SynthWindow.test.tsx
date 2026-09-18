@@ -20,6 +20,16 @@ describe("SynthWindow on the bridge", () => {
     expect(screen.getByRole("meter", { name: "Output" })).toBeInTheDocument();
   });
 
+  it("gutter=0 squares the chassis bottom so the native keyboard can attach to it", async () => {
+    mount(undefined, { gutter: 0 });
+    expect(screen.getByTestId("chassis")).toHaveAttribute("data-attached");
+  });
+
+  it("by default the chassis keeps its margin and stays detached", async () => {
+    mount();
+    expect(screen.getByTestId("chassis")).not.toHaveAttribute("data-attached");
+  });
+
   it("a knob drag sends begin/set/end to the backend and marks the preset dirty", async () => {
     const b = mount();
     const slider = screen.getByRole("slider", { name: "Cutoff" });

@@ -4,6 +4,7 @@
 #include "bridge/StateChannel.h"
 #include "bridge/WebRelays.h"
 #include "plugin/PluginProcessor.h"
+#include "ui/XerumKeyboard.h"
 
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -38,11 +39,12 @@ private:
     /** Native on-screen keyboard strip under the WebView (Serum/Vital style).
         Feeds the processor's MidiKeyboardState, which is merged into the host
         MIDI stream in processBlock(). */
-    juce::MidiKeyboardComponent keyboard_;
+    ui::XerumKeyboard keyboard_;
 
-    static constexpr int kDefaultWidth = 900;
-    static constexpr int kDefaultHeight = 672; // 600 (chassis WebUI) + tastiera
-    static constexpr int kKeyboardHeight = 72;
+    /** Lega l'altezza della finestra alla larghezza: senza, la WebView resta più
+        alta dello chassis scalato e fra pannello e tastiera si apre una banda vuota. */
+    std::unique_ptr<juce::ComponentBoundsConstrainer> constrainer_;
+
     static constexpr int kLowestNote = 36;   // C2
     static constexpr int kHighestNote = 96;  // C7
     static constexpr int kWhiteKeysVisible = 36;

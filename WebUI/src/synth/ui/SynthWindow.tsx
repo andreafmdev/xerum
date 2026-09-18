@@ -21,13 +21,17 @@ export type SynthWindowProps = {
   initialTab?: TabId;
   /** Scala fissa invece dell'adattamento al contenitore. */
   scale?: number;
+  /** Margine totale (px) lasciato attorno allo chassis dall'adattamento.
+      L'host JUCE passa 0: lo chassis riempie la WebView e la tastiera nativa
+      si attacca senza stacco sotto il bordo inferiore. */
+  gutter?: number;
 };
 
 const W = 900;
 const H = 600;
 
 /** Finestra del plugin: 900×600 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
-export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixedScale }: SynthWindowProps) {
+export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixedScale, gutter = 16 }: SynthWindowProps) {
   const s = useSynth(initialTab);
   // Unica istanza dello stato condiviso: i tab lo leggono dal contesto, così non
   // esistono copie che si aggiornano a turno con gli echo dell'host.
@@ -71,17 +75,17 @@ export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixed
     const fit = () => {
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) return;
-      setSc(Math.min((r.width - 16) / W, (r.height - 16) / H, 1.5));
+      setSc(Math.min((r.width - gutter) / W, (r.height - gutter) / H, 1.5));
     };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [fixedScale]);
+  }, [fixedScale, gutter]);
 
   return (
     <div className="sx-root" ref={rootRef}>
-      <div data-testid="chassis" className="sx-chassis" data-variant={variant} style={{ transform: `scale(${sc})`, opacity: bypass.checked ? 0.9 : 1 }}>
+      <div data-testid="chassis" className="sx-chassis" data-variant={variant} data-attached={gutter === 0 ? "" : undefined} style={{ transform: `scale(${sc})`, opacity: bypass.checked ? 0.9 : 1 }}>
         <SynthContext.Provider value={ctx}>
           <MetersProvider>
             <Header
