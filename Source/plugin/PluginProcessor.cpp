@@ -1,7 +1,6 @@
 #include "plugin/PluginProcessor.h"
 #include "plugin/PluginEditor.h"
 #include "parameters/ParamCollect.h"
-#include "parameters/ParamIdHash.h"
 
 namespace
 {
@@ -21,34 +20,32 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
 {
     state::ensureChildren (apvts_.state);
 
-    paramOscOn_ = apvts_.getRawParameterValue ("oscOn");
+    // Risolti una volta sola qui: collectParams() indicizza paramSlots_ con params::ParamSlot,
+    // nessuna ricerca per nome sul thread audio.
+    paramSlots_[(size_t) params::ParamSlot::oscOn] = apvts_.getRawParameterValue ("oscOn");
+    paramSlots_[(size_t) params::ParamSlot::wtpos] = apvts_.getRawParameterValue ("wtpos");
+    paramSlots_[(size_t) params::ParamSlot::oct] = apvts_.getRawParameterValue ("oct");
+    paramSlots_[(size_t) params::ParamSlot::semi] = apvts_.getRawParameterValue ("semi");
+    paramSlots_[(size_t) params::ParamSlot::fine] = apvts_.getRawParameterValue ("fine");
+    paramSlots_[(size_t) params::ParamSlot::level] = apvts_.getRawParameterValue ("level");
+    paramSlots_[(size_t) params::ParamSlot::filtOn] = apvts_.getRawParameterValue ("filtOn");
+    paramSlots_[(size_t) params::ParamSlot::ftype] = apvts_.getRawParameterValue ("ftype");
+    paramSlots_[(size_t) params::ParamSlot::slope] = apvts_.getRawParameterValue ("slope");
+    paramSlots_[(size_t) params::ParamSlot::cutoff] = apvts_.getRawParameterValue ("cutoff");
+    paramSlots_[(size_t) params::ParamSlot::res] = apvts_.getRawParameterValue ("res");
+    paramSlots_[(size_t) params::ParamSlot::drive] = apvts_.getRawParameterValue ("drive");
+    paramSlots_[(size_t) params::ParamSlot::keytrk] = apvts_.getRawParameterValue ("keytrk");
+    paramSlots_[(size_t) params::ParamSlot::att] = apvts_.getRawParameterValue ("att");
+    paramSlots_[(size_t) params::ParamSlot::dec] = apvts_.getRawParameterValue ("dec");
+    paramSlots_[(size_t) params::ParamSlot::sus] = apvts_.getRawParameterValue ("sus");
+    paramSlots_[(size_t) params::ParamSlot::rel] = apvts_.getRawParameterValue ("rel");
+    paramSlots_[(size_t) params::ParamSlot::envVel] = apvts_.getRawParameterValue ("envVel");
+    paramSlots_[(size_t) params::ParamSlot::pan] = apvts_.getRawParameterValue ("pan");
+    paramSlots_[(size_t) params::ParamSlot::bypass] = apvts_.getRawParameterValue ("bypass");
+
+    // wtIndex e volume non passano da EngineParams/collectEngineParams: restano a parte.
     paramWtIndex_ = apvts_.getRawParameterValue ("wtIndex");
-    paramWtpos_ = apvts_.getRawParameterValue ("wtpos");
-
-    paramOct_ = apvts_.getRawParameterValue ("oct");
-    paramSemi_ = apvts_.getRawParameterValue ("semi");
-    paramFine_ = apvts_.getRawParameterValue ("fine");
-
-    paramLevel_ = apvts_.getRawParameterValue ("level");
-
-    paramFiltOn_ = apvts_.getRawParameterValue ("filtOn");
-    paramFtype_ = apvts_.getRawParameterValue ("ftype");
-    paramSlope_ = apvts_.getRawParameterValue ("slope");
-
-    paramCutoff_ = apvts_.getRawParameterValue ("cutoff");
-    paramRes_ = apvts_.getRawParameterValue ("res");
-    paramDrive_ = apvts_.getRawParameterValue ("drive");
-    paramKeytrk_ = apvts_.getRawParameterValue ("keytrk");
-
-    paramAtt_ = apvts_.getRawParameterValue ("att");
-    paramDec_ = apvts_.getRawParameterValue ("dec");
-    paramSus_ = apvts_.getRawParameterValue ("sus");
-    paramRel_ = apvts_.getRawParameterValue ("rel");
-    paramEnvVel_ = apvts_.getRawParameterValue ("envVel");
-
     paramVolume_ = apvts_.getRawParameterValue ("volume");
-    paramPan_ = apvts_.getRawParameterValue ("pan");
-    paramBypass_ = apvts_.getRawParameterValue ("bypass");
 
     apvts_.addParameterListener ("wtIndex", this);
     startTimerHz (kWavetablePollHz);
@@ -74,46 +71,22 @@ engine::EngineParams SerumStyleSynthAudioProcessor::collectParams() const noexce
 {
     // Thin caller: tutta la denormalizzazione/arrotondamento vive in
     // params::collectEngineParams (ParamCollect.h), esercitata direttamente dai test con un
-    // accessor finto. Qui si passa solo una lambda che legge i puntatori atomici già
-    // risolti nel costruttore — instradamento O(1) via `switch` su hash (params::fnv1aParamId,
-    // ParamIdHash.h), non una catena di confronti: stesso costo per blocco di prima.
+    // accessor finto. Qui si passa solo una lambda che legge paramSlots_, gia' risolto nel
+    // costruttore: una singola lettura d'array indicizzata da params::ParamSlot, senza
+    // hashing ne' confronto di stringhe a runtime — stesso costo per blocco di prima.
     return params::collectEngineParams (
-        [this] (const char* id) noexcept -> float
+        [this] (params::ParamSlot slot) noexcept -> float
         {
-            const auto load = [] (const std::atomic<float>* raw, float fallback) noexcept -> float
-            {
-                return raw != nullptr ? raw->load (std::memory_order_relaxed) : fallback;
-            };
+            const auto* raw = paramSlots_[(size_t) slot];
+            if (raw != nullptr)
+                return raw->load (std::memory_order_relaxed);
 
-            switch (params::fnv1aParamId (id))
-            {
-                case params::fnv1aParamId ("oscOn"):  return load (paramOscOn_, 0.0f);
-                case params::fnv1aParamId ("wtpos"):  return load (paramWtpos_, 0.0f);
-                case params::fnv1aParamId ("oct"):    return load (paramOct_, 0.0f);
-                case params::fnv1aParamId ("semi"):   return load (paramSemi_, 0.0f);
-                case params::fnv1aParamId ("fine"):   return load (paramFine_, 0.0f);
-                // Fallback 1.0f (guadagno pieno), non 0.0f: `level` non passa da denormalise()
-                // (vedi ParamCollect.h), quindi qui il fallback e' gia' il valore finale. Un
-                // puntatore nullo non deve far ammutolire lo strumento.
-                case params::fnv1aParamId ("level"):  return load (paramLevel_, 1.0f);
-                case params::fnv1aParamId ("filtOn"): return load (paramFiltOn_, 0.0f);
-                case params::fnv1aParamId ("ftype"):  return load (paramFtype_, 0.0f);
-                case params::fnv1aParamId ("slope"):  return load (paramSlope_, 0.0f);
-                case params::fnv1aParamId ("cutoff"): return load (paramCutoff_, 0.0f);
-                case params::fnv1aParamId ("res"):    return load (paramRes_, 0.0f);
-                case params::fnv1aParamId ("drive"):  return load (paramDrive_, 0.0f);
-                case params::fnv1aParamId ("keytrk"): return load (paramKeytrk_, 0.0f);
-                case params::fnv1aParamId ("att"):    return load (paramAtt_, 0.0f);
-                case params::fnv1aParamId ("dec"):    return load (paramDec_, 0.0f);
-                case params::fnv1aParamId ("sus"):    return load (paramSus_, 0.0f);
-                case params::fnv1aParamId ("rel"):    return load (paramRel_, 0.0f);
-                case params::fnv1aParamId ("envVel"): return load (paramEnvVel_, 0.0f);
-                case params::fnv1aParamId ("pan"):    return load (paramPan_, 0.0f);
-                case params::fnv1aParamId ("bypass"): return load (paramBypass_, 0.0f);
-                default:
-                    jassertfalse; // id sconosciuto: collectEngineParams ne ha chiesto uno non mappato qui
-                    return 0.0f;
-            }
+            // Puntatore nullo: strutturalmente irraggiungibile (ogni slot viene da
+            // apvts_.getRawParameterValue() sullo stesso id che params::createParameterLayout()
+            // registra da ParameterTable.h), ma se mai succedesse level deve tornare al guadagno
+            // pieno (non passa da denormalise(), vedi ParamCollect.h), non ammutolire lo
+            // strumento; per tutti gli altri 0.0f e' innocuo quanto lo era prima.
+            return slot == params::ParamSlot::level ? 1.0f : 0.0f;
         });
 }
 

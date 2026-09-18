@@ -10,6 +10,21 @@
 
 namespace params
 {
+/**
+ * Identifica un parametro grezzo per `collectEngineParams` senza passare per il suo nome:
+ * l'accessore (`RawAccessor` sotto) prende uno `ParamSlot`, non una stringa, cosi' non c'e'
+ * niente da instradare a runtime — chi implementa l'accessore risolve `id -> puntatore` una
+ * volta sola, alla costruzione (vedi PluginProcessor::paramSlots_), e qui dentro e' solo un
+ * indice di array. Ordine arbitrario, ma stabile: e' un dettaglio interno fra questo header e
+ * chi scrive l'accessore, non un ABI pubblico.
+ */
+enum class ParamSlot : int
+{
+    oscOn, wtpos, oct, semi, fine, level, filtOn, ftype, slope, cutoff,
+    res, drive, keytrk, att, dec, sus, rel, envVel, pan, bypass,
+    count
+};
+
 /** `ftype` è un AudioParameterChoice: il valore grezzo è già l'indice 0/1/2. */
 inline dsp::StateVariableFilter::Type filterTypeFromChoice (float rawIndex) noexcept
 {
@@ -23,14 +38,17 @@ inline dsp::StateVariableFilter::Type filterTypeFromChoice (float rawIndex) noex
 
 /**
  * Costruisce una engine::EngineParams leggendo i parametri grezzi (normalizzati 0..1)
- * tramite `rawFor(id)`. E' la stessa aritmetica di PluginProcessor::collectParams, ma
+ * tramite `rawFor(slot)`. E' la stessa aritmetica di PluginProcessor::collectParams, ma
  * isolata da juce_audio_processors: cosi' la si esercita con un accessor finto nei test,
  * senza dover linkare l'APVTS. Gira una volta per blocco sul thread audio.
  *
- * Gli spec (`params::find` su un letterale, con kTable constexpr) sono risolti a tempo di
- * compilazione: sono variabili locali `constexpr`, quindi la loro inizializzazione non
- * costa nulla a runtime — non e' una ricerca nella tabella "una volta per blocco", e' un
- * indirizzo gia' fisso nel binario. Nessuna allocazione, nessun lock, nessuna I/O.
+ * `rawFor` prende uno `ParamSlot` (un indice), non il nome del parametro: non c'e' hashing
+ * ne' confronto di stringhe a runtime da nessuna parte in questa funzione ne' in chi la
+ * chiama, solo una lettura d'array. Gli spec (`params::find` su un letterale, con kTable
+ * constexpr) restano invece risolti sul nome, ma a tempo di compilazione: sono variabili
+ * locali `constexpr`, quindi la loro inizializzazione non costa nulla a runtime — non e' una
+ * ricerca nella tabella "una volta per blocco", e' un indirizzo gia' fisso nel binario.
+ * Nessuna allocazione, nessun lock, nessuna I/O.
  */
 template <typename RawAccessor>
 engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
@@ -61,41 +79,41 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
                        && specPan != nullptr,
                    "una spec di parametro usata da collectEngineParams non e' in ParameterTable.h");
 
-    p.oscOn = rawFor ("oscOn") >= 0.5f;
-    p.framePosition = rawFor ("wtpos"); // gia' 0..1 sul set di frame, nessuna denormalizzazione
+    p.oscOn = rawFor (ParamSlot::oscOn) >= 0.5f;
+    p.framePosition = rawFor (ParamSlot::wtpos); // gia' 0..1 sul set di frame, nessuna denormalizzazione
 
     // roundToInt, non un cast troncante: denormalise() torna un float che per via degli
     // arrotondamenti in virgola mobile puo' cadere leggermente sotto l'intero vero (es.
     // 7.999998), e un cast tronca verso zero invece di arrotondare, sbagliando la nota di
     // un semitono/ottava (bug corretto nella Task 7).
-    p.octave = juce::roundToInt (params::denormalise (*specOct, rawFor ("oct")));
-    p.semitones = juce::roundToInt (params::denormalise (*specSemi, rawFor ("semi")));
-    p.fineCents = params::denormalise (*specFine, rawFor ("fine"));
+    p.octave = juce::roundToInt (params::denormalise (*specOct, rawFor (ParamSlot::oct)));
+    p.semitones = juce::roundToInt (params::denormalise (*specSemi, rawFor (ParamSlot::semi)));
+    p.fineCents = params::denormalise (*specFine, rawFor (ParamSlot::fine));
 
     // `level` ha mappa Db, ma il valore grezzo e' gia' il guadagno lineare (vedi
     // WebUI/src/synth/mapping.ts): denormalise() qui darebbe un dB, sbagliato.
-    p.level = rawFor ("level");
+    p.level = rawFor (ParamSlot::level);
 
-    p.filterOn = rawFor ("filtOn") >= 0.5f;
-    p.filterType = filterTypeFromChoice (rawFor ("ftype"));
-    p.filterStages = rawFor ("slope") >= 0.5f ? 2 : 1;
-    p.cutoffHz = params::denormalise (*specCutoff, rawFor ("cutoff"));
+    p.filterOn = rawFor (ParamSlot::filtOn) >= 0.5f;
+    p.filterType = filterTypeFromChoice (rawFor (ParamSlot::ftype));
+    p.filterStages = rawFor (ParamSlot::slope) >= 0.5f ? 2 : 1;
+    p.cutoffHz = params::denormalise (*specCutoff, rawFor (ParamSlot::cutoff));
 
     // res 0..100 % -> Q 0.707 (Butterworth) ... 20 (autoscillante quasi).
-    p.resonanceQ = juce::jmap (params::denormalise (*specRes, rawFor ("res")) * 0.01f, 0.707f, 20.0f);
+    p.resonanceQ = juce::jmap (params::denormalise (*specRes, rawFor (ParamSlot::res)) * 0.01f, 0.707f, 20.0f);
 
     // drive 0..24 dB -> guadagno lineare pre-saturazione.
-    p.driveGain = juce::Decibels::decibelsToGain (params::denormalise (*specDrive, rawFor ("drive")));
-    p.keyTrack = params::denormalise (*specKeytrk, rawFor ("keytrk")) * 0.01f;
+    p.driveGain = juce::Decibels::decibelsToGain (params::denormalise (*specDrive, rawFor (ParamSlot::drive)));
+    p.keyTrack = params::denormalise (*specKeytrk, rawFor (ParamSlot::keytrk)) * 0.01f;
 
-    p.attackSeconds = params::denormalise (*specAtt, rawFor ("att")) * 0.001f;   // la mappa e' in ms
-    p.decaySeconds = params::denormalise (*specDec, rawFor ("dec")) * 0.001f;
-    p.sustain = params::denormalise (*specSus, rawFor ("sus")) * 0.01f;
-    p.releaseSeconds = params::denormalise (*specRel, rawFor ("rel")) * 0.001f;
-    p.velocityAmount = params::denormalise (*specEnvVel, rawFor ("envVel")) * 0.01f;
+    p.attackSeconds = params::denormalise (*specAtt, rawFor (ParamSlot::att)) * 0.001f;   // la mappa e' in ms
+    p.decaySeconds = params::denormalise (*specDec, rawFor (ParamSlot::dec)) * 0.001f;
+    p.sustain = params::denormalise (*specSus, rawFor (ParamSlot::sus)) * 0.01f;
+    p.releaseSeconds = params::denormalise (*specRel, rawFor (ParamSlot::rel)) * 0.001f;
+    p.velocityAmount = params::denormalise (*specEnvVel, rawFor (ParamSlot::envVel)) * 0.01f;
 
-    p.pan = params::denormalise (*specPan, rawFor ("pan")) * 0.02f;             // -50..50 -> -1..1
-    p.bypass = rawFor ("bypass") >= 0.5f;
+    p.pan = params::denormalise (*specPan, rawFor (ParamSlot::pan)) * 0.02f;             // -50..50 -> -1..1
+    p.bypass = rawFor (ParamSlot::bypass) >= 0.5f;
 
     return p;
 }

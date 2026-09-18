@@ -4,7 +4,6 @@
 #include "engine/EngineParams.h"
 #include "engine/SynthEngine.h"
 #include "parameters/ParamCollect.h"
-#include "parameters/ParamIdHash.h"
 #include "parameters/ParameterTable.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -579,11 +578,14 @@ struct ParamCollectTests final : juce::UnitTest
         codice di test), quindi std::map va benissimo qui. */
     struct FakeRaw
     {
-        std::map<juce::String, float> values;
+        // Chiave params::ParamSlot, non stringa: e' esattamente cio' che collectEngineParams
+        // passa all'accessore ora (vedi ParamCollect.h), quindi il finto qui rispecchia il vero
+        // PluginProcessor::paramSlots_[(size_t) slot].
+        std::map<params::ParamSlot, float> values;
 
-        float operator() (const char* id) const
+        float operator() (params::ParamSlot slot) const
         {
-            const auto it = values.find (juce::String (id));
+            const auto it = values.find (slot);
             return it != values.end() ? it->second : 0.0f;
         }
     };
@@ -612,7 +614,7 @@ struct ParamCollectTests final : juce::UnitTest
             for (auto expected : semiCases)
             {
                 FakeRaw raw;
-                raw.values["semi"] = rawForLinear ("semi", (float) expected);
+                raw.values[params::ParamSlot::semi] = rawForLinear ("semi", (float) expected);
                 const auto p = params::collectEngineParams (raw);
                 expectEquals (p.semitones, expected, "semi " + juce::String (expected));
             }
@@ -621,7 +623,7 @@ struct ParamCollectTests final : juce::UnitTest
             for (auto expected : octCases)
             {
                 FakeRaw raw;
-                raw.values["oct"] = rawForLinear ("oct", (float) expected);
+                raw.values[params::ParamSlot::oct] = rawForLinear ("oct", (float) expected);
                 const auto p = params::collectEngineParams (raw);
                 expectEquals (p.octave, expected, "oct " + juce::String (expected));
             }
@@ -630,9 +632,9 @@ struct ParamCollectTests final : juce::UnitTest
         beginTest ("att/dec/rel: da ms denormalizzati a secondi per il motore");
         {
             FakeRaw raw;
-            raw.values["att"] = rawForMsSquared ("att", 500.0f);
-            raw.values["dec"] = rawForMsSquared ("dec", 1000.0f);
-            raw.values["rel"] = rawForMsSquared ("rel", 2000.0f);
+            raw.values[params::ParamSlot::att] = rawForMsSquared ("att", 500.0f);
+            raw.values[params::ParamSlot::dec] = rawForMsSquared ("dec", 1000.0f);
+            raw.values[params::ParamSlot::rel] = rawForMsSquared ("rel", 2000.0f);
             const auto p = params::collectEngineParams (raw);
 
             expectWithinAbsoluteError (p.attackSeconds, 0.5f, 1.0e-4f);
@@ -643,10 +645,10 @@ struct ParamCollectTests final : juce::UnitTest
         beginTest ("sus/res/keytrk/envVel: dalla percentuale alla frazione 0..1");
         {
             FakeRaw raw;
-            raw.values["sus"] = rawForLinear ("sus", 70.0f);
-            raw.values["res"] = rawForLinear ("res", 40.0f);
-            raw.values["keytrk"] = rawForLinear ("keytrk", 25.0f);
-            raw.values["envVel"] = rawForLinear ("envVel", 60.0f);
+            raw.values[params::ParamSlot::sus] = rawForLinear ("sus", 70.0f);
+            raw.values[params::ParamSlot::res] = rawForLinear ("res", 40.0f);
+            raw.values[params::ParamSlot::keytrk] = rawForLinear ("keytrk", 25.0f);
+            raw.values[params::ParamSlot::envVel] = rawForLinear ("envVel", 60.0f);
             const auto p = params::collectEngineParams (raw);
 
             expectWithinAbsoluteError (p.sustain, 0.7f, 1.0e-5f);
@@ -662,7 +664,7 @@ struct ParamCollectTests final : juce::UnitTest
             for (float target : { -50.0f, 0.0f, 25.0f, 50.0f })
             {
                 FakeRaw raw;
-                raw.values["pan"] = rawForLinear ("pan", target);
+                raw.values[params::ParamSlot::pan] = rawForLinear ("pan", target);
                 const auto p = params::collectEngineParams (raw);
                 expectWithinAbsoluteError (p.pan, target * 0.02f, 1.0e-5f);
             }
@@ -677,29 +679,9 @@ struct ParamCollectTests final : juce::UnitTest
             for (float target : { 0.0f, 0.37f, 1.0f })
             {
                 FakeRaw raw;
-                raw.values["level"] = target;
+                raw.values[params::ParamSlot::level] = target;
                 const auto p = params::collectEngineParams (raw);
                 expectWithinAbsoluteError (p.level, target, 1.0e-6f);
-            }
-        }
-
-        beginTest ("fnv1aParamId: nessuna collisione fra gli id noti di ParameterTable.h");
-        {
-            // Copre PluginProcessor::collectParams (non testabile qui: linka
-            // juce_audio_processors), che instrada `id -> puntatore atomico` con uno `switch`
-            // su questo hash invece di una catena di strcmp. Se due id producessero lo stesso
-            // hash, quello switch avrebbe due `case` uguali e non compilerebbe (rete di sicurezza
-            // a tempo di compilazione); questo test verifica esplicitamente la stessa proprieta'
-            // su tutta la tabella, non solo sui 20 id che collectParams usa oggi.
-            for (int i = 0; i < params::kNumParams; ++i)
-            {
-                for (int j = i + 1; j < params::kNumParams; ++j)
-                {
-                    const auto* a = params::kTable[i].id;
-                    const auto* b = params::kTable[j].id;
-                    expect (params::fnv1aParamId (a) != params::fnv1aParamId (b),
-                            juce::String (a) + " e " + juce::String (b) + " collidono");
-                }
             }
         }
     }
