@@ -48,7 +48,9 @@ std::optional<BlobView> lookupBlob (const char* fileName, std::vector<float>& st
         if (data == nullptr || size <= 0)
             return std::nullopt;
 
-        storage.assign ((size_t) size / sizeof (float), 0.0f);
+        // Arrotondato per eccesso: una risorsa la cui dimensione non e' multipla di 4 byte
+        // lascerebbe il memcpy successivo scrivere fino a 3 byte oltre la fine del buffer.
+        storage.assign (((size_t) size + 3) / 4, 0.0f);
         std::memcpy (storage.data(), data, (size_t) size);
 
         return parseXwt (storage.data(), (size_t) size);
@@ -136,7 +138,12 @@ void WavetableStore::setActive (int index)
         if (! blob.has_value())
             return; // blob assente o corrotto: si resta sulla tavola precedente
 
-        tables_[(size_t) index] = buildMipTable (*blob);
+        auto built = buildMipTable (*blob);
+
+        if (built == nullptr)
+            return; // frame troppo corto per tutti i livelli: si resta sulla tavola precedente
+
+        tables_[(size_t) index] = std::move (built);
     }
 
     active_.store (tables_[(size_t) index].get(), std::memory_order_release);
