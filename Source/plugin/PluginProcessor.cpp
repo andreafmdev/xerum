@@ -1,8 +1,7 @@
 #include "plugin/PluginProcessor.h"
 #include "plugin/PluginEditor.h"
 #include "parameters/ParamCollect.h"
-
-#include <cstring>
+#include "parameters/ParamIdHash.h"
 
 namespace
 {
@@ -76,39 +75,45 @@ engine::EngineParams SerumStyleSynthAudioProcessor::collectParams() const noexce
     // Thin caller: tutta la denormalizzazione/arrotondamento vive in
     // params::collectEngineParams (ParamCollect.h), esercitata direttamente dai test con un
     // accessor finto. Qui si passa solo una lambda che legge i puntatori atomici già
-    // risolti nel costruttore — zero ricerche nella tabella dei parametri, stesso costo per
-    // blocco di prima.
+    // risolti nel costruttore — instradamento O(1) via `switch` su hash (params::fnv1aParamId,
+    // ParamIdHash.h), non una catena di confronti: stesso costo per blocco di prima.
     return params::collectEngineParams (
         [this] (const char* id) noexcept -> float
         {
-            const auto load = [] (const std::atomic<float>* raw) noexcept -> float
+            const auto load = [] (const std::atomic<float>* raw, float fallback) noexcept -> float
             {
-                return raw != nullptr ? raw->load (std::memory_order_relaxed) : 0.0f;
+                return raw != nullptr ? raw->load (std::memory_order_relaxed) : fallback;
             };
 
-            if (std::strcmp (id, "oscOn") == 0)  return load (paramOscOn_);
-            if (std::strcmp (id, "wtpos") == 0)  return load (paramWtpos_);
-            if (std::strcmp (id, "oct") == 0)    return load (paramOct_);
-            if (std::strcmp (id, "semi") == 0)   return load (paramSemi_);
-            if (std::strcmp (id, "fine") == 0)   return load (paramFine_);
-            if (std::strcmp (id, "level") == 0)  return load (paramLevel_);
-            if (std::strcmp (id, "filtOn") == 0) return load (paramFiltOn_);
-            if (std::strcmp (id, "ftype") == 0)  return load (paramFtype_);
-            if (std::strcmp (id, "slope") == 0)  return load (paramSlope_);
-            if (std::strcmp (id, "cutoff") == 0) return load (paramCutoff_);
-            if (std::strcmp (id, "res") == 0)    return load (paramRes_);
-            if (std::strcmp (id, "drive") == 0)  return load (paramDrive_);
-            if (std::strcmp (id, "keytrk") == 0) return load (paramKeytrk_);
-            if (std::strcmp (id, "att") == 0)    return load (paramAtt_);
-            if (std::strcmp (id, "dec") == 0)    return load (paramDec_);
-            if (std::strcmp (id, "sus") == 0)    return load (paramSus_);
-            if (std::strcmp (id, "rel") == 0)    return load (paramRel_);
-            if (std::strcmp (id, "envVel") == 0) return load (paramEnvVel_);
-            if (std::strcmp (id, "pan") == 0)    return load (paramPan_);
-            if (std::strcmp (id, "bypass") == 0) return load (paramBypass_);
-
-            jassertfalse; // id sconosciuto: collectEngineParams ne ha chiesto uno non mappato qui
-            return 0.0f;
+            switch (params::fnv1aParamId (id))
+            {
+                case params::fnv1aParamId ("oscOn"):  return load (paramOscOn_, 0.0f);
+                case params::fnv1aParamId ("wtpos"):  return load (paramWtpos_, 0.0f);
+                case params::fnv1aParamId ("oct"):    return load (paramOct_, 0.0f);
+                case params::fnv1aParamId ("semi"):   return load (paramSemi_, 0.0f);
+                case params::fnv1aParamId ("fine"):   return load (paramFine_, 0.0f);
+                // Fallback 1.0f (guadagno pieno), non 0.0f: `level` non passa da denormalise()
+                // (vedi ParamCollect.h), quindi qui il fallback e' gia' il valore finale. Un
+                // puntatore nullo non deve far ammutolire lo strumento.
+                case params::fnv1aParamId ("level"):  return load (paramLevel_, 1.0f);
+                case params::fnv1aParamId ("filtOn"): return load (paramFiltOn_, 0.0f);
+                case params::fnv1aParamId ("ftype"):  return load (paramFtype_, 0.0f);
+                case params::fnv1aParamId ("slope"):  return load (paramSlope_, 0.0f);
+                case params::fnv1aParamId ("cutoff"): return load (paramCutoff_, 0.0f);
+                case params::fnv1aParamId ("res"):    return load (paramRes_, 0.0f);
+                case params::fnv1aParamId ("drive"):  return load (paramDrive_, 0.0f);
+                case params::fnv1aParamId ("keytrk"): return load (paramKeytrk_, 0.0f);
+                case params::fnv1aParamId ("att"):    return load (paramAtt_, 0.0f);
+                case params::fnv1aParamId ("dec"):    return load (paramDec_, 0.0f);
+                case params::fnv1aParamId ("sus"):    return load (paramSus_, 0.0f);
+                case params::fnv1aParamId ("rel"):    return load (paramRel_, 0.0f);
+                case params::fnv1aParamId ("envVel"): return load (paramEnvVel_, 0.0f);
+                case params::fnv1aParamId ("pan"):    return load (paramPan_, 0.0f);
+                case params::fnv1aParamId ("bypass"): return load (paramBypass_, 0.0f);
+                default:
+                    jassertfalse; // id sconosciuto: collectEngineParams ne ha chiesto uno non mappato qui
+                    return 0.0f;
+            }
         });
 }
 

@@ -4,6 +4,7 @@
 #include "engine/EngineParams.h"
 #include "engine/SynthEngine.h"
 #include "parameters/ParamCollect.h"
+#include "parameters/ParamIdHash.h"
 #include "parameters/ParameterTable.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -679,6 +680,26 @@ struct ParamCollectTests final : juce::UnitTest
                 raw.values["level"] = target;
                 const auto p = params::collectEngineParams (raw);
                 expectWithinAbsoluteError (p.level, target, 1.0e-6f);
+            }
+        }
+
+        beginTest ("fnv1aParamId: nessuna collisione fra gli id noti di ParameterTable.h");
+        {
+            // Copre PluginProcessor::collectParams (non testabile qui: linka
+            // juce_audio_processors), che instrada `id -> puntatore atomico` con uno `switch`
+            // su questo hash invece di una catena di strcmp. Se due id producessero lo stesso
+            // hash, quello switch avrebbe due `case` uguali e non compilerebbe (rete di sicurezza
+            // a tempo di compilazione); questo test verifica esplicitamente la stessa proprieta'
+            // su tutta la tabella, non solo sui 20 id che collectParams usa oggi.
+            for (int i = 0; i < params::kNumParams; ++i)
+            {
+                for (int j = i + 1; j < params::kNumParams; ++j)
+                {
+                    const auto* a = params::kTable[i].id;
+                    const auto* b = params::kTable[j].id;
+                    expect (params::fnv1aParamId (a) != params::fnv1aParamId (b),
+                            juce::String (a) + " e " + juce::String (b) + " collidono");
+                }
             }
         }
     }
