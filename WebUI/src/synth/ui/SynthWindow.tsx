@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useBoolParam, useBridgeState, useChoiceParam, useFloatParam, useMeters } from "../../juce/hooks";
+import { useBoolParam, useBridgeState, useChoiceParam, useFloatParam } from "../../juce/hooks";
 import type { ModSource } from "../../juce/backend";
-import { modsFor, type SourceLevels } from "../mod";
 import type { ParamId } from "../params.generated";
 import { useSynth, type TabId } from "../useSynth";
 import { Footer } from "./Footer";
 import { Header } from "./Header";
+import { MetersProvider } from "./MetersContext";
 import { FilterPanel, MasterPanel, OscPanel } from "./Panels";
 import { PresetOverlay } from "./PresetOverlay";
 import { SynthContext, type SynthCtx } from "./SynthContext";
@@ -29,36 +29,35 @@ const H = 600;
 /** Finestra del plugin: 900×600 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
 export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixedScale }: SynthWindowProps) {
   const s = useSynth(initialTab);
+  // Unica istanza dello stato condiviso: i tab lo leggono dal contesto, così non
+  // esistono copie che si aggiornano a turno con gli echo dell'host.
   const state = useBridgeState();
-  const meters = useMeters();
   const bypass = useBoolParam("bypass");
   const wtpos = useFloatParam("wtpos");
   const warp = useFloatParam("warp");
   const level = useFloatParam("level");
   const wt = useChoiceParam("wtIndex");
 
-  // L'host manda solo il livello dell'LFO: le altre sorgenti restano valori di
-  // comodo finché il C++ non le espone.
-  const sources = useMemo<SourceLevels>(() => ({ lfo: meters.lfo, env: 0.6, vel: 0.7, mw: 0.5 }), [meters.lfo]);
-
-  // addMod cambia identità a ogni render di useBridgeState: lo teniamo in un ref
-  // così il contesto si ricalcola solo quando cambia davvero qualcosa.
-  const addModRef = useRef(state.addMod);
-  addModRef.current = state.addMod;
-  const setTab = s.setTab;
+  // useBridgeState ricrea addMod/setDepth/removeMod a ogni render: le avvolgiamo
+  // dietro un ref per esporre callback stabili e non ricalcolare il contesto.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const { setTab, markDirty } = s;
   const addMod = useCallback(
     (src: ModSource, target: ParamId) => {
-      addModRef.current(src, target);
+      stateRef.current.addMod(src, target);
       setTab("mod");
+      markDirty();
     },
-    [setTab],
+    [setTab, markDirty],
   );
+  const setDepth = useCallback((i: number, depth: number) => { stateRef.current.setDepth(i, depth); markDirty(); }, [markDirty]);
+  const removeMod = useCallback((i: number) => { stateRef.current.removeMod(i); markDirty(); }, [markDirty]);
+  const setArpSteps = useCallback((steps: number[]) => { stateRef.current.setArpSteps(steps); markDirty(); }, [markDirty]);
   const ctx = useMemo<SynthCtx>(
-    () => ({ mods: state.mods, addMod, sources, markDirty: s.markDirty }),
-    [state.mods, addMod, sources, s.markDirty],
+    () => ({ mods: state.mods, arpSteps: state.arpSteps, addMod, setDepth, removeMod, setArpSteps, markDirty }),
+    [state.mods, state.arpSteps, addMod, setDepth, removeMod, setArpSteps, markDirty],
   );
-
-  const posLive = modsFor(state.mods, "wtpos").reduce((a, m) => a + (m.src === "lfo" ? m.depth * meters.lfo : 0), 0);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const [sc, setSc] = useState(fixedScale ?? 1);
@@ -84,28 +83,30 @@ export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixed
     <div className="sx-root" ref={rootRef}>
       <div data-testid="chassis" className="sx-chassis" data-variant={variant} style={{ transform: `scale(${sc})`, opacity: bypass.checked ? 0.9 : 1 }}>
         <SynthContext.Provider value={ctx}>
-          <Header
-            preset={s.preset}
-            dirty={s.dirty}
-            onBrowse={() => s.setBrowse(true)}
-            onPrev={() => s.stepPreset(-1)}
-            onNext={() => s.stepPreset(1)}
-          />
-          <WaveDisplay position={wtpos.value} warp={warp.value} level={level.value} lfo={posLive} name={wt.options.find((o) => o.value === wt.value)?.label ?? ""} />
-          <div className="flex h-56 shrink-0 gap-2">
-            <OscPanel />
-            <FilterPanel />
-            <MasterPanel />
-          </div>
-          <TabArea tab={s.tab} setTab={s.setTab}>
-            {s.tab === "env" && <EnvTab />}
-            {s.tab === "lfo" && <LfoTab />}
-            {s.tab === "mod" && <ModTab />}
-            {s.tab === "fx" && <FxTab />}
-            {s.tab === "arp" && <ArpTab />}
-          </TabArea>
-          <Footer />
-          {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
+          <MetersProvider>
+            <Header
+              preset={s.preset}
+              dirty={s.dirty}
+              onBrowse={() => s.setBrowse(true)}
+              onPrev={() => s.stepPreset(-1)}
+              onNext={() => s.stepPreset(1)}
+            />
+            <WaveDisplay position={wtpos.value} warp={warp.value} level={level.value} name={wt.options.find((o) => o.value === wt.value)?.label ?? ""} />
+            <div className="flex h-56 shrink-0 gap-2">
+              <OscPanel />
+              <FilterPanel />
+              <MasterPanel />
+            </div>
+            <TabArea tab={s.tab} setTab={s.setTab}>
+              {s.tab === "env" && <EnvTab />}
+              {s.tab === "lfo" && <LfoTab />}
+              {s.tab === "mod" && <ModTab />}
+              {s.tab === "fx" && <FxTab />}
+              {s.tab === "arp" && <ArpTab />}
+            </TabArea>
+            <Footer />
+            {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
+          </MetersProvider>
         </SynthContext.Provider>
       </div>
     </div>

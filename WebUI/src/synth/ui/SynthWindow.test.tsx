@@ -52,6 +52,12 @@ describe("SynthWindow on the bridge", () => {
     expect(b.param("bypass").get()).toBe(1);
   });
 
+  it("a segmented change marks the preset dirty", async () => {
+    mount();
+    await userEvent.click(screen.getByRole("radio", { name: "HP" }));
+    expect(screen.getByRole("button", { name: /Glass Pad \*/ })).toBeInTheDocument();
+  });
+
   it("mod matrix comes from the bridge state, drop adds through it, remove goes through it", async () => {
     const b = mount(undefined, { initialTab: "mod" });
     await act(async () => {});

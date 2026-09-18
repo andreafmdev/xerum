@@ -34,6 +34,7 @@ describe("formatValue", () => {
     expect(formatValue(S.drive, 0.5)).toBe("12.0 dB");
     expect(formatValue(S.fine, 1)).toBe("100 ct");
     expect(formatValue(S.fine, 0)).toBe("-100 ct");
+    expect(formatValue(S.lphase, 0.5)).toBe("180°");   // i gradi restano attaccati
   });
   it("db -inf", () => {
     expect(formatValue(S.level, 0)).toBe("-inf");

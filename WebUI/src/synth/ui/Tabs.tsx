@@ -1,13 +1,15 @@
 import { useMemo, type ReactNode } from "react";
 import { Segmented, Tabs, Toggle, toneStyle } from "@xerum/ui";
 import { X } from "lucide-react";
-import { useBoolParam, useBridgeState, useChoiceParam, useFloatParam, useMeters } from "../../juce/hooks";
+import { useBoolParam, useChoiceParam, useFloatParam } from "../../juce/hooks";
 import { envPath, lfoPath } from "../curves";
 import { formatValue, paramLabel } from "../mapping";
 import { MOD_SOURCES, SOURCE_LABEL, SOURCE_TONE, type LfoShape } from "../mod";
 import { PARAM_SPECS } from "../params.generated";
+import { useMeterFrame } from "./MetersContext";
 import { ModChip } from "./ModChip";
 import { ParamKnob } from "./ParamKnob";
+import { useDirty, useSynthCtx } from "./SynthContext";
 import type { TabId } from "../useSynth";
 
 const TAB_ITEMS = [
@@ -85,27 +87,24 @@ export function LfoTab() {
   const lshape = useChoiceParam("lshape");
   const lsync = useBoolParam("lsync");
   const lretrig = useBoolParam("lretrig");
-  const lfo = useMeters().lfo;
+  const dirty = useDirty();
   const W = 200;
   const H = 66;
   const d = useMemo(() => lfoPath(lshape.value as LfoShape, W, H), [lshape.value]);
-  // Il bridge manda il livello dell'LFO, non la sua fase: il puntino sta al centro
-  // dello schermo e sale/scende con il valore.
-  const cy = H / 2 - lfo * (H / 2 - 8);
   return (
     <div className={content}>
       <div className={screen} style={{ width: W, height: H }}>
         <svg width={W} height={H}>
           <line x1="6" x2={W - 6} y1={H / 2} y2={H / 2} className="stroke-line-strong" opacity={0.4} />
           <path d={d} className="fill-none stroke-(--tone) [filter:var(--glow)]" strokeWidth={1.6} />
-          <circle cx={W / 2} cy={cy} r="3.5" className="fill-foreground" />
+          <LfoDot w={W} h={H} />
         </svg>
       </div>
       <div className="flex flex-col gap-2">
-        <Segmented label="LFO shape" value={lshape.value} onChange={lshape.set} options={lshape.options} />
+        <Segmented label="LFO shape" value={lshape.value} onChange={dirty(lshape.set)} options={lshape.options} />
         <div className="flex items-center gap-2.5">
-          <Toggle checked={lsync.checked} onChange={lsync.set} label="Sync" />
-          <Toggle checked={lretrig.checked} onChange={lretrig.set} label="Retrig" />
+          <Toggle checked={lsync.checked} onChange={dirty(lsync.set)} label="Sync" />
+          <Toggle checked={lretrig.checked} onChange={dirty(lretrig.set)} label="Retrig" />
         </div>
       </div>
       <div className={`${group} gap-3.5`}>
@@ -120,8 +119,16 @@ export function LfoTab() {
   );
 }
 
+/** Solo il puntino segue i meter: il resto del tab non si ridisegna a 30 Hz. */
+function LfoDot({ w, h }: { w: number; h: number }) {
+  // Il bridge manda il livello dell'LFO, non la sua fase: il puntino sta al centro
+  // dello schermo e sale/scende con il valore.
+  const { lfo } = useMeterFrame();
+  return <circle cx={w / 2} cy={h / 2 - lfo * (h / 2 - 8)} r="3.5" className="fill-foreground" />;
+}
+
 export function ModTab() {
-  const { mods, setDepth, removeMod } = useBridgeState();
+  const { mods, setDepth, removeMod } = useSynthCtx();
   if (!mods.length) {
     return (
       <div className={content}>
@@ -157,9 +164,10 @@ export function ModTab() {
 export function FxTab() {
   const fx1On = useBoolParam("fx1On");
   const fx2On = useBoolParam("fx2On");
+  const dirty = useDirty();
   const slot = (on: boolean, setOn: (v: boolean) => void, name: string, knobs: ReactNode) => (
     <div className={`flex flex-1 items-center gap-2.5 rounded-control bg-surface-1 px-2.5 py-1 shadow-[inset_0_0_0_1px_var(--color-edge-dark),inset_0_1px_0_var(--color-edge-light)] ${on ? "" : "[&_.fx-nm]:opacity-45 [&_[data-slot=knob]]:opacity-45"}`}>
-      <Toggle checked={on} onChange={setOn} label={`${name} on`} className="[&_label]:sr-only" />
+      <Toggle checked={on} onChange={dirty(setOn)} label={`${name} on`} className="[&_label]:sr-only" />
       <span className="fx-nm w-18 text-2xs font-semibold tracking-widest text-(--tone) uppercase">{name}</span>
       <div className={`${group} flex-1 justify-around gap-3`}>{knobs}</div>
     </div>
@@ -184,11 +192,18 @@ export function FxTab() {
   );
 }
 
+/** Riquadro dello step in riproduzione: l'unico pezzo dell'arp abbonato ai meter. */
+function ArpPlayhead({ index, on }: { index: number; on: boolean }) {
+  const { arpStep } = useMeterFrame();
+  if (!on || arpStep !== index) return null;
+  return <i aria-hidden className="absolute inset-0 rounded-[2px] outline outline-offset-1 outline-foreground" />;
+}
+
 export function ArpTab() {
   const arpOn = useBoolParam("arpOn");
   const arpMode = useChoiceParam("arpMode");
-  const { arpSteps, setArpSteps } = useBridgeState();
-  const step = useMeters().arpStep;
+  const { arpSteps, setArpSteps } = useSynthCtx();
+  const dirty = useDirty();
   const setStep = (i: number, v: number) => {
     const n = arpSteps.slice();
     n[i] = Math.min(1, Math.max(0, v));
@@ -197,8 +212,8 @@ export function ArpTab() {
   return (
     <div className={content}>
       <div className="flex flex-col gap-1.5">
-        <Toggle checked={arpOn.checked} onChange={arpOn.set} label="Arp on" />
-        <Segmented label="Arp mode" value={arpMode.value} onChange={arpMode.set} options={arpMode.options} />
+        <Toggle checked={arpOn.checked} onChange={dirty(arpOn.set)} label="Arp on" />
+        <Segmented label="Arp mode" value={arpMode.value} onChange={dirty(arpMode.set)} options={arpMode.options} />
       </div>
       <div className="flex h-16 items-end gap-[3px] rounded-control bg-well p-1.5 shadow-well">
         {arpSteps.map((v, i) => (
@@ -209,8 +224,9 @@ export function ArpTab() {
             aria-pressed={v > 0}
             onClick={() => setStep(i, v > 0 ? 0 : 0.8)}
             onWheel={(e) => setStep(i, v + (e.deltaY < 0 ? 0.1 : -0.1))}
-            className={`relative h-full w-4 rounded-[2px] bg-surface-2 ${arpOn.checked && step === i ? "outline outline-offset-1 outline-foreground" : ""}`}
+            className="relative h-full w-4 rounded-[2px] bg-surface-2"
           >
+            <ArpPlayhead index={i} on={arpOn.checked} />
             <i
               className={`absolute inset-x-0 bottom-0 rounded-[2px] bg-(--tone) transition-[height] duration-100 ${v > 0 ? "opacity-100 shadow-[0_0_6px_color-mix(in_oklch,var(--tone)_60%,transparent)]" : "opacity-35"}`}
               style={{ height: `${Math.max(8, v * 100)}%` }}

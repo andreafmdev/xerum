@@ -58,7 +58,8 @@ export function formatValue(spec: ParamSpec, v: number): string {
   }
   if (real === -Infinity) return "-inf";
   const text = real.toFixed(d);
-  return spec.unit ? `${text} ${spec.unit}` : text;
+  // I gradi si scrivono attaccati al numero ("180°"), ogni altra unità staccata.
+  return spec.unit ? (spec.unit === "°" ? `${text}${spec.unit}` : `${text} ${spec.unit}`) : text;
 }
 
 export const paramLabel = (spec: ParamSpec) => `${GROUPS[spec.group] ?? spec.group} · ${spec.name}`;

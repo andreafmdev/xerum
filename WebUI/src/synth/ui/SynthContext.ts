@@ -1,16 +1,19 @@
-// Contesto della finestra: quello che i knob condividono ma non arriva da un
-// singolo parametro (mod matrix, livelli delle sorgenti, "preset modificato").
-// Evita di far passare un oggetto `ctx` di pannello in pannello.
+// Contesto della finestra: lo stato condiviso del bridge (mod matrix e step
+// dell'arp) più il flag "preset modificato". Una sola istanza di useBridgeState
+// vive in SynthWindow e passa di qui, così non ci sono copie che si rincorrono.
+// I meter NON stanno qui: cambiano 30 volte al secondo, vedi MetersContext.
 
-import { createContext, useContext } from "react";
+import { createContext, useCallback, useContext } from "react";
 import type { ModAssignment, ModSource } from "../../juce/backend";
 import type { ParamId } from "../params.generated";
-import type { SourceLevels } from "../mod";
 
 export type SynthCtx = {
   mods: ModAssignment[];
+  arpSteps: number[];
   addMod: (src: ModSource, target: ParamId) => void;
-  sources: SourceLevels;
+  setDepth: (i: number, depth: number) => void;
+  removeMod: (i: number) => void;
+  setArpSteps: (steps: number[]) => void;
   markDirty: () => void;
 };
 
@@ -20,4 +23,20 @@ export function useSynthCtx(): SynthCtx {
   const c = useContext(SynthContext);
   if (!c) throw new Error("SynthContext mancante");
   return c;
+}
+
+/**
+ * Avvolge il setter di un controllo perché la modifica dell'utente sporchi il
+ * preset. Gli echo dell'host passano dai relay e non da qui, quindi non sporcano.
+ */
+export function useDirty(): <A extends unknown[]>(fn: (...a: A) => void) => (...a: A) => void {
+  const { markDirty } = useSynthCtx();
+  return useCallback(
+    <A extends unknown[]>(fn: (...a: A) => void) =>
+      (...a: A) => {
+        fn(...a);
+        markDirty();
+      },
+    [markDirty],
+  );
 }

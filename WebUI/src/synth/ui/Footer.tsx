@@ -1,9 +1,10 @@
 import { Meter } from "@xerum/ui";
-import { useBoolParam, useChoiceParam, useMeters } from "../../juce/hooks";
+import { useBoolParam, useChoiceParam } from "../../juce/hooks";
+import { useMeterFrame } from "./MetersContext";
 
 /** Barra bassa: meter in/out dal bridge, conteggi di voci e CPU derivati dai parametri. */
 export function Footer() {
-  const meters = useMeters();
+  const meters = useMeterFrame();
   const arpOn = useBoolParam("arpOn");
   const fx2On = useBoolParam("fx2On");
   const voiceMode = useChoiceParam("voiceMode");

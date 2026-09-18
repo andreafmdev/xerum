@@ -2,16 +2,23 @@ import { useEffect, useRef } from "react";
 import { toneStyle } from "@xerum/ui";
 import { sampleWave, spectrum } from "../curves";
 import { formatValue } from "../mapping";
+import { modsFor } from "../mod";
 import { PARAM_SPECS } from "../params.generated";
+import { useMeterFrame } from "./MetersContext";
+import { useSynthCtx } from "./SynthContext";
 
-type Props = { position: number; warp: number; level: number; lfo: number; name: string };
+type Props = { position: number; warp: number; level: number; name: string };
 
 const FRAMES = 9;
 const HARMONICS = 32;
 
 /** Schermo principale: pila di frame in prospettiva, spettro del frame corrente a destra. */
-export function WaveDisplay({ position, warp, level, lfo, name }: Props) {
+export function WaveDisplay({ position, warp, level, name }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
+  // Scostamento istantaneo della posizione: solo le sorgenti LFO assegnate a wtpos.
+  const { mods } = useSynthCtx();
+  const { lfo: lfoLevel } = useMeterFrame();
+  const lfo = modsFor(mods, "wtpos").reduce((a, m) => a + (m.src === "lfo" ? m.depth * lfoLevel : 0), 0);
 
   useEffect(() => {
     const cv = ref.current;
