@@ -91,7 +91,8 @@ target_sources(XerumTests
         Source/dsp/MipTable.cpp
         Source/dsp/WavetableStore.cpp
         Source/dsp/WavetableOscillator.cpp
-        Source/dsp/ADSREnvelope.cpp)
+        Source/dsp/ADSREnvelope.cpp
+        Source/dsp/StateVariableFilter.cpp)
 
 target_include_directories(XerumTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
 

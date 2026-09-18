@@ -1,6 +1,8 @@
 #include "dsp/ADSREnvelope.h"
+#include "dsp/StateVariableFilter.h"
 
 #include <juce_core/juce_core.h>
+#include <cmath>
 
 struct ADSRTests final : juce::UnitTest
 {
@@ -124,3 +126,110 @@ struct ADSRTests final : juce::UnitTest
 };
 
 static ADSRTests adsrTests;
+
+namespace
+{
+/** Ampiezza in uscita dal filtro a una data frequenza, misurata a regime. */
+float filterGainAt (dsp::StateVariableFilter& filter, float frequencyHz, double sampleRate)
+{
+    filter.reset();
+
+    const auto increment = 2.0 * juce::MathConstants<double>::pi * (double) frequencyHz / sampleRate;
+    const int settle = (int) (sampleRate * 0.2);
+    const int measure = (int) (sampleRate * 0.1);
+
+    double phase = 0.0;
+    for (int i = 0; i < settle; ++i, phase += increment)
+        filter.processSample ((float) std::sin (phase));
+
+    double sumSquares = 0.0;
+    for (int i = 0; i < measure; ++i, phase += increment)
+    {
+        const auto out = filter.processSample ((float) std::sin (phase));
+        sumSquares += (double) out * (double) out;
+    }
+
+    // RMS in uscita diviso l'RMS di un seno di ampiezza 1 (cioe 1/sqrt(2)).
+    return (float) (std::sqrt (sumSquares / measure) * std::sqrt (2.0));
+}
+} // namespace
+
+struct StateVariableFilterTests final : juce::UnitTest
+{
+    StateVariableFilterTests() : juce::UnitTest ("StateVariableFilter", "dsp") {}
+
+    void runTest() override
+    {
+        constexpr double sampleRate = 48000.0;
+
+        beginTest ("passa-basso Butterworth: -3 dB al cutoff");
+        {
+            dsp::StateVariableFilter filter;
+            filter.prepare (sampleRate);
+            filter.setType (dsp::StateVariableFilter::Type::lowPass);
+            filter.setNumStages (1);
+            filter.setResonance (juce::MathConstants<float>::sqrt2 / 2.0f); // Q = 0.707
+            filter.setCutoffHz (1000.0f);
+
+            expectWithinAbsoluteError (filterGainAt (filter, 1000.0f, sampleRate), 0.707f, 0.03f);
+            expect (filterGainAt (filter, 100.0f, sampleRate) > 0.95f, "in banda passante deve passare");
+            expect (filterGainAt (filter, 8000.0f, sampleRate) < 0.1f, "tre ottave sopra deve essere spento");
+        }
+
+        beginTest ("passa-alto: specchio del passa-basso");
+        {
+            dsp::StateVariableFilter filter;
+            filter.prepare (sampleRate);
+            filter.setType (dsp::StateVariableFilter::Type::highPass);
+            filter.setNumStages (1);
+            filter.setResonance (juce::MathConstants<float>::sqrt2 / 2.0f);
+            filter.setCutoffHz (1000.0f);
+
+            expect (filterGainAt (filter, 100.0f, sampleRate) < 0.1f);
+            expect (filterGainAt (filter, 8000.0f, sampleRate) > 0.95f);
+        }
+
+        beginTest ("24 dB taglia piu ripido di 12 dB");
+        {
+            dsp::StateVariableFilter gentle, steep;
+            for (auto* f : { &gentle, &steep })
+            {
+                f->prepare (sampleRate);
+                f->setType (dsp::StateVariableFilter::Type::lowPass);
+                f->setResonance (juce::MathConstants<float>::sqrt2 / 2.0f);
+                f->setCutoffHz (1000.0f);
+            }
+            gentle.setNumStages (1);
+            steep.setNumStages (2);
+
+            expect (filterGainAt (steep, 4000.0f, sampleRate) < filterGainAt (gentle, 4000.0f, sampleRate) * 0.5f);
+        }
+
+        beginTest ("risonanza alta su tutto il range: nessun NaN, nessuna esplosione");
+        {
+            dsp::StateVariableFilter filter;
+            filter.prepare (sampleRate);
+            filter.setType (dsp::StateVariableFilter::Type::lowPass);
+            filter.setNumStages (2);
+            filter.setResonance (20.0f);
+
+            for (float cutoff : { 20.0f, 200.0f, 2000.0f, 19000.0f, 40000.0f })
+            {
+                filter.setCutoffHz (cutoff);
+                filter.reset();
+
+                float peak = 0.0f;
+                for (int i = 0; i < 48000; ++i)
+                {
+                    const auto out = filter.processSample (i == 0 ? 1.0f : 0.0f);
+                    expect (std::isfinite (out), "uscita non finita a cutoff " + juce::String (cutoff));
+                    peak = juce::jmax (peak, std::abs (out));
+                }
+
+                expect (peak < 100.0f, "picco " + juce::String (peak) + " a cutoff " + juce::String (cutoff));
+            }
+        }
+    }
+};
+
+static StateVariableFilterTests stateVariableFilterTests;
