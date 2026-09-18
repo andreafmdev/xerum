@@ -69,8 +69,8 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     engine_->process (buffer, midi);
 
-    // Picchi del blocco per l'editor. Il picco "in" è il segnale delle voci prima del master:
-    // finché il master è applicato dentro l'engine, approssimiamo in = out / gain.
+    // Picchi del blocco per l'editor. Finché l'engine non espone un tap pre-master, "in" e "out"
+    // ricevono lo stesso picco post-master; il meter IN diventerà reale con la fase DSP.
     // store(jmax(load, peak)) non è una CAS: va bene perché il thread audio è l'unico scrittore
     // e il lettore (timer dell'editor) fa solo exchange(0), quindi non c'è race sulla read-modify-write.
     float peak = 0.0f;
