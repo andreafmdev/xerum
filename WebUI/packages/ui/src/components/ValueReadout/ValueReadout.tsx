@@ -14,9 +14,14 @@ export function ValueReadout({ value, label, mono = true, className }: ValueRead
     <Badge
       variant="secondary"
       data-slot="value-readout"
-      className={cn("h-5 gap-1.5 rounded-sm bg-surface-2 px-1.5 text-foreground", mono && "font-mono tabular-nums", className)}
+      className={cn(
+        // Finestrella incassata: il valore si legge come su un display, non come un badge.
+        "h-6 gap-1.5 rounded-control bg-well px-1.5 text-label text-(--tone) shadow-well",
+        mono && "font-mono tabular-nums",
+        className,
+      )}
     >
-      {label && <span className="text-2xs tracking-wider text-muted-foreground uppercase">{label}</span>}
+      {label && <span className="text-label text-muted-foreground">{label}</span>}
       <span>{value}</span>
     </Badge>
   );

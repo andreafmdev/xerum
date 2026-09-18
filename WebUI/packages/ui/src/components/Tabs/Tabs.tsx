@@ -22,14 +22,15 @@ export function Tabs({ value, onChange, items, tone, className }: TabsProps) {
       className={className}
       style={toneStyle(tone)}
     >
-      <TabsList variant="line" activateOnFocus className="h-7 gap-3 p-0">
+      <TabsList variant="line" activateOnFocus className="h-auto! gap-1 p-0">
         {items.map((item) => (
           <TabsTrigger
             key={item.value}
             value={item.value}
             className={cn(
-              "px-1 text-2xs font-medium tracking-wider uppercase",
-              "data-active:text-(--tone) after:bg-(--tone)",
+              // Due piastrine: quella attiva è premuta dentro la piastra, non sottolineata.
+              "h-6 flex-none rounded-control border border-transparent px-2 text-label font-medium text-muted-foreground after:hidden hover:text-foreground",
+              "data-active:border-edge-dark data-active:bg-well! data-active:text-(--tone) data-active:shadow-well",
             )}
           >
             {item.label}
