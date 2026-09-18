@@ -80,4 +80,16 @@ void VoiceManager::render (float* outL, float* outR, int numSamples) noexcept
     for (auto& voice : voices_)
         voice.render (outL, outR, numSamples);
 }
+
+void VoiceManager::setWavetable (const dsp::MipTable* table) noexcept
+{
+    for (auto& voice : voices_)
+        voice.setWavetable (table);
+}
+
+void VoiceManager::setFramePosition (float normalised) noexcept
+{
+    for (auto& voice : voices_)
+        voice.setFramePosition (normalised);
+}
 } // namespace engine

@@ -1,5 +1,4 @@
 #include "engine/SynthVoice.h"
-#include "util/RealtimeHelpers.h"
 
 #include <cmath>
 
@@ -28,7 +27,6 @@ void SynthVoice::reset() noexcept
     active_ = false;
     midiNote_ = -1;
     velocity_ = 0.0f;
-    phase_ = 0.0;
     oscillator_.reset();
     filter_.reset();
     envelope_.reset();
@@ -42,7 +40,6 @@ void SynthVoice::start (int midiNote, float velocity) noexcept
     oscillator_.setFrequencyHz (frequencyHz_);
     envelope_.noteOn();
     active_ = true;
-    phase_ = 0.0;
 }
 
 void SynthVoice::stop() noexcept
@@ -66,6 +63,16 @@ int SynthVoice::getMidiNote() const noexcept
     return midiNote_;
 }
 
+void SynthVoice::setWavetable (const dsp::MipTable* table) noexcept
+{
+    oscillator_.setTable (table);
+}
+
+void SynthVoice::setFramePosition (float normalised) noexcept
+{
+    oscillator_.setFramePosition (normalised);
+}
+
 void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
 {
     if (! isActive() || outL == nullptr || outR == nullptr || numSamples <= 0)
@@ -75,21 +82,8 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
 
     for (int i = 0; i < numSamples; ++i)
     {
-        float sample = 0.0f;
-
-        if constexpr (util::kEnableTestTone)
-        {
-            const double increment = static_cast<double> (frequencyHz_) / sampleRate_;
-            sample = static_cast<float> (std::sin (phase_ * 2.0 * 3.14159265358979323846)) * amp;
-            phase_ += increment;
-            if (phase_ >= 1.0)
-                phase_ -= 1.0;
-        }
-        else
-        {
-            sample = oscillator_.getSample() * amp * envelope_.getNextSample();
-            sample = filter_.processSample (sample);
-        }
+        float sample = oscillator_.getSample() * amp * envelope_.getNextSample();
+        sample = filter_.processSample (sample);
 
         outL[i] += sample;
         outR[i] += sample;

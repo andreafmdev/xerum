@@ -18,10 +18,28 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
 
     volumeParam_ = apvts_.getRawParameterValue ("volume");
     levelParam_ = apvts_.getRawParameterValue ("level");
+    wtIndexParam_ = apvts_.getRawParameterValue ("wtIndex");
+    wtposParam_ = apvts_.getRawParameterValue ("wtpos");
+}
+
+int SerumStyleSynthAudioProcessor::wavetableIndexFromParam() const noexcept
+{
+    if (wtIndexParam_ == nullptr)
+        return 0;
+
+    // `wtIndex` è un AudioParameterChoice: il valore grezzo è già l'indice.
+    return juce::jlimit (0, wavetables_.getNumTables() - 1,
+                         (int) wtIndexParam_->load (std::memory_order_relaxed));
 }
 
 void SerumStyleSynthAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    // Costruire la tavola alloca: qui è lecito, in processBlock no.
+    const auto index = wavetableIndexFromParam();
+    wavetables_.setActive (index);
+    lastWavetableIndex_ = index;
+    engine_->setWavetable (wavetables_.active());
+
     engine::EngineSpec spec;
     spec.sampleRate = sampleRate;
     spec.maximumBlockSize = samplesPerBlock;
@@ -64,6 +82,9 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     // MidiKeyboardState takes a brief CriticalSection internally (JUCE's standard pattern);
     // contention only happens on UI note on/off, never on the steady-state path.
     keyboardState_.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
+
+    if (wtposParam_ != nullptr)
+        engine_->setFramePosition (wtposParam_->load (std::memory_order_relaxed));
 
     engine_->process (buffer, midi);
 

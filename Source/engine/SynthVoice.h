@@ -23,13 +23,18 @@ public:
     /** Mix into stereo buffers (additive). Real-time safe. */
     void render (float* outL, float* outR, int numSamples) noexcept;
 
+    /** La tavola attiva, o nullptr. Chiamata dal message thread tramite VoiceManager. */
+    void setWavetable (const dsp::MipTable* table) noexcept;
+
+    /** Posizione del morph, 0..1. */
+    void setFramePosition (float normalised) noexcept;
+
 private:
     double sampleRate_ { 44100.0 };
     bool active_ { false };
     int midiNote_ { -1 };
     float velocity_ { 0.0f };
     float frequencyHz_ { 440.0f };
-    double phase_ { 0.0 }; // used only when util::kEnableTestTone
 
     dsp::WavetableOscillator oscillator_;
     dsp::StateVariableFilter filter_;

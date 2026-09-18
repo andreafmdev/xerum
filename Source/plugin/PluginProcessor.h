@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dsp/WavetableStore.h"
 #include "engine/MeterFrame.h"
 #include "engine/SynthEngine.h"
 #include "parameters/ParameterLayout.h"
@@ -51,6 +52,9 @@ public:
     juce::ChangeBroadcaster& getStateReplacedBroadcaster() noexcept { return stateReplaced_; }
 
 private:
+    /** Indice `wtIndex` corrente, come intero valido per WavetableStore. */
+    int wavetableIndexFromParam() const noexcept;
+
     juce::AudioProcessorValueTreeState apvts_;
     juce::MidiKeyboardState keyboardState_;
     std::unique_ptr<engine::SynthEngine> engine_;
@@ -60,6 +64,11 @@ private:
     // Puntatori grezzi ai valori normalizzati 0..1 dell'APVTS: letti solo con load() sul thread audio.
     std::atomic<float>* volumeParam_ { nullptr };
     std::atomic<float>* levelParam_ { nullptr };
+
+    dsp::WavetableStore wavetables_;
+    std::atomic<float>* wtIndexParam_ { nullptr };
+    std::atomic<float>* wtposParam_ { nullptr };
+    int lastWavetableIndex_ { -1 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SerumStyleSynthAudioProcessor)
 };

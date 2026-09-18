@@ -25,6 +25,12 @@ public:
 
     void setMasterGainLinear (float gain) noexcept;
 
+    /** Propaga la tavola attiva alle voci. Message thread (prepareToPlay). */
+    void setWavetable (const dsp::MipTable* table) noexcept;
+
+    /** Propaga la posizione del morph alle voci. */
+    void setFramePosition (float normalised) noexcept;
+
 private:
     void handleMidiEvent (const juce::MidiMessage& message) noexcept;
 

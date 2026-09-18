@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dsp/MipTable.h"
 #include "engine/SynthVoice.h"
 
 #include <array>
@@ -22,6 +23,12 @@ public:
     void allSoundOff() noexcept;
 
     void render (float* outL, float* outR, int numSamples) noexcept;
+
+    /** Propaga la tavola attiva a tutte le voci. Message thread. */
+    void setWavetable (const dsp::MipTable* table) noexcept;
+
+    /** Propaga la posizione del morph a tutte le voci. */
+    void setFramePosition (float normalised) noexcept;
 
 private:
     SynthVoice* findFreeVoice() noexcept;

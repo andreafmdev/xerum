@@ -18,6 +18,16 @@ void SynthEngine::setMasterGainLinear (float gain) noexcept
     masterGain_ = gain;
 }
 
+void SynthEngine::setWavetable (const dsp::MipTable* table) noexcept
+{
+    voices_.setWavetable (table);
+}
+
+void SynthEngine::setFramePosition (float normalised) noexcept
+{
+    voices_.setFramePosition (normalised);
+}
+
 void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
 {
     if (message.isNoteOn())
