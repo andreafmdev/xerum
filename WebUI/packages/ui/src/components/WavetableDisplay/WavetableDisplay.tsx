@@ -101,10 +101,21 @@ export function WavetableDisplay({ frames, position, tone, className }: Wavetabl
     <div
       data-testid="wavetable"
       data-slot="wavetable-display"
-      className={cn("relative h-24 w-full overflow-hidden rounded-md bg-surface-0 ring-1 ring-border", className)}
+      className={cn(
+        // Schermo incassato nella piastra, con il riflesso del vetro in diagonale.
+        "relative h-24 w-full overflow-hidden rounded-control bg-well shadow-well",
+        "after:pointer-events-none after:absolute after:inset-0 after:bg-linear-to-br after:from-foreground/5 after:to-transparent",
+        className,
+      )}
       style={toneStyle(tone)}
     >
-      <canvas ref={canvasRef} role="img" aria-label="Wavetable" className="size-full text-(--tone)" />
+      {/* Graticola: divisioni verticali + linea dello zero, come su un oscilloscopio. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-[linear-gradient(to_right,var(--color-line-strong)_1px,transparent_1px)] bg-[size:24px_100%] opacity-25"
+      />
+      <div aria-hidden className="absolute inset-x-0 top-1/2 h-px bg-line-strong opacity-40" />
+      <canvas ref={canvasRef} role="img" aria-label="Wavetable" className="relative size-full text-(--tone)" />
     </div>
   );
 }
