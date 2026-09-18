@@ -1,0 +1,23 @@
+{
+  "projectId": "3a8cfc98-836e-4c0f-a43e-029781c7fe4b",
+  "pkg": "@xerum/ui",
+  "globalName": "XerumUI",
+  "shape": "storybook",
+  "storybookConfigDir": "WebUI/packages/ui/.storybook",
+  "storybookStatic": ".design-sync/sb-reference",
+  "buildCmd": "cd WebUI && pnpm --filter @xerum/ui build",
+  "entry": "WebUI/packages/ui/dist/index.js",
+  "cssEntry": "dist/ui.css",
+  "titleMap": {
+    "Tokens": null
+  },
+  "overrides": {
+    "Button": {
+      "cardMode": "column"
+    },
+    "Knob": {
+      "cardMode": "column"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}
