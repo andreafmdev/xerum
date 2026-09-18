@@ -15,13 +15,6 @@ export const SOURCE_TONE: Record<ModSource, Tone> = { lfo: "lfo", env: "env", ve
 export const SOURCE_LABEL: Record<ModSource, string> = { lfo: "LFO", env: "ENV", vel: "VEL", mw: "MW" };
 export const MOD_SOURCES: ModSource[] = ["lfo", "env", "vel", "mw"];
 
-const SYNC_HZ = [4, 2, 1, 0.5, 0.25, 0.125];
-
-/** Frequenza LFO: libera 0.05..20 Hz, oppure 6 divisioni di nota a 120 bpm. */
-export function lfoHz(rate: number, sync: boolean): number {
-  return sync ? SYNC_HZ[Math.min(5, Math.floor(rate * 6))]! : 0.05 * Math.pow(400, rate);
-}
-
 /** Forma d'onda LFO a fase 0..1 (wrap), uscita -1..1. */
 export function lfoShape(shape: LfoShape, phase: number): number {
   const ph = ((phase % 1) + 1) % 1;

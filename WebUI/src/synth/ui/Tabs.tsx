@@ -3,7 +3,7 @@ import { Segmented, Tabs, Toggle, toneStyle } from "@xerum/ui";
 import { X } from "lucide-react";
 import { useBoolParam, useChoiceParam, useFloatParam } from "../../juce/hooks";
 import { envPath, lfoPath } from "../curves";
-import { formatValue, paramLabel } from "../mapping";
+import { formatValue, paramLabel, signedInt } from "../mapping";
 import { MOD_SOURCES, SOURCE_LABEL, SOURCE_TONE, type LfoShape } from "../mod";
 import { PARAM_SPECS } from "../params.generated";
 import { useMeterFrame } from "./MetersContext";
@@ -43,8 +43,6 @@ const group = "flex items-end gap-2.5";
 const vsep = "w-px self-stretch bg-linear-to-b from-transparent via-edge-dark to-transparent";
 const screen = "shrink-0 overflow-hidden rounded-control bg-well shadow-well";
 
-const signedInt = (v: number) => (v > 0 ? `+${v}` : `${v}`);
-
 export function EnvTab() {
   const att = useFloatParam("att");
   const dec = useFloatParam("dec");
@@ -80,7 +78,7 @@ export function EnvTab() {
   );
 }
 
-/** Divisioni di nota mostrate al posto degli hertz quando l'LFO è in sync (cfr. SYNC_HZ in mod.ts). */
+/** Divisioni di nota mostrate al posto degli hertz quando l'LFO è in sync. */
 const DIVISIONS = ["1/16", "1/8", "1/4", "1/2", "1", "2"];
 
 export function LfoTab() {

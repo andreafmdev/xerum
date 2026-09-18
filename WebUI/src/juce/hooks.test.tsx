@@ -3,7 +3,8 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { FakeBackend } from "./fake-backend";
 import { BridgeProvider } from "./provider";
-import { useBoolParam, useBridgeState, useChoiceParam, useFloatParam, useIntParam, useMeters } from "./hooks";
+import { parseState, useBoolParam, useBridgeState, useChoiceParam, useFloatParam, useIntParam, useMeters } from "./hooks";
+import type { BridgeState } from "./backend";
 
 const wrap = (b: FakeBackend) => ({ children }: { children: ReactNode }) => <BridgeProvider backend={b}>{children}</BridgeProvider>;
 
@@ -51,6 +52,58 @@ describe("useBridgeState", () => {
     await act(async () => { result.current.setDepth(0, 0.5); });   // no crash on empty
     await act(async () => { result.current.setArpSteps(new Array(16).fill(1)); });
     expect((await b.getState()).arpSteps[0]).toBe(1);
+  });
+});
+
+describe("parseState", () => {
+  const good: BridgeState = { version: 1, mods: [{ src: "lfo", target: "cutoff", depth: 0.2 }], arpSteps: new Array(16).fill(0) };
+  it("accepts a well-formed payload", () => expect(parseState(good)).toEqual(good));
+  it("rejects unknown versions, malformed mods, wrong step counts and non-objects", () => {
+    expect(parseState({ ...good, version: 2 })).toBeNull();
+    expect(parseState({ ...good, mods: [{ src: "lfo" }] })).toBeNull();
+    expect(parseState({ ...good, mods: [{ src: "lfo", target: "cutoff", depth: "deep" }] })).toBeNull();
+    expect(parseState({ ...good, mods: "nope" })).toBeNull();
+    expect(parseState({ ...good, arpSteps: new Array(8).fill(0) })).toBeNull();
+    expect(parseState({ ...good, arpSteps: new Array(16).fill("x") })).toBeNull();
+    expect(parseState(null)).toBeNull();
+    expect(parseState("nope")).toBeNull();
+  });
+});
+
+describe("useBridgeState payload validation", () => {
+  const bad = (p: unknown) => p as BridgeState;
+
+  it("warns and keeps the current state on a malformed payload, applies a valid one", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const b = new FakeBackend({ state: { mods: [{ src: "lfo", target: "cutoff", depth: 0.25 }] } });
+    const { result } = renderHook(() => useBridgeState(), { wrapper: wrap(b) });
+    await act(async () => {});
+    expect(result.current.mods).toHaveLength(1);
+
+    act(() => b.emitStateChanged(bad({ version: 1, mods: [{ src: "lfo" }], arpSteps: new Array(16).fill(0) }), "host"));
+    expect(warn).toHaveBeenCalledWith("[bridge] stato non valido", expect.anything());
+    expect(result.current.mods).toHaveLength(1);
+
+    act(() => b.emitStateChanged(bad({ version: 2, mods: [], arpSteps: new Array(16).fill(0) }), "host"));
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(result.current.mods).toHaveLength(1);
+
+    act(() => b.emitStateChanged({ version: 1, mods: [], arpSteps: new Array(16).fill(0) }, "host"));
+    expect(result.current.mods).toHaveLength(0);
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
+  it("warns and keeps the empty state when getState resolves with a malformed payload", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const b = new FakeBackend();
+    vi.spyOn(b, "getState").mockResolvedValue(bad({ version: 1, arpSteps: new Array(16).fill(0) }));
+    const { result } = renderHook(() => useBridgeState(), { wrapper: wrap(b) });
+    await act(async () => {});
+    expect(warn).toHaveBeenCalledWith("[bridge] stato non valido", expect.anything());
+    expect(result.current.mods).toHaveLength(0);
+    expect(result.current.arpSteps).toHaveLength(16);
+    warn.mockRestore();
   });
 });
 

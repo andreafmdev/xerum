@@ -33,6 +33,17 @@ describe("SynthWindow on the bridge", () => {
     expect(screen.getByRole("button", { name: /Glass Pad \*/ })).toBeInTheDocument();
   });
 
+  it("double-clicking a knob returns it to the spec default, not to zero", async () => {
+    const b = mount();
+    const slider = screen.getByRole("slider", { name: "Cutoff" });
+    fireEvent.pointerDown(slider, { clientY: 100, clientX: 0, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(slider, { clientY: 60, clientX: 0, pointerId: 1 });
+    fireEvent.pointerUp(slider, { clientY: 60, clientX: 0, pointerId: 1 });
+    expect(b.param("cutoff").get()).not.toBeCloseTo(0.62);
+    fireEvent.doubleClick(slider);
+    expect(b.param("cutoff").get()).toBeCloseTo(0.62);   // default dello spec, non 0
+  });
+
   it("a host change moves the knob readout", async () => {
     const b = mount();
     act(() => b.push("cutoff", 0));

@@ -5,7 +5,7 @@
 
 import { PARAM_SPECS, type ParamId } from "../synth/params.generated";
 import { fromIndex, toIndex } from "../synth/mapping";
-import { defaultNormalised, type Backend, type BridgeState, type ModAssignment, type ParamHandle } from "./backend";
+import { defaultNormalised, type Backend, type BridgeState, type MeterFrame, type ModAssignment, type ParamHandle } from "./backend";
 import type * as Juce from "./vendor/juce-frontend/index";
 
 declare global {
@@ -77,6 +77,18 @@ export async function createJuceBackend(): Promise<Backend> {
   const handles = new Map<ParamId, ParamHandle>();
   const call = (name: string) => juce.getNativeFunction(name);
 
+  // removeEventListener del bundle vendor upstream è un no-op: registrando un
+  // listener per ogni subscribe i callback si accumulerebbero ad ogni remount.
+  // Ne registriamo uno solo per evento e distribuiamo a un Set locale, così la
+  // funzione di unsubscribe restituita rimuove davvero il callback.
+  const fanOut = <T>(event: string) => {
+    const subs = new Set<(p: T) => void>();
+    window.__JUCE__!.backend.addEventListener(event, (p) => { for (const cb of [...subs]) cb(p as T); });
+    return (cb: (p: T) => void) => { subs.add(cb); return () => { subs.delete(cb); }; };
+  };
+  const onStateChanged = fanOut<BridgeState & { origin: string }>("stateChanged");
+  const onMeters = fanOut<MeterFrame>("meters");
+
   return {
     kind: "juce",
     param(id) {
@@ -94,7 +106,7 @@ export async function createJuceBackend(): Promise<Backend> {
     getState: () => call("getState")() as Promise<BridgeState>,
     setMods: (mods: ModAssignment[], origin: string) => call("setMods")(JSON.stringify(mods), origin).then(() => {}),
     setArpSteps: (steps: number[], origin: string) => call("setArpSteps")(JSON.stringify(steps), origin).then(() => {}),
-    onStateChanged(cb) { const id = window.__JUCE__!.backend.addEventListener("stateChanged", cb); return () => window.__JUCE__!.backend.removeEventListener(id); },
-    onMeters(cb) { const id = window.__JUCE__!.backend.addEventListener("meters", cb as (p: unknown) => void); return () => window.__JUCE__!.backend.removeEventListener(id); },
+    onStateChanged,
+    onMeters,
   };
 }

@@ -50,7 +50,25 @@ export function addModPure(mods: ModAssignment[], src: ModSource, target: ParamI
   return mods.some((m) => m.src === src && m.target === target) ? mods : [...mods, { src, target, depth: DEFAULT_DEPTH }];
 }
 
-const EMPTY: BridgeState = { version: 1, mods: [], arpSteps: new Array(16).fill(0) };
+export const ARP_STEPS = 16;
+const EMPTY: BridgeState = { version: 1, mods: [], arpSteps: new Array(ARP_STEPS).fill(0) };
+
+const isMod = (m: unknown): m is ModAssignment => {
+  const o = m as Record<string, unknown> | null;
+  return typeof o === "object" && o !== null && typeof o.src === "string" && typeof o.target === "string" && typeof o.depth === "number";
+};
+
+/** Valida un payload getState/stateChanged (spec §8/§9): null se non conforme.
+    Il bridge è un confine di fiducia: un binario più vecchio o un payload rotto
+    non deve poter inserire mods/step malformati nello stato dell'UI. */
+export function parseState(raw: unknown): BridgeState | null {
+  const o = raw as Record<string, unknown> | null;
+  if (typeof o !== "object" || o === null) return null;
+  if (o.version !== 1) return null;
+  if (!Array.isArray(o.mods) || !o.mods.every(isMod)) return null;
+  if (!Array.isArray(o.arpSteps) || o.arpSteps.length !== ARP_STEPS || !o.arpSteps.every((n) => typeof n === "number")) return null;
+  return { version: 1, mods: o.mods, arpSteps: o.arpSteps };
+}
 
 export function useBridgeState() {
   const backend = useBackend();
@@ -65,25 +83,31 @@ export function useBridgeState() {
 
   useEffect(() => {
     let alive = true;
+    // Un payload non conforme non entra mai nello stato: si logga e si tiene quello corrente.
+    const apply = (raw: unknown) => {
+      const s = parseState(raw);
+      if (s === null) { console.warn("[bridge] stato non valido", raw); return; }
+      modsRef.current = s.mods;
+      setState(s);
+    };
     backend.getState().then(
-      (s) => { if (alive) { modsRef.current = s.mods; setState(s); } },
+      (raw) => { if (alive) apply(raw); },
       (e) => console.warn("[bridge] getState fallita", e),
     );
-    // Idempotente: applicare due volte lo stesso evento produce lo stesso stato
-    // (contro il backend JUCE vero gli unsubscribe sono no-op, i listener possono
-    // duplicarsi dopo un remount — setState con un valore equivalente non cambia nulla).
+    // Idempotente: applicare due volte lo stesso evento produce lo stesso stato,
+    // quindi un eventuale doppione di un listener non cambia nulla.
     const off = backend.onStateChanged((s) => {
-      if (s.origin !== origin.current) { modsRef.current = s.mods; setState({ version: s.version, mods: s.mods, arpSteps: s.arpSteps }); }
+      if (s?.origin !== origin.current) apply(s);
     });
     return () => { alive = false; off(); };
   }, [backend]);
 
   const setMods = useCallback(
-    (mods: ModAssignment[]) => { modsRef.current = mods; setState((s) => ({ ...s, mods })); void backend.setMods(mods, origin.current); },
+    (mods: ModAssignment[]) => { modsRef.current = mods; setState((s) => ({ ...s, mods })); void backend.setMods(mods, origin.current).catch((e) => console.warn("[bridge] scrittura fallita", e)); },
     [backend],
   );
   const setArpSteps = useCallback(
-    (arpSteps: number[]) => { setState((s) => ({ ...s, arpSteps })); void backend.setArpSteps(arpSteps, origin.current); },
+    (arpSteps: number[]) => { setState((s) => ({ ...s, arpSteps })); void backend.setArpSteps(arpSteps, origin.current).catch((e) => console.warn("[bridge] scrittura fallita", e)); },
     [backend],
   );
 
@@ -103,9 +127,9 @@ export function useMeters(): MeterFrame {
   const [frame, setFrame] = useState<MeterFrame>({ in: 0, out: 0, lfo: 0, arpStep: 0 });
   // Istante dell'ultimo frame applicato: il decay dipende dal tempo trascorso (in
   // "tick" da 1000/30 ms), non dal numero di eventi ricevuti. Così due copie dello
-  // stesso frame consegnate nello stesso istante (gli unsubscribe sono no-op contro
-  // il backend JUCE vero, i listener possono duplicarsi dopo un remount) applicano
-  // lo stesso decay (≈1, tempo trascorso ≈0) invece di comprimere 0.85 due volte.
+  // stesso frame consegnate nello stesso istante (un listener doppione dopo un
+  // remount) applicano lo stesso decay (≈1, tempo trascorso ≈0) invece di
+  // comprimere 0.85 due volte.
   const at = useRef<number | null>(null);
   useEffect(
     () =>

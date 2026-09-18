@@ -40,20 +40,21 @@ export const fromIndex = (spec: ParamSpec, i: number) => { const n = spec.option
 export const toInt = (spec: ParamSpec, v: number) => Math.round(denormalise(spec, v));
 export const fromInt = (spec: ParamSpec, n: number) => normalise(spec, n);
 
-const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+/** Intero con segno esplicito ("+3", "0", "-2"): usato dai formati e dagli stepper della UI. */
+export const signedInt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 const ARP_DIVS = ["1/32", "1/16", "1/8", "1/4"];
 
 export function formatValue(spec: ParamSpec, v: number): string {
   if (spec.kind === "bool") return v >= 0.5 ? "On" : "Off";
   if (spec.kind === "choice") return spec.options?.[toIndex(spec, v)]?.label ?? "";
-  if (spec.kind === "int") return signed(toInt(spec, v));
+  if (spec.kind === "int") return signedInt(toInt(spec, v));
   const real = denormalise(spec, v);
   const d = spec.decimals ?? 0;
   switch (spec.labelKind) {
     case "hz": return real >= 1000 ? `${(real / 1000).toFixed(2)} kHz` : `${Math.round(real)} Hz`;
     case "time": return real >= 1000 ? `${(real / 1000).toFixed(2)} s` : `${Math.round(real)} ms`;
     case "pan": { const c = Math.round(real); return c === 0 ? "C" : c < 0 ? `${-c} L` : `${c} R`; }
-    case "signed": return signed(Math.round(real));
+    case "signed": return signedInt(Math.round(real));
     case "arp-rate": return ARP_DIVS[Math.min(3, Math.floor(clamp01(v) * 4))]!;
   }
   if (real === -Infinity) return "-inf";

@@ -91,6 +91,26 @@ describe("JuceBackend", () => {
     fire(0.4); expect(cb).toHaveBeenCalledTimes(1);
   });
 
+  it("registers one real listener per event: two subscribers, one unsubscribes, only the other is called", async () => {
+    const { createJuceBackend } = await import("./juce-backend");
+    const b = await createJuceBackend();
+    const first = vi.fn();
+    const second = vi.fn();
+    const off = b.onStateChanged(first);
+    b.onStateChanged(second);
+    // removeEventListener upstream è un no-op: un solo addEventListener reale, il
+    // fan-out e l'unsubscribe restano locali al backend.
+    expect(stub.listeners.get("stateChanged")).toHaveLength(1);
+    const fire = () => stub.listeners.get("stateChanged")!.forEach((fn) => fn({ version: 1, mods: [], arpSteps: [], origin: "x" }));
+    fire();
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
+    off();
+    fire();
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(2);
+  });
+
   it("marks unknown ids as orphans with a no-op set", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { createJuceBackend } = await import("./juce-backend");

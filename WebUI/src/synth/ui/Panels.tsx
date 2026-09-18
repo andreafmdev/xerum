@@ -3,6 +3,7 @@ import { Panel, Segmented, Stepper } from "@xerum/ui";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useBoolParam, useChoiceParam, useFloatParam, useIntParam } from "../../juce/hooks";
 import { filterPath } from "../curves";
+import { signedInt } from "../mapping";
 import { liveValue, modsFor, type FilterType } from "../mod";
 import { step } from "../presets";
 import { useSourceLevels } from "./MetersContext";
@@ -11,8 +12,6 @@ import { useDirty, useSynthCtx } from "./SynthContext";
 
 const plate = "sx-plate min-w-0 gap-1.5 pt-1.5";
 const body = "flex flex-1 items-end justify-between gap-1 px-2.5 pb-2.5";
-
-const signedInt = (v: number) => (v > 0 ? `+${v}` : `${v}`);
 
 export function OscPanel() {
   const oscOn = useBoolParam("oscOn");
@@ -133,7 +132,7 @@ export function MasterPanel() {
           <ParamKnob id="pan" size="sm" />
           <ParamKnob id="glide" size="sm" />
         </div>
-        <ParamKnob id="volume" size="lg" defaultValue={0.8} />
+        <ParamKnob id="volume" size="lg" />
       </div>
     </Panel>
   );

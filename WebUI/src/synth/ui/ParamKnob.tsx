@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Knob, type KnobProps } from "@xerum/ui";
-import type { ModAssignment } from "../../juce/backend";
+import { defaultNormalised, type ModAssignment } from "../../juce/backend";
 import { useFloatParam } from "../../juce/hooks";
 import { formatValue } from "../mapping";
 import { liveValue, modsFor, SOURCE_TONE, type ModSource } from "../mod";
@@ -50,6 +50,9 @@ export function ParamKnob({ id, label, format, bipolar, ...rest }: Props) {
     bipolar: bipolar ?? p.spec.bipolar,
     onDropMod: (src) => addMod(src as ModSource, id),
     ...rest,
+    // Il doppio clic rimanda al default: senza questo useDragValue userebbe 0 e
+    // scriverebbe una gesture reale a zero verso l'host.
+    defaultValue: rest.defaultValue ?? defaultNormalised(p.spec),
   };
 
   // Solo i knob modulati si abbonano ai meter: gli altri non si ridisegnano a 30 Hz.

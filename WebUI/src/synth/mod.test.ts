@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lfoHz, lfoShape, liveValue, modsFor, SOURCE_TONE, type ModAssignment } from "./mod";
+import { lfoShape, liveValue, modsFor, SOURCE_TONE, type ModAssignment } from "./mod";
 import { addModPure } from "../juce/hooks";
 
 describe("lfoShape", () => {
@@ -24,17 +24,6 @@ describe("lfoShape", () => {
     expect(lfoShape("S&H", 0.1)).not.toBe(lfoShape("S&H", 0.3));
   });
   it("wraps phase", () => expect(lfoShape("Saw", 1.25)).toBeCloseTo(lfoShape("Saw", 0.25)));
-});
-
-describe("lfoHz", () => {
-  it("free: 0.05 Hz .. 20 Hz", () => {
-    expect(lfoHz(0, false)).toBeCloseTo(0.05);
-    expect(lfoHz(1, false)).toBeCloseTo(20);
-  });
-  it("synced: 6 note divisions from 1/16 to 2 bars at 120 bpm", () => {
-    expect(lfoHz(0, true)).toBe(4);
-    expect(lfoHz(1, true)).toBe(0.125);
-  });
 });
 
 describe("liveValue", () => {
