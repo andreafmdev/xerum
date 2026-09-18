@@ -9,7 +9,8 @@ namespace bridge
     Native functions: getState(), setMods(json, origin), setArpSteps(json, origin).
     Evento verso la UI: "stateChanged" con lo stesso payload di getState. */
 class StateChannel final : private juce::ValueTree::Listener,
-                           private juce::ChangeListener
+                           private juce::ChangeListener,
+                           private juce::AsyncUpdater
 {
 public:
     StateChannel (juce::AudioProcessorValueTreeState& apvts, juce::ChangeBroadcaster& stateReplaced);
@@ -32,6 +33,7 @@ private:
     void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override {}
     void valueTreeParentChanged (juce::ValueTree&) override {}
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
+    void handleAsyncUpdate() override;
 
     juce::AudioProcessorValueTreeState& apvts_;
     juce::ChangeBroadcaster& stateReplaced_;

@@ -53,7 +53,13 @@ inline juce::String formatValue (const Spec& s, float v)
     }
     if (std::isinf (real)) return "-inf";
     const auto text = juce::String (real, s.decimals);
-    return s.unit != nullptr ? text + " " + utf8 (s.unit) : text;
+
+    if (s.unit == nullptr)
+        return text;
+
+    // I gradi si scrivono attaccati al numero ("180°"), ogni altra unità staccata (cfr. mapping.ts).
+    const auto unit = utf8 (s.unit);
+    return unit == utf8 ("\u00b0") ? text + unit : text + " " + unit;
 }
 
 /** Parametro APVTS da una voce della tabella. I float sono normalizzati 0..1 nell'APVTS. */
@@ -79,7 +85,7 @@ inline std::unique_ptr<juce::RangedAudioParameter> makeParameter (const Spec& s)
     return std::make_unique<juce::AudioParameterFloat> (id, utf8 (s.name),
         juce::NormalisableRange<float> { 0.0f, 1.0f }, s.def,
         juce::AudioParameterFloatAttributes()
-            .withStringFromValueFunction ([&s] (float v, int) { return formatValue (s, v); })
+            .withStringFromValueFunction ([s] (float v, int) { return formatValue (s, v); })
             .withLabel (s.unit != nullptr ? utf8 (s.unit) : juce::String()));
 }
 } // namespace params

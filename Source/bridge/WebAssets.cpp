@@ -34,7 +34,8 @@ std::optional<juce::WebBrowserComponent::Resource> lookup (const juce::String& u
 {
    #if XERUM_EMBED_WEBUI
     // Vite emette nomi con hash unici: basta il basename. "/" → index.html.
-    auto name = url.fromLastOccurrenceOf ("/", false, false);
+    // La query string (?v=…, ?import) non fa parte del nome della risorsa: va tolta prima del basename.
+    auto name = url.upToFirstOccurrenceOf ("?", false, false).fromLastOccurrenceOf ("/", false, false);
 
     if (name.isEmpty())
         name = "index.html";

@@ -9,6 +9,7 @@ namespace
 {
 float midiNoteToHz (int note) noexcept
 {
+    // std::pow gira solo a note-on (da SynthVoice::start), mai per campione: niente libm nel loop audio.
     return 440.0f * std::pow (2.0f, (static_cast<float> (note) - 69.0f) / 12.0f);
 }
 } // namespace

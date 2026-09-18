@@ -73,36 +73,40 @@ inline juce::var toVar (const juce::ValueTree& root, const juce::String& origin)
 /** Sostituisce l'intera lista di mod: nessun diff, la UI manda sempre lo stato completo. */
 inline void setMods (juce::ValueTree& root, const juce::var& mods, juce::UndoManager* undo)
 {
+    // Payload non conforme (JSON rotto, UI più vecchia): lo stato resta com'è invece di essere azzerato.
+    if (! mods.isArray())
+        return;
+
     auto tree = root.getChildWithName (ids::MODS);
     tree.removeAllChildren (undo);
 
-    if (auto* arr = mods.getArray())
+    for (const auto& m : *mods.getArray())
     {
-        for (const auto& m : *arr)
-        {
-            juce::ValueTree node { ids::MOD };
-            node.setProperty (ids::src, m["src"], undo);
-            node.setProperty (ids::target, m["target"], undo);
-            node.setProperty (ids::depth, (double) m["depth"], undo);
-            tree.appendChild (node, undo);
-        }
+        juce::ValueTree node { ids::MOD };
+        node.setProperty (ids::src, m["src"], undo);
+        node.setProperty (ids::target, m["target"], undo);
+        node.setProperty (ids::depth, (double) m["depth"], undo);
+        tree.appendChild (node, undo);
     }
 }
 
 /** Sostituisce l'intera sequenza dell'arp: i valori sono salvati come stringa CSV. */
 inline void setArpSteps (juce::ValueTree& root, const juce::var& steps, juce::UndoManager* undo)
 {
+    // Payload non conforme: meglio lasciare la sequenza com'è che sostituirla con una stringa vuota.
+    if (! steps.isArray())
+        return;
+
     juce::StringArray tokens;
 
     // Scartiamo l'eccesso già in scrittura: nello stato non finiscono mai più di kArpSteps valori.
-    if (auto* arr = steps.getArray())
-        for (const auto& s : *arr)
-        {
-            if (tokens.size() >= kArpSteps)
-                break;
+    for (const auto& s : *steps.getArray())
+    {
+        if (tokens.size() >= kArpSteps)
+            break;
 
-            tokens.add (juce::String ((double) s, 3));
-        }
+        tokens.add (juce::String ((double) s, 3));
+    }
 
     root.getChildWithName (ids::ARP).setProperty (ids::steps, tokens.joinIntoString (","), undo);
 }

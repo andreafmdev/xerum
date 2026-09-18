@@ -42,7 +42,7 @@ Adding a new `.cpp` file to `Source/` needs a `cmake --preset ...` reconfigure t
 
 Standalone app is useful for MIDI smoke tests without a DAW.
 
-Vite serves `http://localhost:5173`. Debug builds of the editor navigate there automatically. If the server is down, reopen after starting Vite (or use the embedded fallback HTML via the resource provider in Release). See "Web UI" below for the install/dev commands.
+Vite serves `http://localhost:5173`. Debug builds of the editor navigate there automatically. If the server is down, the WebView shows its own load error: start Vite and reopen the editor. Release builds have no dev server — they embed the bundle and serve it through the resource provider. See "Web UI" below for the install/dev commands.
 
 ## Smoke checklist
 
@@ -71,9 +71,9 @@ The `macos-release` preset sets `XERUM_EMBED_WEBUI=ON`, which `juce_add_binary_d
 
     cd WebUI && pnpm ui:build && pnpm build
 
-(`pnpm ui:build` builds `@xerum/ui`; `pnpm build` runs `tsc --noEmit && vite build` into `WebUI/dist`.) Or build it as part of the CMake graph, with the `webui` custom target:
+(`pnpm ui:build` builds `@xerum/ui`; `pnpm build` runs `tsc --noEmit && vite build` into `WebUI/dist`.) Or build it as part of the CMake graph, with the `webui` custom target — from the `macos-debug` build tree, since the Release configure is what just failed:
 
-    cmake --build --preset macos-release --target webui
+    cmake --build --preset macos-debug --target webui
 
 ### Bridge checklist
 
@@ -84,3 +84,4 @@ Manual checks in a DAW after touching `Source/bridge/` or the WebUI parameter/st
 3. Save the project, reload it — the mod matrix and arp steps come back as they were.
 4. Release Standalone opens with the embedded UI, without Vite running.
 5. `processBlock` CPU is the same with the editor open and closed (`MeterChannel` only runs while the editor/WebView is alive).
+6. Double-click a knob and confirm it returns to its default, not to zero.

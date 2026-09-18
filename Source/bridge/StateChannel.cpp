@@ -14,6 +14,7 @@ StateChannel::StateChannel (juce::AudioProcessorValueTreeState& apvts, juce::Cha
 
 StateChannel::~StateChannel()
 {
+    cancelPendingUpdate();
     stateReplaced_.removeChangeListener (this);
     listened_.removeListener (this);
 }
@@ -36,14 +37,12 @@ juce::WebBrowserComponent::Options StateChannel::applyTo (juce::WebBrowserCompon
         {
             lastOrigin_ = args.size() > 1 ? args[1].toString() : juce::String();
             state::setMods (apvts_.state, juce::JSON::parse (args[0].toString()), apvts_.undoManager);
-            lastOrigin_.clear();   // la scrittura è sincrona: i callback hanno già usato l'origin
             done ({});
         })
         .withNativeFunction ("setArpSteps", [this] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion done)
         {
             lastOrigin_ = args.size() > 1 ? args[1].toString() : juce::String();
             state::setArpSteps (apvts_.state, juce::JSON::parse (args[0].toString()), apvts_.undoManager);
-            lastOrigin_.clear();   // la scrittura è sincrona: i callback hanno già usato l'origin
             done ({});
         });
 }
@@ -59,16 +58,26 @@ void StateChannel::emitState (const juce::String& origin)
         webView_->emitEventIfBrowserIsVisible ("stateChanged", state::toVar (apvts_.state, origin));
 }
 
-// Ogni cambio (nostro o esterno) emette: la UI filtra il proprio origin. Coalescenza: un evento per
-// cambio; setMods produce più callback (remove + N add) → la UI riceve N+1 eventi identici, tutti
-// scartati perché origin coincide. Accettabile: gli array sono piccoli.
-void StateChannel::valueTreePropertyChanged (juce::ValueTree& t, const juce::Identifier&) { if (isOurs (t)) emitState (lastOrigin_); }
-void StateChannel::valueTreeChildAdded (juce::ValueTree& p, juce::ValueTree&)             { if (isOurs (p)) emitState (lastOrigin_); }
-void StateChannel::valueTreeChildRemoved (juce::ValueTree& p, juce::ValueTree&, int)      { if (isOurs (p)) emitState (lastOrigin_); }
+// Ogni cambio (nostro o esterno) marca soltanto: setMods produce removeAllChildren + N append, cioè
+// 2N callback, e un emitState sincrono per ciascuna significherebbe 2N toVar + evaluateJavascript
+// durante un drag di depth. L'AsyncUpdater li coalizza in un solo evento per giro di message loop.
+void StateChannel::valueTreePropertyChanged (juce::ValueTree& t, const juce::Identifier&) { if (isOurs (t)) triggerAsyncUpdate(); }
+void StateChannel::valueTreeChildAdded (juce::ValueTree& p, juce::ValueTree&)             { if (isOurs (p)) triggerAsyncUpdate(); }
+void StateChannel::valueTreeChildRemoved (juce::ValueTree& p, juce::ValueTree&, int)      { if (isOurs (p)) triggerAsyncUpdate(); }
+
+// L'origin dell'ultima scrittura dalla UI deve sopravvivere fino a qui: si azzera solo dopo l'emit,
+// così il prossimo cambio senza origin (host, undo, automazione) parte davvero da stringa vuota.
+void StateChannel::handleAsyncUpdate()
+{
+    emitState (lastOrigin_);
+    lastOrigin_.clear();
+}
 
 void StateChannel::changeListenerCallback (juce::ChangeBroadcaster*)
 {
     // replaceState() ha sostituito l'albero radice: riaggancia il listener e notifica (origin vuoto = esterno).
+    // L'emit pendente si riferirebbe all'albero vecchio: lo annulliamo e mandiamo questo, sincrono.
+    cancelPendingUpdate();
     lastOrigin_.clear();
     listenTo (apvts_.state);
     emitState ({});

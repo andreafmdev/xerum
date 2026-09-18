@@ -60,10 +60,6 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         engine_->setMasterGainLinear (v <= 0.0f ? 0.0f : v * kHeadroomGain); // v è lineare 0..1; +6 dB di headroom
     }
 
-    // "level" è riservato al mix degli oscillatori (fase 3): lo leggiamo già qui per tenere il puntatore vivo.
-    if (levelParam_ != nullptr)
-        (void) levelParam_->load (std::memory_order_relaxed);
-
     // Merge notes played on the editor's on-screen keyboard into the host MIDI stream.
     // MidiKeyboardState takes a brief CriticalSection internally (JUCE's standard pattern);
     // contention only happens on UI note on/off, never on the steady-state path.
@@ -98,9 +94,11 @@ void SerumStyleSynthAudioProcessor::setStateInformation (const void* data, int s
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts_.state.getType()))
         {
+            // Siamo sul message thread: ricreare i figli mancanti e notificare è sicuro.
+            JUCE_ASSERT_MESSAGE_THREAD
+
             apvts_.replaceState (juce::ValueTree::fromXml (*xml));
 
-            // Siamo sul message thread: ricreare i figli mancanti e notificare è sicuro.
             state::ensureChildren (apvts_.state);
             stateReplaced_.sendChangeMessage();
         }

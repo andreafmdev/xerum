@@ -6,61 +6,14 @@ namespace
 {
 constexpr const char* kDevServerUrl = "http://localhost:5173";
 
-juce::WebBrowserComponent::Resource makeFallbackIndexHtml()
-{
-    static constexpr char html[] = R"HTML(
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <title>SerumStyleSynth</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #12141a; color: #e8eaf0;
-      font-family: ui-sans-serif, system-ui, sans-serif; display: grid; place-items: center; }
-    main { text-align: center; max-width: 28rem; padding: 2rem; }
-    h1 { font-weight: 600; letter-spacing: 0.02em; margin-bottom: 0.5rem; }
-    p { opacity: 0.7; line-height: 1.5; }
-    code { background: #1c2030; padding: 0.15rem 0.4rem; border-radius: 4px; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>SerumStyleSynth</h1>
-    <p>Web UI scaffold. Start the Vite dev server:</p>
-    <p><code>cd WebUI && pnpm dev</code></p>
-    <p>then reopen the editor.</p>
-  </main>
-</body>
-</html>
-)HTML";
-
-    juce::WebBrowserComponent::Resource resource;
-    const auto* data = reinterpret_cast<const std::byte*> (html);
-    resource.data.assign (data, data + sizeof (html) - 1);
-    resource.mimeType = "text/html";
-    return resource;
-}
-
 juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& relays,
                                                   bridge::StateChannel& stateChannel)
 {
     auto options = juce::WebBrowserComponent::Options {}
                        .withNativeIntegrationEnabled()
-                       .withResourceProvider ([] (const auto& url)
-                                              -> std::optional<juce::WebBrowserComponent::Resource>
-                       {
-                           // In Release il bundle Vite è dentro il binario: serve quello.
-                           if (auto resource = bridge::webAssets::lookup (url))
-                               return resource;
-
-                           // Senza bundle embedded resta la pagina di cortesia per "/".
-                           if (! bridge::webAssets::embedded()
-                               && (url == "/" || url == "/index.html"
-                                   || url.endsWithIgnoreCase ("index.html")))
-                               return makeFallbackIndexHtml();
-
-                           return std::nullopt;
-                       });
+                       // In Release il bundle Vite è dentro il binario: serve quello. In Debug
+                       // la WebView va sul dev server e il provider non viene mai interrogato.
+                       .withResourceProvider ([] (const auto& url) { return bridge::webAssets::lookup (url); });
 
    #if JUCE_WINDOWS
     options = options
