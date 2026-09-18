@@ -11,6 +11,8 @@ export type KnobProps = {
   /** Valore del doppio click. Default 0 (0.5 se bipolar). */
   defaultValue?: number;
   onChange: (v: number) => void;
+  /** Fine di una modifica: pointer-up/cancel, oppure subito dopo un cambio da rotella, tastiera o doppio click. */
+  onChangeEnd?: () => void;
   label: string;
   /** Testo del readout e di aria-valuetext. Default: percentuale. */
   format?: (v: number) => string;
@@ -85,6 +87,7 @@ export function Knob({
   value,
   defaultValue,
   onChange,
+  onChangeEnd,
   label,
   format = defaultFormat,
   size = "md",
@@ -121,6 +124,7 @@ export function Knob({
     value,
     defaultValue: defaultValue ?? (bipolar ? 0.5 : 0),
     onChange,
+    onChangeEnd,
     disabled,
   });
 

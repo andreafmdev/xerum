@@ -46,6 +46,17 @@ describe("Knob", () => {
     expect(slider).toHaveAttribute("data-dragging", "true");
   });
 
+  it("calls onChangeEnd after a drag ends", () => {
+    const onChangeEnd = vi.fn();
+    render(<Knob value={0.5} onChange={() => {}} onChangeEnd={onChangeEnd} label="Cutoff" />);
+    const slider = screen.getByRole("slider");
+    fireEvent.pointerDown(slider, { clientY: 100, clientX: 0, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(slider, { clientY: 80, clientX: 0, pointerId: 1 });
+    expect(onChangeEnd).not.toHaveBeenCalled();
+    fireEvent.pointerUp(slider, { clientY: 80, clientX: 0, pointerId: 1 });
+    expect(onChangeEnd).toHaveBeenCalledTimes(1);
+  });
+
   it("draws the value arc from the centre when bipolar", () => {
     const { rerender } = render(<Knob value={0.5} onChange={() => {}} label="Pan" bipolar />);
     const arc = () => screen.getByTestId("knob-value-arc").getAttribute("d") ?? "";

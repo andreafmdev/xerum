@@ -14,6 +14,8 @@ export type UseDragValueOptions = {
   /** Valore ripristinato dal doppio click. Default 0. */
   defaultValue?: number;
   onChange: (v: number) => void;
+  /** Fine di una modifica: pointer-up/cancel, oppure subito dopo un cambio da rotella, tastiera o doppio click. */
+  onChangeEnd?: () => void;
   /** Incremento per rotella e frecce. Default 0.01. Shift = step/10. */
   step?: number;
   /** Pixel di trascinamento per percorrere l'intero range. Default 200. Shift = ×10 (fine). */
@@ -44,6 +46,7 @@ export function useDragValue({
   value,
   defaultValue = 0,
   onChange,
+  onChangeEnd,
   step = 0.01,
   sensitivity = 200,
   axis = "y",
@@ -54,8 +57,8 @@ export function useDragValue({
   const [node, setNode] = useState<HTMLElement | null>(null);
 
   // Ultimi valori senza rifare i listener a ogni render.
-  const latest = useRef({ value, onChange, disabled, step });
-  latest.current = { value, onChange, disabled, step };
+  const latest = useRef({ value, onChange, onChangeEnd, disabled, step });
+  latest.current = { value, onChange, onChangeEnd, disabled, step };
 
   const emit = useCallback((next: number) => {
     const v = clamp01(next);
@@ -102,11 +105,13 @@ export function useDragValue({
       e.currentTarget.releasePointerCapture?.(e.pointerId);
     }
     setDragging(false);
+    latest.current.onChangeEnd?.();
   }, []);
 
   const onDoubleClick: MouseEventHandler<HTMLElement> = useCallback(() => {
     if (latest.current.disabled) return;
     emit(defaultValue);
+    latest.current.onChangeEnd?.();
   }, [defaultValue, emit]);
 
   const onKeyDown: KeyboardEventHandler<HTMLElement> = useCallback(
@@ -128,6 +133,7 @@ export function useDragValue({
       if (next === undefined) return;
       e.preventDefault();
       emit(next);
+      latest.current.onChangeEnd?.();
     },
     [emit],
   );
@@ -148,6 +154,7 @@ export function useDragValue({
       e.preventDefault();
       const s = e.shiftKey ? latest.current.step / 10 : latest.current.step;
       emit(latest.current.value + (e.deltaY < 0 ? s : -s));
+      latest.current.onChangeEnd?.();
     };
     node.addEventListener("wheel", onWheel, { passive: false });
     return () => node.removeEventListener("wheel", onWheel);
