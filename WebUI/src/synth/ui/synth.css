@@ -1,0 +1,79 @@
+/* Finestra plugin: chassis 900×600 scalato nel contenitore, tre varianti di materiale.
+   Le varianti ridefiniscono i token hardware di @xerum/ui sul chassis, così ogni
+   primitiva (Knob, Segmented, Button…) cambia pelle senza prop aggiuntive. */
+
+.sx-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  user-select: none;
+}
+
+.sx-chassis {
+  width: 900px;
+  height: 600px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface-0));
+  box-shadow:
+    0 0 0 1px var(--color-edge-dark),
+    inset 0 1px 0 var(--color-edge-light),
+    0 30px 60px rgb(0 0 0 / 0.75),
+    0 8px 16px rgb(0 0 0 / 0.55);
+  transform-origin: center;
+  transition: opacity 150ms;
+
+  /* Effetti opzionali: attivi solo in `glow`. */
+  --glow: none;
+  --tglow: none;
+}
+
+/* soft = token di libreria così come sono. */
+
+.sx-chassis[data-variant="deep"],
+.sx-chassis[data-variant="glow"] {
+  --color-cap-hi: #4b5268;
+  --color-cap-lo: #181b25;
+  --color-cap-rim: #3a4052;
+  --color-cap-sheen: rgb(255 255 255 / 0.16);
+  --shadow-cap:
+    inset 0 1px 1px rgb(255 255 255 / 0.18),
+    inset 0 -2px 3px rgb(0 0 0 / 0.6),
+    0 4px 6px rgb(0 0 0 / 0.7),
+    0 10px 18px rgb(0 0 0 / 0.55);
+  --shadow-panel:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    inset 0 -1px 0 #000,
+    0 6px 14px rgb(0 0 0 / 0.65),
+    0 1px 2px #000;
+  --shadow-well:
+    inset 0 2px 6px rgb(0 0 0 / 0.85),
+    inset 0 0 0 1px #000,
+    inset 0 -1px 0 rgb(255 255 255 / 0.04);
+}
+
+.sx-chassis[data-variant="glow"] {
+  --glow: drop-shadow(0 0 4px var(--tone)) drop-shadow(0 0 10px color-mix(in oklch, var(--tone) 60%, transparent));
+  --tglow: 0 0 6px color-mix(in oklch, var(--tone) 70%, transparent);
+}
+
+/* Piastre: gradiente verticale sopra la superficie della card di libreria. */
+.sx-plate {
+  background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface-1)) !important;
+}
+
+/* Range della mod matrix: nativo, colorato di sezione. */
+.sx-range {
+  flex: 1;
+  height: 2px;
+  accent-color: var(--tone);
+}

@@ -26,7 +26,7 @@ private:
     juce::MidiKeyboardComponent keyboard_;
 
     static constexpr int kDefaultWidth = 900;
-    static constexpr int kDefaultHeight = 632;
+    static constexpr int kDefaultHeight = 672; // 600 (chassis WebUI) + tastiera
     static constexpr int kKeyboardHeight = 72;
     static constexpr int kLowestNote = 36;   // C2
     static constexpr int kHighestNote = 96;  // C7

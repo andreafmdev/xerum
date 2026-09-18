@@ -51,4 +51,5 @@ Requires pnpm 11 (`corepack enable`).
     pnpm ui:build        # @xerum/ui -> packages/ui/dist
     pnpm dev             # app shell on http://localhost:5173
     pnpm ui:storybook    # component catalogue on http://localhost:6006
-    pnpm ui:test         # Vitest
+    pnpm ui:test         # Vitest (@xerum/ui)
+    pnpm test            # Vitest (app shell: synth logic + SynthWindow smoke)

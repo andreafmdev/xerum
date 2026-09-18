@@ -1,14 +1,14 @@
 @import "tailwindcss";
 @import "@xerum/ui/theme.css";
 @import "@xerum/ui/ui.css";
+@import "tw-animate-css";
 
-/* Chassis: una superficie piatta sotto le piastre, senza gradiente eroe.
-   La separazione la fanno i pannelli (--color-surface-1) e i loro bordi. */
+/* Il chassis del synth (src/synth/ui/synth.css) è l'unica superficie: html/body restano piatti. */
 html,
 body,
 #root {
   margin: 0;
-  min-height: 100%;
+  height: 100%;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);

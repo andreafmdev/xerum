@@ -35,3 +35,6 @@ compile_commands.json
 .design-sync/node_modules
 .ds-sync/
 ds-bundle/
+
+# vitest json reporter (hook RTK)
+.vitest/
