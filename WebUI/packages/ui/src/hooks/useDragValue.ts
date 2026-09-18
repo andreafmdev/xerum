@@ -71,6 +71,7 @@ export function useDragValue({
     (e) => {
       if (latest.current.disabled || e.button !== 0) return;
       e.preventDefault();
+      e.currentTarget.focus({ preventScroll: true });
       e.currentTarget.setPointerCapture?.(e.pointerId);
       origin.current = { pos: readPos(e), value: latest.current.value, shift: e.shiftKey };
       setDragging(true);

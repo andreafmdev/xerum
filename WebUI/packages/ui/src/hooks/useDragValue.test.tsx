@@ -174,6 +174,13 @@ describe("useDragValue", () => {
     fireEvent.keyDown(target(), { key: "End" });
     expect(onChange).not.toHaveBeenCalled();
     expect(target()).toHaveAttribute("data-dragging", "false");
+    expect(target()).not.toHaveFocus();
+  });
+
+  it("focuses the element on pointer down so keyboard control works after a grab", () => {
+    render(<Harness initial={0.5} />);
+    fireEvent.pointerDown(target(), { clientY: 0, clientX: 0, button: 0, pointerId: 1 });
+    expect(target()).toHaveFocus();
   });
 
   it("ignores non-primary buttons", () => {
