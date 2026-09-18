@@ -9,6 +9,15 @@ namespace
 {
 constexpr double kSmoothingSeconds = 0.02;
 
+// Headroom fisso per voce: senza di questo, una singola nota a level=1.0 con il volume di
+// default satura gia' da sola, e un accordo satura pesantemente (vedi task-7-report.md,
+// Finding 4). E' una costante fissa, non un divisore sul numero di voci attive: un divisore
+// farebbe "respirare" il volume ogni volta che una nota parte o finisce, un difetto peggiore
+// del clipping che risolve. -20 dB, misurato con HeadroomHarness (vedi report): una nota
+// singola a level=1.0/volume di default arriva a -19.04 dBFS, un accordo di 16 voci simultanee
+// (caso pessimistico: nessuna cancellazione di fase) arriva a -4.19 dBFS, quindi mai in clip.
+constexpr float kVoiceHeadroomGain = 0.1f; // 10^(-20/20)
+
 float midiNoteToHz (int note, float offsetSemitones) noexcept
 {
     // std::pow gira solo a note-on, mai per campione: niente libm nel loop audio.
@@ -152,8 +161,8 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
     // perché getNextValue() è una semplice interpolazione lineare, senza libm.
     const auto panNow = smoothedPan_.skip (numSamples);
     const auto angle = (panNow * 0.5f + 0.5f) * 1.5707963f;
-    const auto gainL = std::cos (angle);
-    const auto gainR = std::sin (angle);
+    const auto gainL = std::cos (angle) * kVoiceHeadroomGain;
+    const auto gainR = std::sin (angle) * kVoiceHeadroomGain;
 
     for (int i = 0; i < numSamples; ++i)
     {

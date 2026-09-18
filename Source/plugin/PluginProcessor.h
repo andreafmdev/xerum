@@ -116,6 +116,12 @@ private:
     dsp::WavetableStore wavetables_;
     int lastWavetableIndex_ { -1 };
 
+    // prepareToPlay() e timerCallback() possono girare su thread diversi (nello Standalone
+    // prepareToPlay non è detto sia sul message thread) e mutano entrambi wavetables_ e
+    // lastWavetableIndex_: senza questo lock sarebbe una race genuina su tables_ (non atomico).
+    // Nessuno dei due gira mai dentro processBlock, quindi il lock non tocca il thread audio.
+    juce::CriticalSection wavetableLock_;
+
     // parameterChanged() può arrivare dal thread audio durante l'automazione host: si limita a
     // marcare il flag. Il timer (message thread) fa il lavoro vero, che alloca.
     std::atomic<bool> wavetableDirty_ { false };

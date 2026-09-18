@@ -115,8 +115,11 @@ engine::EngineParams SerumStyleSynthAudioProcessor::collectParams() const noexce
 
     p.oscOn = paramOscOn_ != nullptr && paramOscOn_->load (std::memory_order_relaxed) >= 0.5f;
     p.framePosition = paramWtpos_ != nullptr ? paramWtpos_->load (std::memory_order_relaxed) : 0.0f;
-    p.octave = (int) realValue (specOct_, paramOct_);
-    p.semitones = (int) realValue (specSemi_, paramSemi_);
+    // roundToInt, non un cast troncante: denormalise() torna un float che per via degli
+    // arrotondamenti in virgola mobile puo' cadere leggermente sotto l'intero vero (es. 7.999998),
+    // e un cast tronca verso zero invece di arrotondare, sbagliando la nota di un semitono/ottava.
+    p.octave = juce::roundToInt (realValue (specOct_, paramOct_));
+    p.semitones = juce::roundToInt (realValue (specSemi_, paramSemi_));
     p.fineCents = realValue (specFine_, paramFine_);
 
     // `level` ha mappa Db, ma il valore grezzo è già il guadagno lineare (vedi ParameterMapping.h).
@@ -158,6 +161,8 @@ void SerumStyleSynthAudioProcessor::timerCallback()
     if (! wavetableDirty_.exchange (false, std::memory_order_acquire))
         return;
 
+    const juce::ScopedLock lock (wavetableLock_); // vedi commento sul membro: serializza con prepareToPlay
+
     const auto index = wavetableIndexFromParam();
 
     if (index == lastWavetableIndex_)
@@ -175,7 +180,11 @@ void SerumStyleSynthAudioProcessor::timerCallback()
 void SerumStyleSynthAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     // Costruire la tavola alloca: qui è lecito, in processBlock no. Il thread audio non gira
-    // ancora, quindi applicarla direttamente alle voci è sicuro.
+    // ancora, quindi applicarla direttamente alle voci è sicuro. Il lock serializza solo con
+    // timerCallback() (vedi commento sul membro): nello Standalone questo può girare su un
+    // thread diverso dal message thread.
+    const juce::ScopedLock lock (wavetableLock_);
+
     const auto index = wavetableIndexFromParam();
     wavetables_.setActive (index);
     lastWavetableIndex_ = index;
