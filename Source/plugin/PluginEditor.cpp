@@ -86,6 +86,27 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
     setResizable (true, true);
     setResizeLimits (640, 400 + kKeyboardHeight, 1920, 1200);
 
+   #if JUCE_DEBUG
+    // Dev aid: XERUM_SNAPSHOT=/path/out.png writes a snapshot of the JUCE-painted editor
+    // (keyboard strip; the WebView is a native view and renders blank) ~2 s after opening.
+    if (const auto snapshotPath = juce::SystemStats::getEnvironmentVariable ("XERUM_SNAPSHOT", {});
+        snapshotPath.isNotEmpty())
+    {
+        juce::Timer::callAfterDelay (2000, [safeThis = juce::Component::SafePointer (this), snapshotPath]
+        {
+            if (safeThis == nullptr)
+                return;
+
+            const auto image = safeThis->createComponentSnapshot (safeThis->getLocalBounds(), true, 2.0f);
+            juce::File (snapshotPath).deleteFile();
+            juce::FileOutputStream out { juce::File (snapshotPath) };
+
+            if (out.openedOk())
+                juce::PNGImageFormat().writeImageToStream (image, out);
+        });
+    }
+   #endif
+
     if (kUseDevServer)
     {
         // XERUM_WEBUI_URL overrides the dev server (e.g. when 5173 is taken).
