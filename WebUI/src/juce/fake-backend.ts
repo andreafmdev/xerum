@@ -3,6 +3,7 @@
 // opzionalmente, un clock rAF che simula meter e LFO (ex useClock).
 
 import { PARAM_IDS, type ParamId } from "../synth/params.generated";
+import { PRESETS } from "../synth/presets.generated";
 import { defaultNormalised, specOf, type Backend, type BridgeState, type MeterFrame, type ModAssignment, type ParamHandle } from "./backend";
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -45,6 +46,15 @@ export class FakeBackend implements Backend {
   async getState() { return structuredClone(this.state); }
   async setMods(mods: ModAssignment[], origin: string) { this.state = { ...this.state, mods: [...mods] }; this.emitStateChanged(this.state, origin); }
   async setArpSteps(steps: number[], origin: string) { this.state = { ...this.state, arpSteps: [...steps] }; this.emitStateChanged(this.state, origin); }
+  // Rispecchia StateChannel::applyPreset: un parametro non elencato nel preset
+  // torna al suo default di spec, cosi' il demo nel browser si comporta come il plugin.
+  async loadPreset(index: number) {
+    const preset = PRESETS[index];
+    if (!preset) return;
+    for (const id of PARAM_IDS)
+      this.handles.get(id)!.push(preset.values[id] ?? defaultNormalised(specOf(id)));
+    this.emitStateChanged(this.state, "preset");
+  }
   onStateChanged(cb: (s: BridgeState & { origin: string }) => void) { this.stateSubs.add(cb); return () => { this.stateSubs.delete(cb); }; }
   onMeters(cb: (m: MeterFrame) => void) { this.meterSubs.add(cb); return () => { this.meterSubs.delete(cb); }; }
   emitStateChanged(s: BridgeState, origin: string) { for (const cb of this.stateSubs) cb({ ...structuredClone(s), origin }); }

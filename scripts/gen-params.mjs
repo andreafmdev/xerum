@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Genera ParameterTable.h e params.generated.ts da Source/parameters/parameters.json.
+// Genera ParameterTable.h, params.generated.ts, PresetTable.h e presets.generated.ts
+// da Source/parameters/parameters.json e Source/parameters/presets.json.
 // Uso: node scripts/gen-params.mjs   (oppure: cd WebUI && pnpm gen:params)
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -84,6 +85,77 @@ export function generate(json) {
   return { header, ts };
 }
 
+// Genera PresetTable.h e presets.generated.ts da presets.json, convalidando ogni
+// preset contro l'insieme di id di parameters.json: un id sconosciuto o un valore
+// fuori range 0..1 fanno fallire subito la generazione, non a runtime nel plugin.
+export function generatePresets(presetsJson, paramsJson) {
+  const knownIds = new Set(paramsJson.params.map((p) => p.id));
+  const presets = presetsJson.presets;
+
+  for (const p of presets) {
+    for (const [id, value] of Object.entries(p.values ?? {})) {
+      if (!knownIds.has(id))
+        throw new Error(`preset "${p.name}": parametro sconosciuto ${id}`);
+      if (typeof value !== "number" || value < 0 || value > 1)
+        throw new Error(`preset "${p.name}": valore fuori range 0..1 per ${id}: ${value}`);
+    }
+  }
+
+  const header = [
+    "#pragma once",
+    "",
+    "// GENERATO da scripts/gen-params.mjs a partire da Source/parameters/presets.json.",
+    "// Non modificare a mano.",
+    "",
+    "namespace params",
+    "{",
+    "struct PresetValue",
+    "{",
+    "    const char* id;",
+    "    float value;",
+    "};",
+    "",
+    "struct Preset",
+    "{",
+    "    const char* name;",
+    "    const char* category;",
+    "    const PresetValue* values;",
+    "    int numValues;",
+    "};",
+    "",
+    ...presets.map((p, i) => {
+      const entries = Object.entries(p.values ?? {});
+      if (entries.length === 0) return `inline constexpr const PresetValue* kPreset${i}Values = nullptr;`;
+      return `inline constexpr PresetValue kPreset${i}Values[] = { ${entries.map(([id, v]) => `{ ${cstr(id)}, ${f(v)} }`).join(", ")} };`;
+    }),
+    "",
+    `inline constexpr int kNumPresets = ${presets.length};`,
+    "inline constexpr Preset kPresetTable[kNumPresets] = {",
+    ...presets.map((p, i) => {
+      const n = Object.entries(p.values ?? {}).length;
+      return `    { ${cstr(p.name)}, ${cstr(p.cat)}, ${n === 0 ? "nullptr" : `kPreset${i}Values`}, ${n} },`;
+    }),
+    "};",
+    "} // namespace params",
+    "",
+  ].join("\n");
+
+  const ts = [
+    "// GENERATO da scripts/gen-params.mjs a partire da Source/parameters/presets.json.",
+    "// Non modificare a mano.",
+    'import type { ParamId } from "./params.generated";',
+    "",
+    "export type Preset = { name: string; cat: string; values: Partial<Record<ParamId, number>> };",
+    "",
+    "export const PRESETS: Preset[] = [",
+    ...presets.map((p) => `  { name: ${JSON.stringify(p.name)}, cat: ${JSON.stringify(p.cat)}, values: ${JSON.stringify(p.values ?? {})} },`),
+    "];",
+    "",
+  ].join("\n");
+
+  return { header, ts };
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const json = JSON.parse(readFileSync(resolve(root, "Source/parameters/parameters.json"), "utf8"));
@@ -91,4 +163,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   writeFileSync(resolve(root, "Source/parameters/ParameterTable.h"), header);
   writeFileSync(resolve(root, "WebUI/src/synth/params.generated.ts"), ts);
   console.log(`gen-params: ${json.params.length} parametri → ParameterTable.h, params.generated.ts`);
+
+  const presetsJson = JSON.parse(readFileSync(resolve(root, "Source/parameters/presets.json"), "utf8"));
+  const { header: presetHeader, ts: presetTs } = generatePresets(presetsJson, json);
+  writeFileSync(resolve(root, "Source/parameters/PresetTable.h"), presetHeader);
+  writeFileSync(resolve(root, "WebUI/src/synth/presets.generated.ts"), presetTs);
+  console.log(`gen-params: ${presetsJson.presets.length} preset → PresetTable.h, presets.generated.ts`);
 }

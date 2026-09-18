@@ -3,6 +3,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
+#include "parameters/PresetTable.h"
+
 namespace bridge
 {
 /** Stato non parametrico (mod matrix, arp steps) fra ValueTree APVTS e WebView.
@@ -25,6 +27,9 @@ public:
 private:
     void listenTo (juce::ValueTree root);
     void emitState (const juce::String& origin);
+    /** Scrive i valori del preset indicato via beginChangeGesture/setValueNotifyingHost/
+        endChangeGesture: cosi' l'host registra il cambio e l'undo funziona. Sul message thread. */
+    void applyPreset (int index);
     bool isOurs (const juce::ValueTree& tree) const;
 
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;

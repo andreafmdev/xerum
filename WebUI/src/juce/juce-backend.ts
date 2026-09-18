@@ -106,6 +106,7 @@ export async function createJuceBackend(): Promise<Backend> {
     getState: () => call("getState")() as Promise<BridgeState>,
     setMods: (mods: ModAssignment[], origin: string) => call("setMods")(JSON.stringify(mods), origin).then(() => {}),
     setArpSteps: (steps: number[], origin: string) => call("setArpSteps")(JSON.stringify(steps), origin).then(() => {}),
+    loadPreset: (index: number) => call("loadPreset")(index).then(() => {}),
     onStateChanged,
     onMeters,
   };

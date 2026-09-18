@@ -1,5 +1,6 @@
 #include "bridge/StateChannel.h"
 
+#include "parameters/ParameterTable.h"
 #include "parameters/StateTree.h"
 
 namespace bridge
@@ -44,7 +45,46 @@ juce::WebBrowserComponent::Options StateChannel::applyTo (juce::WebBrowserCompon
             lastOrigin_ = args.size() > 1 ? args[1].toString() : juce::String();
             state::setArpSteps (apvts_.state, juce::JSON::parse (args[0].toString()), apvts_.undoManager);
             done ({});
+        })
+        .withNativeFunction ("loadPreset", [this] (const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion done)
+        {
+            // Siamo sul message thread: scrivere i parametri e notificare è sicuro.
+            if (args.size() >= 1)
+                applyPreset ((int) args[0]);
+
+            done (juce::var {});
         });
+}
+
+void StateChannel::applyPreset (int index)
+{
+    if (index < 0 || index >= params::kNumPresets)
+        return;
+
+    const auto& preset = params::kPresetTable[index];
+
+    for (const auto& spec : params::kTable)
+    {
+        auto* parameter = apvts_.getParameter (spec.id);
+
+        if (parameter == nullptr)
+            continue;
+
+        // Un parametro non elencato nel preset torna al suo default di spec:
+        // altrimenti i preset ereditano pezzi del suono precedente.
+        float value = spec.def;
+
+        for (int i = 0; i < preset.numValues; ++i)
+            if (juce::String (preset.values[i].id) == spec.id)
+                value = preset.values[i].value;
+
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost (value);
+        parameter->endChangeGesture();
+    }
+
+    emitState ("preset");
 }
 
 bool StateChannel::isOurs (const juce::ValueTree& t) const

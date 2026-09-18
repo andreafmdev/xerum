@@ -31,6 +31,7 @@ export interface Backend {
   getState(): Promise<BridgeState>;
   setMods(mods: ModAssignment[], origin: string): Promise<void>;
   setArpSteps(steps: number[], origin: string): Promise<void>;
+  loadPreset(index: number): Promise<void>;
   onStateChanged(cb: (s: BridgeState & { origin: string }) => void): () => void;
   onMeters(cb: (m: MeterFrame) => void): () => void;
 }

@@ -40,7 +40,7 @@ describe("SynthWindow on the bridge", () => {
     expect(ops[0]).toBe("begin");
     expect(ops).toContain("set");
     expect(ops.at(-1)).toBe("end");
-    expect(screen.getByRole("button", { name: /Glass Pad \*/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Init \*/ })).toBeInTheDocument();
   });
 
   it("double-clicking a knob returns it to the spec default, not to zero", async () => {
@@ -76,7 +76,7 @@ describe("SynthWindow on the bridge", () => {
   it("a segmented change marks the preset dirty", async () => {
     mount();
     await userEvent.click(screen.getByRole("radio", { name: "HP" }));
-    expect(screen.getByRole("button", { name: /Glass Pad \*/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Init \*/ })).toBeInTheDocument();
   });
 
   it("mod matrix comes from the bridge state, drop adds through it, remove goes through it", async () => {
@@ -115,7 +115,7 @@ describe("SynthWindow on the bridge", () => {
 
   it("preset browsing stays local", async () => {
     mount();
-    await userEvent.click(screen.getByRole("button", { name: /Glass Pad/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Init/ }));
     const overlay = screen.getByRole("dialog", { name: "Presets" });
     await userEvent.type(within(overlay).getByRole("searchbox"), "acid");
     await userEvent.click(within(overlay).getByRole("button", { name: /Acid Line/ }));
