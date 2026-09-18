@@ -1,36 +1,22 @@
 #pragma once
 
+#include "parameters/ParameterDenormalise.h"
 #include "parameters/ParameterTable.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
 
 #include <cmath>
-#include <limits>
 #include <memory>
 
 namespace params
 {
-inline float clamp01 (float v) noexcept { return juce::jlimit (0.0f, 1.0f, v); }
-
 /** I letterali della tabella sono UTF-8 ("Vel → amp", "°"): juce::String(const char*)
     li leggerebbe come ASCII, con assertion in debug e testo corrotto. */
 inline juce::String utf8 (const char* t) { return juce::String (juce::CharPointer_UTF8 (t)); }
 
-/** Valore reale dal normalizzato 0..1. Stesse formule di WebUI/src/synth/mapping.ts. */
-inline float denormalise (const Spec& s, float v) noexcept
-{
-    const float x = clamp01 (v);
-    switch (s.map)
-    {
-        case Map::Linear:    return s.min + x * (s.max - s.min);
-        case Map::Log:       return s.min * std::pow (s.max / s.min, x);
-        case Map::Db:        return x <= 0.0f ? -std::numeric_limits<float>::infinity() : 20.0f * std::log10 (x) + s.offset;
-        case Map::MsSquared: return s.min + x * x * (s.max - s.min);
-        case Map::None:      break;
-    }
-    return v;
-}
+// clamp01() e denormalise() vivono in ParameterDenormalise.h: non serve juce_audio_processors
+// per denormalizzare, solo per costruire i RangedAudioParameter qui sotto.
 
 inline juce::String signedInt (int n) { return (n > 0 ? "+" : "") + juce::String (n); }
 

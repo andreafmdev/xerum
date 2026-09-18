@@ -112,6 +112,7 @@ serum_style_synth_set_warnings(XerumTests)
 target_link_libraries(XerumTests
     PRIVATE
         juce::juce_dsp
+        juce::juce_audio_basics
         WavetableAssets
     PUBLIC
         juce::juce_recommended_config_flags

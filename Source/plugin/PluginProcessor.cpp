@@ -1,6 +1,8 @@
 #include "plugin/PluginProcessor.h"
 #include "plugin/PluginEditor.h"
-#include "parameters/ParameterMapping.h"
+#include "parameters/ParamCollect.h"
+
+#include <cstring>
 
 namespace
 {
@@ -10,27 +12,6 @@ const float kHeadroomGain = juce::Decibels::decibelsToGain (6.0f);
 
 // Ogni quanto il timer del processore controlla se wtIndex e' cambiato.
 constexpr int kWavetablePollHz = 25;
-
-/** Valore denormalizzato di un parametro, usando la spec già risolta in ParameterTable. */
-float realValue (const params::Spec* spec, const std::atomic<float>* raw) noexcept
-{
-    if (raw == nullptr || spec == nullptr)
-        return 0.0f;
-
-    return params::denormalise (*spec, raw->load (std::memory_order_relaxed));
-}
-
-/** `ftype` è un AudioParameterChoice: il valore grezzo è già l'indice 0/1/2. */
-dsp::StateVariableFilter::Type filterTypeFromChoice (const std::atomic<float>* raw) noexcept
-{
-    const int index = raw != nullptr ? (int) raw->load (std::memory_order_relaxed) : 0;
-    switch (index)
-    {
-        case 1:  return dsp::StateVariableFilter::Type::highPass;
-        case 2:  return dsp::StateVariableFilter::Type::bandPass;
-        default: return dsp::StateVariableFilter::Type::lowPass;
-    }
-}
 } // namespace
 
 SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
@@ -46,11 +27,8 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
     paramWtpos_ = apvts_.getRawParameterValue ("wtpos");
 
     paramOct_ = apvts_.getRawParameterValue ("oct");
-    specOct_ = params::find ("oct");
     paramSemi_ = apvts_.getRawParameterValue ("semi");
-    specSemi_ = params::find ("semi");
     paramFine_ = apvts_.getRawParameterValue ("fine");
-    specFine_ = params::find ("fine");
 
     paramLevel_ = apvts_.getRawParameterValue ("level");
 
@@ -59,35 +37,19 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
     paramSlope_ = apvts_.getRawParameterValue ("slope");
 
     paramCutoff_ = apvts_.getRawParameterValue ("cutoff");
-    specCutoff_ = params::find ("cutoff");
     paramRes_ = apvts_.getRawParameterValue ("res");
-    specRes_ = params::find ("res");
     paramDrive_ = apvts_.getRawParameterValue ("drive");
-    specDrive_ = params::find ("drive");
     paramKeytrk_ = apvts_.getRawParameterValue ("keytrk");
-    specKeytrk_ = params::find ("keytrk");
 
     paramAtt_ = apvts_.getRawParameterValue ("att");
-    specAtt_ = params::find ("att");
     paramDec_ = apvts_.getRawParameterValue ("dec");
-    specDec_ = params::find ("dec");
     paramSus_ = apvts_.getRawParameterValue ("sus");
-    specSus_ = params::find ("sus");
     paramRel_ = apvts_.getRawParameterValue ("rel");
-    specRel_ = params::find ("rel");
     paramEnvVel_ = apvts_.getRawParameterValue ("envVel");
-    specEnvVel_ = params::find ("envVel");
 
     paramVolume_ = apvts_.getRawParameterValue ("volume");
     paramPan_ = apvts_.getRawParameterValue ("pan");
-    specPan_ = params::find ("pan");
     paramBypass_ = apvts_.getRawParameterValue ("bypass");
-
-    jassert (specOct_ != nullptr && specSemi_ != nullptr && specFine_ != nullptr
-             && specCutoff_ != nullptr && specRes_ != nullptr && specDrive_ != nullptr
-             && specKeytrk_ != nullptr && specAtt_ != nullptr && specDec_ != nullptr
-             && specSus_ != nullptr && specRel_ != nullptr && specEnvVel_ != nullptr
-             && specPan_ != nullptr);
 
     apvts_.addParameterListener ("wtIndex", this);
     startTimerHz (kWavetablePollHz);
@@ -111,42 +73,43 @@ int SerumStyleSynthAudioProcessor::wavetableIndexFromParam() const noexcept
 
 engine::EngineParams SerumStyleSynthAudioProcessor::collectParams() const noexcept
 {
-    engine::EngineParams p;
+    // Thin caller: tutta la denormalizzazione/arrotondamento vive in
+    // params::collectEngineParams (ParamCollect.h), esercitata direttamente dai test con un
+    // accessor finto. Qui si passa solo una lambda che legge i puntatori atomici già
+    // risolti nel costruttore — zero ricerche nella tabella dei parametri, stesso costo per
+    // blocco di prima.
+    return params::collectEngineParams (
+        [this] (const char* id) noexcept -> float
+        {
+            const auto load = [] (const std::atomic<float>* raw) noexcept -> float
+            {
+                return raw != nullptr ? raw->load (std::memory_order_relaxed) : 0.0f;
+            };
 
-    p.oscOn = paramOscOn_ != nullptr && paramOscOn_->load (std::memory_order_relaxed) >= 0.5f;
-    p.framePosition = paramWtpos_ != nullptr ? paramWtpos_->load (std::memory_order_relaxed) : 0.0f;
-    // roundToInt, non un cast troncante: denormalise() torna un float che per via degli
-    // arrotondamenti in virgola mobile puo' cadere leggermente sotto l'intero vero (es. 7.999998),
-    // e un cast tronca verso zero invece di arrotondare, sbagliando la nota di un semitono/ottava.
-    p.octave = juce::roundToInt (realValue (specOct_, paramOct_));
-    p.semitones = juce::roundToInt (realValue (specSemi_, paramSemi_));
-    p.fineCents = realValue (specFine_, paramFine_);
+            if (std::strcmp (id, "oscOn") == 0)  return load (paramOscOn_);
+            if (std::strcmp (id, "wtpos") == 0)  return load (paramWtpos_);
+            if (std::strcmp (id, "oct") == 0)    return load (paramOct_);
+            if (std::strcmp (id, "semi") == 0)   return load (paramSemi_);
+            if (std::strcmp (id, "fine") == 0)   return load (paramFine_);
+            if (std::strcmp (id, "level") == 0)  return load (paramLevel_);
+            if (std::strcmp (id, "filtOn") == 0) return load (paramFiltOn_);
+            if (std::strcmp (id, "ftype") == 0)  return load (paramFtype_);
+            if (std::strcmp (id, "slope") == 0)  return load (paramSlope_);
+            if (std::strcmp (id, "cutoff") == 0) return load (paramCutoff_);
+            if (std::strcmp (id, "res") == 0)    return load (paramRes_);
+            if (std::strcmp (id, "drive") == 0)  return load (paramDrive_);
+            if (std::strcmp (id, "keytrk") == 0) return load (paramKeytrk_);
+            if (std::strcmp (id, "att") == 0)    return load (paramAtt_);
+            if (std::strcmp (id, "dec") == 0)    return load (paramDec_);
+            if (std::strcmp (id, "sus") == 0)    return load (paramSus_);
+            if (std::strcmp (id, "rel") == 0)    return load (paramRel_);
+            if (std::strcmp (id, "envVel") == 0) return load (paramEnvVel_);
+            if (std::strcmp (id, "pan") == 0)    return load (paramPan_);
+            if (std::strcmp (id, "bypass") == 0) return load (paramBypass_);
 
-    // `level` ha mappa Db, ma il valore grezzo è già il guadagno lineare (vedi ParameterMapping.h).
-    p.level = paramLevel_ != nullptr ? paramLevel_->load (std::memory_order_relaxed) : 1.0f;
-
-    p.filterOn = paramFiltOn_ != nullptr && paramFiltOn_->load (std::memory_order_relaxed) >= 0.5f;
-    p.filterType = filterTypeFromChoice (paramFtype_);
-    p.filterStages = paramSlope_ != nullptr && paramSlope_->load (std::memory_order_relaxed) >= 0.5f ? 2 : 1;
-    p.cutoffHz = realValue (specCutoff_, paramCutoff_);
-
-    // res 0..100 % → Q 0.707 (Butterworth) … 20 (autoscillante quasi).
-    p.resonanceQ = juce::jmap (realValue (specRes_, paramRes_) * 0.01f, 0.707f, 20.0f);
-
-    // drive 0..24 dB → guadagno lineare pre-saturazione.
-    p.driveGain = juce::Decibels::decibelsToGain (realValue (specDrive_, paramDrive_));
-    p.keyTrack = realValue (specKeytrk_, paramKeytrk_) * 0.01f;
-
-    p.attackSeconds = realValue (specAtt_, paramAtt_) * 0.001f;   // la mappa è in ms
-    p.decaySeconds = realValue (specDec_, paramDec_) * 0.001f;
-    p.sustain = realValue (specSus_, paramSus_) * 0.01f;
-    p.releaseSeconds = realValue (specRel_, paramRel_) * 0.001f;
-    p.velocityAmount = realValue (specEnvVel_, paramEnvVel_) * 0.01f;
-
-    p.pan = realValue (specPan_, paramPan_) * 0.02f;              // -50..50 → -1..1
-    p.bypass = paramBypass_ != nullptr && paramBypass_->load (std::memory_order_relaxed) >= 0.5f;
-
-    return p;
+            jassertfalse; // id sconosciuto: collectEngineParams ne ha chiesto uno non mappato qui
+            return 0.0f;
+        });
 }
 
 void SerumStyleSynthAudioProcessor::parameterChanged (const juce::String& id, float)

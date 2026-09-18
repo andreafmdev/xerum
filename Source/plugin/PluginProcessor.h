@@ -75,42 +75,30 @@ private:
     juce::ChangeBroadcaster stateReplaced_;
 
     // Puntatori grezzi ai valori normalizzati 0..1 dell'APVTS: letti solo con load() sul thread
-    // audio. Gli `specXxx_` sono risolti una volta sola qui accanto, nel costruttore: denormalise()
-    // li usa in collectParams() senza mai cercare nella tabella durante il rendering.
+    // audio, e passati a params::collectEngineParams() (ParamCollect.h) tramite una lambda.
+    // Le spec di denormalizzazione non servono piu' qui: collectEngineParams le risolve da
+    // sola a tempo di compilazione (vedi il commento su quella funzione).
     std::atomic<float>* paramOscOn_ { nullptr };
     std::atomic<float>* paramWtIndex_ { nullptr };
     std::atomic<float>* paramWtpos_ { nullptr };
     std::atomic<float>* paramOct_ { nullptr };
-    const params::Spec* specOct_ { nullptr };
     std::atomic<float>* paramSemi_ { nullptr };
-    const params::Spec* specSemi_ { nullptr };
     std::atomic<float>* paramFine_ { nullptr };
-    const params::Spec* specFine_ { nullptr };
     std::atomic<float>* paramLevel_ { nullptr };
     std::atomic<float>* paramFiltOn_ { nullptr };
     std::atomic<float>* paramFtype_ { nullptr };
     std::atomic<float>* paramSlope_ { nullptr };
     std::atomic<float>* paramCutoff_ { nullptr };
-    const params::Spec* specCutoff_ { nullptr };
     std::atomic<float>* paramRes_ { nullptr };
-    const params::Spec* specRes_ { nullptr };
     std::atomic<float>* paramDrive_ { nullptr };
-    const params::Spec* specDrive_ { nullptr };
     std::atomic<float>* paramKeytrk_ { nullptr };
-    const params::Spec* specKeytrk_ { nullptr };
     std::atomic<float>* paramAtt_ { nullptr };
-    const params::Spec* specAtt_ { nullptr };
     std::atomic<float>* paramDec_ { nullptr };
-    const params::Spec* specDec_ { nullptr };
     std::atomic<float>* paramSus_ { nullptr };
-    const params::Spec* specSus_ { nullptr };
     std::atomic<float>* paramRel_ { nullptr };
-    const params::Spec* specRel_ { nullptr };
     std::atomic<float>* paramEnvVel_ { nullptr };
-    const params::Spec* specEnvVel_ { nullptr };
     std::atomic<float>* paramVolume_ { nullptr };
     std::atomic<float>* paramPan_ { nullptr };
-    const params::Spec* specPan_ { nullptr };
     std::atomic<float>* paramBypass_ { nullptr };
 
     dsp::WavetableStore wavetables_;
