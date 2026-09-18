@@ -13,9 +13,13 @@ constexpr double kSmoothingSeconds = 0.02;
 // default satura gia' da sola, e un accordo satura pesantemente (vedi task-7-report.md,
 // Finding 4). E' una costante fissa, non un divisore sul numero di voci attive: un divisore
 // farebbe "respirare" il volume ogni volta che una nota parte o finisce, un difetto peggiore
-// del clipping che risolve. -20 dB, misurato con HeadroomHarness (vedi report): una nota
-// singola a level=1.0/volume di default arriva a -19.04 dBFS, un accordo di 16 voci simultanee
-// (caso pessimistico: nessuna cancellazione di fase) arriva a -4.19 dBFS, quindi mai in clip.
+// del clipping che risolve. -20 dB, misurato con HeadroomHarness (vedi report) all'uscita del
+// *motore* (masterGain a guadagno unitario, non il volume del plugin): una nota singola a
+// level=1.0 arriva a -19.04 dBFS, un accordo di 16 voci simultanee (caso pessimistico: nessuna
+// cancellazione di fase) arriva a -4.19 dBFS. Misurato di nuovo all'uscita del *plugin* (motore
+// + volume di default, 0.8 lineare, senza il +6 dB fisso che PluginProcessor applicava prima
+// e che raddoppiava questo stesso headroom): nota singola -25.97 dBFS, accordo a 16 voci
+// -11.24 dBFS — mai in clip, con margine per unison ed FX ancora da aggiungere.
 constexpr float kVoiceHeadroomGain = 0.1f; // 10^(-20/20)
 
 float midiNoteToHz (int note, float offsetSemitones) noexcept

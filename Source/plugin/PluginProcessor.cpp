@@ -4,10 +4,6 @@
 
 namespace
 {
-// Headroom di +6 dB in guadagno lineare. Calcolato una sola volta all'avvio perché
-// decibelsToGain() usa std::pow: niente libm sul thread audio.
-const float kHeadroomGain = juce::Decibels::decibelsToGain (6.0f);
-
 // Ogni quanto il timer del processore controlla se wtIndex e' cambiato.
 constexpr int kWavetablePollHz = 25;
 } // namespace
@@ -109,7 +105,16 @@ void SerumStyleSynthAudioProcessor::timerCallback()
     if (index == lastWavetableIndex_)
         return;
 
+    const auto* previousActive = wavetables_.active();
     wavetables_.setActive (index); // alloca: message thread
+
+    // setActive() lascia la tavola precedente attiva se la costruzione fallisce (blob assente,
+    // corrotto, o frame troppo corto): il puntatore pubblicato non cambia. Se non lo notiamo e
+    // avanziamo comunque lastWavetableIndex_, quell'indice non verra' piu' ritentato finche'
+    // wtIndex non cambia di nuovo — un indice rotto resterebbe silenziosamente "gia' provato".
+    if (wavetables_.active() == previousActive)
+        return;
+
     lastWavetableIndex_ = index;
 
     // Pubblica solo il puntatore: l'applicazione alle voci avviene sul thread audio dentro
@@ -169,7 +174,9 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     if (paramVolume_ != nullptr)
     {
         const float v = paramVolume_->load (std::memory_order_relaxed);
-        engine_->setMasterGainLinear (v <= 0.0f ? 0.0f : v * kHeadroomGain); // v è lineare 0..1; +6 dB di headroom
+        // v e' gia' il guadagno lineare 0..1 dell'APVTS: nessun boost fisso qui, l'headroom
+        // vive per intero in SynthVoice::kVoiceHeadroomGain (vedi il suo commento).
+        engine_->setMasterGainLinear (v <= 0.0f ? 0.0f : v);
     }
 
     // Merge notes played on the editor's on-screen keyboard into the host MIDI stream.
