@@ -12,7 +12,7 @@ describe("Fader", () => {
 
   it("supports horizontal orientation and x-axis drag", () => {
     const onChange = vi.fn();
-    render(<Fader value={0.5} onChange={onChange} orientation="horizontal" />);
+    render(<Fader value={0.5} onChange={onChange} label="Level" orientation="horizontal" />);
     const s = screen.getByRole("slider");
     expect(s).toHaveAttribute("aria-orientation", "horizontal");
     fireEvent.pointerDown(s, { clientX: 100, clientY: 0, button: 0, pointerId: 1 });
@@ -22,30 +22,37 @@ describe("Fader", () => {
 
   it("resets on double click", () => {
     const onChange = vi.fn();
-    render(<Fader value={0.8} defaultValue={0.5} onChange={onChange} />);
+    render(<Fader value={0.8} defaultValue={0.5} onChange={onChange} label="Level" />);
     fireEvent.doubleClick(screen.getByRole("slider"));
     expect(onChange).toHaveBeenCalledWith(0.5);
   });
 
   it("sizes the fill from the value", () => {
-    render(<Fader value={0.25} onChange={() => {}} />);
+    render(<Fader value={0.25} onChange={() => {}} label="Level" />);
     expect(screen.getByTestId("fader-fill").style.height).toBe("25%");
   });
 
   it("shows the formatted readout", () => {
-    render(<Fader value={0.5} onChange={() => {}} format={(v) => `${(v * 12 - 6).toFixed(1)} dB`} />);
+    render(<Fader value={0.5} onChange={() => {}} label="Out" format={(v) => `${(v * 12 - 6).toFixed(1)} dB`} />);
     expect(screen.getByTestId("fader-readout")).toHaveTextContent("0.0 dB");
+  });
+
+  it("shows the label beside the value at rest", () => {
+    render(<Fader value={0.25} onChange={() => {}} label="Attack" />);
+    expect(screen.getByText("Attack")).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Attack" })).toBeInTheDocument();
+    expect(screen.getByTestId("fader-readout")).toHaveTextContent("25%");
   });
 
   it("is inert when disabled", () => {
     const onChange = vi.fn();
-    render(<Fader value={0.5} onChange={onChange} disabled />);
+    render(<Fader value={0.5} onChange={onChange} label="Level" disabled />);
     fireEvent.keyDown(screen.getByRole("slider"), { key: "End" });
     expect(onChange).not.toHaveBeenCalled();
   });
 
   it("marks the root as dragging while the pointer is down", () => {
-    render(<Fader value={0.5} onChange={() => {}} />);
+    render(<Fader value={0.5} onChange={() => {}} label="Level" />);
     const slider = screen.getByRole("slider");
     const root = slider.parentElement as HTMLElement;
     fireEvent.pointerDown(slider, { clientY: 0, clientX: 0, button: 0, pointerId: 1 });
