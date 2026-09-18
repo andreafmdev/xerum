@@ -9,6 +9,13 @@ const preview: Preview = {
     layout: "centered",
   },
   initialGlobals: { backgrounds: { value: "dark" } },
+  decorators: [
+    (Story) => (
+      <div className="font-sans text-foreground">
+        <Story />
+      </div>
+    ),
+  ],
 };
 
 export default preview;
