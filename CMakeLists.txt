@@ -62,6 +62,35 @@ target_compile_definitions(SerumStyleSynth
 
 serum_style_synth_set_warnings(SerumStyleSynth)
 
+# --- Unit tests -----------------------------------------------------------
+# Console app: gira juce::UnitTestRunner su dsp/ ed engine/. Non tocca la UI
+# né l'host, quindi niente juce_gui_extra e niente WebView.
+juce_add_console_app(XerumTests PRODUCT_NAME "XerumTests")
+
+target_sources(XerumTests
+    PRIVATE
+        Tests/main.cpp
+        Tests/WavetableTests.cpp
+        Source/dsp/WavetableBlob.cpp)
+
+target_include_directories(XerumTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
+
+target_compile_definitions(XerumTests
+    PRIVATE
+        JUCE_UNIT_TESTS=1
+        JUCE_STANDALONE_APPLICATION=1
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0)
+
+serum_style_synth_set_warnings(XerumTests)
+
+target_link_libraries(XerumTests
+    PRIVATE
+        juce::juce_dsp
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
+
 target_link_libraries(SerumStyleSynth
     PRIVATE
         juce::juce_audio_utils
