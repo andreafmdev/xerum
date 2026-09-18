@@ -24,6 +24,8 @@ Ctrl-C stops the Standalone and the dev server together.
 
 ## Configure & build
 
+`Resources/wavetables/*.xwt` must exist before configuring: the `WavetableAssets` target embeds them, and CMake stops with `FATAL_ERROR` and a pointer to `node scripts/fetch-wavetables.mjs` if the glob is empty (see `docs/architecture.md` → Wavetables). The files are committed, so this only matters if they're missing or deleted locally.
+
 ```bash
 cmake --preset macos-debug
 cmake --build --preset macos-debug
@@ -44,14 +46,30 @@ Standalone app is useful for MIDI smoke tests without a DAW.
 
 Vite serves `http://localhost:5173`. Debug builds of the editor navigate there automatically. If the server is down, the WebView shows its own load error: start Vite and reopen the editor. Release builds have no dev server — they embed the bundle and serve it through the resource provider. See "Web UI" below for the install/dev commands.
 
+## Unit tests
+
+`XerumTests` (`juce_add_console_app`, target defined in `CMakeLists.txt`) runs `juce::UnitTestRunner` over `Source/dsp` and `Source/engine` (`Tests/WavetableTests.cpp`, `Tests/EnvelopeFilterTests.cpp`, `Tests/EngineTests.cpp`). It links only `juce_dsp`/`juce_audio_basics` — no `juce_gui_extra`, no WebView — and does not compile `Source/bridge/*`, so `StateChannel::applyPreset` has no direct C++ test.
+
+Build and run:
+
+```bash
+cmake --build --preset macos-debug --target XerumTests
+build/macos-debug/XerumTests_artefacts/Debug/XerumTests
+```
+
+It prints one line per test and ends with `ALL TESTS PASSED` (or `TEST FAILURES`, with a non-zero exit code). Must pass before any commit that touches `Source/dsp` or `Source/engine`.
+
 ## Smoke checklist
 
 1. Configure CMake without errors
 2. Build AU + VST3 + Standalone
 3. Open Standalone or load in a DAW as an **instrument**
-4. Send MIDI — no crash; silence is expected
+4. Send MIDI — a note is audible, no crash
 5. Automate **Master Gain** from the host
 6. With `pnpm dev` (see "Web UI" below), open the editor and confirm the React placeholder
+7. Pick a preset (header arrows or the preset overlay) and confirm the sound changes
+8. Automate `cutoff` from the host through a sweep — audible, no zipper/stepping
+9. Save the session with a non-default wavetable selected, reload it, and confirm the same table is still the one playing
 
 ## Web UI
 

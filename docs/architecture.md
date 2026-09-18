@@ -11,7 +11,7 @@
 | Plugin adapter | `Source/plugin/` | `AudioProcessor`, APVTS, WebView editor |
 | Parameters | `Source/parameters/` | Single source of parameter IDs + layout |
 | Engine | `Source/engine/` | MIDI dispatch, voice pool, block render |
-| DSP stubs | `Source/dsp/` | Oscillator / filter / envelope / future `WavetableStore` |
+| DSP | `Source/dsp/` | Wavetable oscillator + mipmaps, TPT filter, ADSR envelope, `WavetableStore` |
 | Web UI | `WebUI/` | App shell React + Vite (dev server → WebView): finestra plugin `src/synth/` (900×600, stato, mod matrix, preset) costruita con `@xerum/ui` |
 | UI library | `WebUI/packages/ui/` | `@xerum/ui`: componenti synth (Tailwind v4, shadcn base-nova), Storybook, test |
 | Bridge | `Source/bridge/` | Web relays, state channel, meters, embedded assets (message thread only) |
@@ -19,7 +19,7 @@
 ```
 DAW MIDI ──► PluginProcessor ──► SynthEngine ──► VoiceManager ──► SynthVoice
                     │                                      │
-                 APVTS                              dsp stubs (silence)
+                 APVTS                              dsp:: oscillator/filter/envelope
                     │
              PluginEditor ─┬─ WebView ◄── React (localhost:5173 / fallback HTML)
                            └─ MidiKeyboardComponent (native strip) ──► MidiKeyboardState ──► processBlock MIDI
@@ -46,6 +46,7 @@ The front panel is `SynthWindow` (`WebUI/src/synth/ui/`): a fixed 900×600 chass
 - Without a JUCE host (browser, tests) the UI runs on `FakeBackend` (`?demo` clock on in the browser).
 - Three materials via `variant` (`deep` default, `soft`, `glow`) — `synth.css` overrides the `@xerum/ui` hardware tokens on the chassis. In the browser: `?variant=glow&tab=lfo`.
 - Every control is an `@xerum/ui` primitive (Knob with modulation rings and drop target, Segmented, Stepper, Meter, Tabs `bar`, Toggle, Panel, Button). Displays specific to the window (filter response, envelope, LFO scope, wavetable stack + spectrum) are app-level canvases/SVGs.
+- **Known divergence:** `WaveDisplay` (`WebUI/src/synth/ui/WaveDisplay.tsx`) draws a procedural curve from `WebUI/src/synth/curves.ts`, not the real `.xwt` table data — deliberate, not an oversight.
 
 ## On-screen keyboard
 
@@ -68,14 +69,28 @@ The editor loads the UI with `?gutter=0`, which tells `SynthWindow` to fit the c
 
 - Instrument plugin: AU + VST3 + Standalone
 - MIDI note on/off allocates voices (16-voice pool, round-robin steal)
-- Output is **silence** (`util::kEnableTestTone = false`): oscillator, envelope and filter are still stubs
-- Parameters: `master_gain`, `osc1_level` (latter unused until oscillator mix)
+- The engine is audible: a wavetable oscillator with band-limited mipmaps (`dsp::WavetableOscillator` / `dsp::MipTable`) feeds an exponential ADSR (`dsp::ADSREnvelope`) into a TPT state-variable filter (`dsp::StateVariableFilter`, 1 or 2 stages). 22 parameters are wired end to end: `oscOn`, `wtIndex`, `wtpos`, `oct`, `semi`, `fine`, `level`, `filtOn`, `ftype`, `slope`, `cutoff`, `res`, `drive`, `keytrk`, `att`, `dec`, `sus`, `rel`, `envVel`, `volume`, `pan`, `bypass`
+- Still inert (accepted by the APVTS, no effect on sound yet): `envCurve`, `glide`, `voiceMode`, `unison`, `detune`, `warp`, every `l*` (LFO), `fx1On`/`ch*` (chorus), `fx2On`/`rv*` (reverb), every `arp*`
+
+## Wavetables
+
+Six tables ship under `Resources/wavetables/*.xwt` — `basic`, `saws`, `grit`, `vocal`, `bells`, `pwm`, in the order of the `wtIndex` choice options in `Source/parameters/parameters.json` — sourced from **Adventure Kid Waveforms (AKWF)**, CC0-1.0, provenance tracked in `Resources/wavetables/CREDITS.md`. Regenerate them with:
+
+    node scripts/fetch-wavetables.mjs
+
+This re-downloads the AKWF families from GitHub, resamples each cycle to 64 frames × 2048 samples, and overwrites the `.xwt` files and `CREDITS.md`. It runs rarely — the `.xwt` files are committed, and this only refreshes them from source.
+
+**Format** (`dsp::parseXwt`, `Source/dsp/WavetableBlob.h/.cpp`): a 12-byte header — magic `"XWT1"`, little-endian `uint32` frame count, little-endian `uint32` frame size (must be a power of two) — followed by `frames × frameSize` `float32` samples, one frame after another. `parseXwt` rejects a wrong magic, a non-power-of-two frame size, a truncated buffer, sizes above its sanity caps (256 frames, 4096 samples/frame), or a misaligned pointer.
+
+**Mipmaps** (`dsp::MipTable` / `buildMipTable`, `Source/dsp/MipTable.h/.cpp`, `Source/dsp/WavetableStore.cpp`): each frame gets `MipTable::kMaxLevel + 1` (7) band-limited copies built with an FFT — level *k* keeps `frameSize >> k` samples, half the harmonics of level *k − 1*, so the oscillator can pick the shortest level whose harmonics stay under Nyquist for the note being played. `buildMipTable` returns `nullptr` when a frame is shorter than 2^`kMaxLevel` (64) samples rather than construct an FFT with a negative order — a null table means silence, not a crash. The shipped tables are 2048 samples/frame, so this path never triggers on real material.
+
+**Loading and lifecycle** (`dsp::WavetableStore`): tables are embedded at build time via `juce_add_binary_data(WavetableAssets ... HEADER_NAME WavetableData.h)` — the explicit header name avoids colliding with the `WebUIAssets` target, which already generates its own `BinaryData.h` for the web-bundle embed. `WavetableStore::lookupBlob` copies each embedded blob into an aligned buffer before parsing it, because JUCE's generated resource arrays give no alignment guarantee and `parseXwt` refuses a misaligned pointer. Built `MipTable`s are never freed: the audio thread reads `WavetableStore::active()` (an atomic pointer) at any time, so their memory must outlive every possible concurrent read. `PluginProcessor::prepareToPlay` and its 25 Hz timer (`kWavetablePollHz`) both call `WavetableStore::setActive` and are serialised by `PluginProcessor::wavetableLock_` (a `juce::CriticalSection`), never taken on the audio thread. The pointer itself reaches the audio thread through a single-slot atomic mailbox, `SynthEngine::setPendingWavetable`, drained once per block inside `SynthEngine::process`: handing it to the voices directly from the message thread would race with the audio thread reading the oscillator's plain (non-atomic) fields.
 
 ## Roadmap
 
 1. **Scaffolding** (this phase) — build, MIDI path, WebView shell
-2. **WavetableStore** — load / swap tables safely
-3. **WavetableOscillator** — interpolate + advance phase
+2. **WavetableStore** — load / swap tables safely (done)
+3. **WavetableOscillator** — interpolate + advance phase (done)
 4. **WebRelay** — APVTS ↔ React (done)
 5. **ModulationMatrix** — LFO / env / macro → targets
 6. **Warp / unison**
