@@ -13,7 +13,8 @@
     "ui:storybook": "pnpm --filter @xerum/ui storybook",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen:params": "node ../scripts/gen-params.mjs"
   },
   "dependencies": {
     "@xerum/ui": "workspace:*",
