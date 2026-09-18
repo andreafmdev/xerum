@@ -31,15 +31,7 @@ Artifacts land under `build/macos-debug/` (Xcode layout). With `COPY_PLUGIN_AFTE
 
 Standalone app is useful for MIDI smoke tests without a DAW.
 
-## Web UI (dev)
-
-```bash
-cd WebUI
-npm install
-npm run dev
-```
-
-Vite serves `http://localhost:5173`. Debug builds of the editor navigate there automatically. If the server is down, reopen after starting Vite (or use the embedded fallback HTML via the resource provider in Release).
+Vite serves `http://localhost:5173`. Debug builds of the editor navigate there automatically. If the server is down, reopen after starting Vite (or use the embedded fallback HTML via the resource provider in Release). See "Web UI" below for the install/dev commands.
 
 ## Smoke checklist
 
@@ -48,7 +40,7 @@ Vite serves `http://localhost:5173`. Debug builds of the editor navigate there a
 3. Open Standalone or load in a DAW as an **instrument**
 4. Send MIDI — no crash; silence is expected
 5. Automate **Master Gain** from the host
-6. With `npm run dev`, open the editor and confirm the React placeholder
+6. With `pnpm dev` (see "Web UI" below), open the editor and confirm the React placeholder
 
 ## Web UI
 
