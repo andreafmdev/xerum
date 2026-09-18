@@ -46,7 +46,7 @@ juce::WebBrowserComponent::Resource makeFallbackIndexHtml()
 }
 
 juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& relays,
-                                                  bridge::StateChannel& state)
+                                                  bridge::StateChannel& stateChannel)
 {
     auto options = juce::WebBrowserComponent::Options {}
                        .withNativeIntegrationEnabled()
@@ -72,7 +72,7 @@ juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& rela
     options = relays.applyTo (options);
 
     // Il canale di stato aggiunge getState / setMods / setArpSteps.
-    options = state.applyTo (options);
+    options = stateChannel.applyTo (options);
 
     return options;
 }

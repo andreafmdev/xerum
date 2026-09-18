@@ -36,12 +36,14 @@ juce::WebBrowserComponent::Options StateChannel::applyTo (juce::WebBrowserCompon
         {
             lastOrigin_ = args.size() > 1 ? args[1].toString() : juce::String();
             state::setMods (apvts_.state, juce::JSON::parse (args[0].toString()), apvts_.undoManager);
+            lastOrigin_.clear();   // la scrittura è sincrona: i callback hanno già usato l'origin
             done ({});
         })
         .withNativeFunction ("setArpSteps", [this] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion done)
         {
             lastOrigin_ = args.size() > 1 ? args[1].toString() : juce::String();
             state::setArpSteps (apvts_.state, juce::JSON::parse (args[0].toString()), apvts_.undoManager);
+            lastOrigin_.clear();   // la scrittura è sincrona: i callback hanno già usato l'origin
             done ({});
         });
 }

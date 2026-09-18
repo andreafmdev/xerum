@@ -53,8 +53,14 @@ inline juce::var toVar (const juce::ValueTree& root, const juce::String& origin)
 
     juce::Array<juce::var> steps;
 
+    // Il contratto con la UI è esattamente kArpSteps valori: tronchiamo l'eccesso e completiamo il resto.
     for (const auto& s : juce::StringArray::fromTokens (root.getChildWithName (ids::ARP)[ids::steps].toString(), ",", ""))
+    {
+        if (steps.size() >= kArpSteps)
+            break;
+
         steps.add (s.getDoubleValue());
+    }
 
     while (steps.size() < kArpSteps)
         steps.add (0.0);
@@ -88,9 +94,15 @@ inline void setArpSteps (juce::ValueTree& root, const juce::var& steps, juce::Un
 {
     juce::StringArray tokens;
 
+    // Scartiamo l'eccesso già in scrittura: nello stato non finiscono mai più di kArpSteps valori.
     if (auto* arr = steps.getArray())
         for (const auto& s : *arr)
+        {
+            if (tokens.size() >= kArpSteps)
+                break;
+
             tokens.add (juce::String ((double) s, 3));
+        }
 
     root.getChildWithName (ids::ARP).setProperty (ids::steps, tokens.joinIntoString (","), undo);
 }
