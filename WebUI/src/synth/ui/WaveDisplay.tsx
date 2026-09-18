@@ -7,13 +7,20 @@ import { PARAM_SPECS } from "../params.generated";
 import { useMeterFrame } from "./MetersContext";
 import { useSynthCtx } from "./SynthContext";
 
-type Props = { position: number; warp: number; level: number; name: string };
+type Props = {
+  position: number;
+  warp: number;
+  level: number;
+  name: string;
+  /** Scala dello chassis. Serve solo al backing store del canvas: vedi `draw`. */
+  scale: number;
+};
 
 const FRAMES = 9;
 const HARMONICS = 32;
 
 /** Schermo principale: pila di frame in prospettiva, spettro del frame corrente a destra. */
-export function WaveDisplay({ position, warp, level, name }: Props) {
+export function WaveDisplay({ position, warp, level, name, scale }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   // Scostamento istantaneo della posizione: solo le sorgenti LFO assegnate a wtpos.
   const { mods } = useSynthCtx();
@@ -26,13 +33,16 @@ export function WaveDisplay({ position, warp, level, name }: Props) {
     if (!cv || !ctx) return;
     const W = cv.clientWidth;
     const H = cv.clientHeight;
-    // Lo chassis e' scalato con `zoom` (SynthWindow.tsx): clientWidth resta in px di layout
-    // mentre il rect e' gia' in px di viewport, quindi il loro rapporto e' la scala effettiva.
-    // Senza moltiplicarla nel backing store il canvas resterebbe l'unica superficie a bassa
-    // risoluzione della finestra — nitido tutto il resto, sfocato solo lo schermo dell'onda.
+    // Lo chassis e' scalato con transform (SynthWindow.tsx), e transform non tocca il
+    // backing store del canvas: senza moltiplicarlo per la scala, questo resterebbe a
+    // risoluzione 1x mentre tutto il resto viene ingrandito — sfocato solo lo schermo
+    // dell'onda. Il rapporto rect/clientWidth misura la scala davvero applicata (regge
+    // anche se un giorno la si applicasse altrove); `scale` arriva come prop perche' serve
+    // come *dipendenza*: e' l'unica cosa che dice a questo effetto di rigirare quando la
+    // finestra cambia misura, e senza il canvas restava alla risoluzione del primo render.
     const rect = cv.getBoundingClientRect();
-    const zoom = W > 0 && rect.width > 0 ? rect.width / W : 1;
-    const dpr = (window.devicePixelRatio || 1) * zoom;
+    const applied = W > 0 && rect.width > 0 ? rect.width / W : 1;
+    const dpr = (window.devicePixelRatio || 1) * applied;
     const backingWidth = Math.round(W * dpr);
     if (cv.width !== backingWidth) {
       cv.width = backingWidth;
@@ -94,11 +104,10 @@ export function WaveDisplay({ position, warp, level, name }: Props) {
     ctx.beginPath();
     ctx.arc(px, py + amp * 0.6 + 8, 2, 0, 7);
     ctx.fill();
-  }, [position, warp, level, lfo]);
+  }, [position, warp, level, lfo, scale]);
 
-  // Ridisegna anche quando cambia solo la scala: l'host puo' ridimensionare la finestra
-  // senza che nessuna delle dipendenze qui sopra si muova, e il backing store resterebbe
-  // alla risoluzione precedente.
+  // Il `resize` copre il caso rimanente: la finestra si sposta su uno schermo con un
+  // devicePixelRatio diverso senza che la scala dello chassis cambi.
   useEffect(() => {
     draw();
     window.addEventListener("resize", draw);

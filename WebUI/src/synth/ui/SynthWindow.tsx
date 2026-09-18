@@ -30,16 +30,21 @@ export type SynthWindowProps = {
 const W = 900;
 const H = 600;
 
-// `zoom` e non `transform: scale()`: transform rasterizza il sottoalbero alla dimensione di
-// layout (900×600) e poi stira il bitmap, quindi sopra 1× testo, bordi da 1 px e ombre
-// escono sfocati — proprio il caso in cui l'host JUCE apre la finestra grande (fino a 1.5×,
-// vedi kMaxScale in PluginEditor.cpp). `zoom` rifa' il **layout**: tutto viene ridisegnato
-// alla risoluzione finale e resta nitido a qualunque scala. In cambio lo chassis occupa
-// spazio reale (transform non lo faceva), cosa che qui va bene: `.sx-root` lo centra con
-// flex e il fit sotto calcola comunque la scala a partire dal contenitore, non da lui.
-// L'unica superficie che `zoom` non puo' salvare da sola e' il <canvas> di WaveDisplay:
-// il suo backing store va moltiplicato per la scala a mano (vedi WaveDisplay.tsx).
-
+// Lo chassis si scala con `transform`, non con `zoom`.
+//
+// `zoom` e' stato provato proprio per risolvere la sfocatura del testo sopra 1x (transform
+// rasterizza il sottoalbero alla dimensione di layout e poi stira il bitmap) ed e' stato
+// tolto: WebKit — il motore della WKWebView in cui gira davvero il plugin, non Chromium —
+// non lo implementa come Chromium. Misurato con Playwright/WebKit a viewport 1309x873 e
+// `zoom: 1.4544` sullo chassis: il suo getBoundingClientRect resta 900x600 (non scalato) e i
+// discendenti vengono *divisi* per il fattore invece che moltiplicati (il display d'onda,
+// 130 px di layout, ne misurava 89.4 = 130 / 1.4544). Nel plugin l'effetto era una fascia
+// vuota di ~270 px fra il pannello e la tastiera. Se un giorno si volesse riprovare, serve
+// prima una misura su WebKit, non su Chrome.
+//
+// Il <canvas> di WaveDisplay ha comunque bisogno di conoscere la scala: `transform` non
+// tocca il backing store, quindi lo schermo dell'onda restava a risoluzione 1x anche quando
+// tutto il resto era ingrandito. Lo ricava da getBoundingClientRect (vedi WaveDisplay.tsx).
 /** Finestra del plugin: 900×600 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
 export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixedScale, gutter = 16 }: SynthWindowProps) {
   const s = useSynth(initialTab);
@@ -95,7 +100,7 @@ export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixed
 
   return (
     <div className="sx-root" ref={rootRef}>
-      <div data-testid="chassis" className="sx-chassis" data-variant={variant} data-attached={gutter === 0 ? "" : undefined} style={{ zoom: sc, opacity: bypass.checked ? 0.9 : 1 }}>
+      <div data-testid="chassis" className="sx-chassis" data-variant={variant} data-attached={gutter === 0 ? "" : undefined} style={{ transform: `scale(${sc})`, opacity: bypass.checked ? 0.9 : 1 }}>
         <SynthContext.Provider value={ctx}>
           <MetersProvider>
             <Header
@@ -105,7 +110,7 @@ export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixed
               onPrev={() => s.stepPreset(-1)}
               onNext={() => s.stepPreset(1)}
             />
-            <WaveDisplay position={wtpos.value} warp={warp.value} level={level.value} name={wt.options.find((o) => o.value === wt.value)?.label ?? ""} />
+            <WaveDisplay position={wtpos.value} warp={warp.value} level={level.value} scale={sc} name={wt.options.find((o) => o.value === wt.value)?.label ?? ""} />
             <div className="flex h-56 shrink-0 gap-2">
               <OscPanel />
               <FilterPanel />
