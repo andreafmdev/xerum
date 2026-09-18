@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { FakeBackend } from "./fake-backend";
+import { PARAM_SPECS } from "../synth/params.generated";
+import { PRESETS } from "../synth/presets.generated";
 
 describe("FakeBackend params", () => {
   it("starts every param at its spec default, normalised", () => {
@@ -53,5 +55,36 @@ describe("FakeBackend state and events", () => {
     b.onMeters(cb);
     b.emitMeters({ in: 0.5, out: 0.4, lfo: 0, arpStep: 3 });
     expect(cb).toHaveBeenCalledWith({ in: 0.5, out: 0.4, lfo: 0, arpStep: 3 });
+  });
+});
+
+// Stessa regola di Source/bridge/StateChannel.cpp::applyPreset: un parametro non
+// menzionato dal preset torna al suo default di spec, uno esplicitamente a 0 resta 0.
+describe("FakeBackend loadPreset", () => {
+  it("un parametro non menzionato torna al default di spec; uno esplicito a 0 resta 0", async () => {
+    const b = new FakeBackend();
+    const index = PRESETS.findIndex((p) => p.name === "Sub Pulse");
+    const preset = PRESETS[index]!;
+    // Guardia: questo test si appoggia a queste due proprietà del preset "Sub Pulse".
+    expect(preset.values.att).toBe(0);
+    expect(preset.values.level).toBeUndefined();
+
+    // Allontana entrambi i parametri dal loro default prima di caricare il preset.
+    b.param("att").set(0.9);
+    b.param("level").set(0.2);
+
+    await b.loadPreset(index);
+
+    // Valore esplicito 0 nel preset: deve restare 0, non ricadere sul default di spec (0.12).
+    expect(b.param("att").get()).toBe(0);
+    // Parametro non menzionato: torna al default di spec di "level" (0.85 in parameters.json).
+    expect(b.param("level").get()).toBeCloseTo(Number(PARAM_SPECS.level.default));
+  });
+
+  it("un indice fuori range non tocca i parametri", async () => {
+    const b = new FakeBackend();
+    b.param("cutoff").set(0.1);
+    await b.loadPreset(9999);
+    expect(b.param("cutoff").get()).toBe(0.1);
   });
 });

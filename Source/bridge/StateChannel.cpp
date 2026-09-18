@@ -57,6 +57,10 @@ juce::WebBrowserComponent::Options StateChannel::applyTo (juce::WebBrowserCompon
         });
 }
 
+// Rispecchiata in WebUI/src/juce/fake-backend.ts::loadPreset (stesso fallback al default
+// di spec per un parametro non menzionato). Le due implementazioni possono divergere senza
+// che nessun test se ne accorga (XerumTests non compila questo file): se cambi questa
+// logica, cambia anche l'altra.
 void StateChannel::applyPreset (int index)
 {
     if (index < 0 || index >= params::kNumPresets)

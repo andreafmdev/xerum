@@ -121,4 +121,16 @@ describe("SynthWindow on the bridge", () => {
     await userEvent.click(within(overlay).getByRole("button", { name: /Acid Line/ }));
     expect(screen.getByRole("button", { name: /Acid Line/ })).toBeInTheDocument();
   });
+
+  it("picking a preset shows the clean name, not the dirty marker", async () => {
+    mount();
+    await userEvent.click(screen.getByRole("button", { name: /Init/ }));
+    const overlay = screen.getByRole("dialog", { name: "Presets" });
+    await userEvent.type(within(overlay).getByRole("searchbox"), "acid");
+    await userEvent.click(within(overlay).getByRole("button", { name: /Acid Line/ }));
+    // Ancorato a fine stringa: "Acid Line *" (sporco) non termina con "Acid Line"
+    // e farebbe fallire questa asserzione, a differenza di un /Acid Line/ non ancorato.
+    expect(screen.getByRole("button", { name: /Acid Line$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /\*/ })).not.toBeInTheDocument();
+  });
 });

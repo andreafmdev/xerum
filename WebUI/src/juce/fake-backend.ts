@@ -46,8 +46,10 @@ export class FakeBackend implements Backend {
   async getState() { return structuredClone(this.state); }
   async setMods(mods: ModAssignment[], origin: string) { this.state = { ...this.state, mods: [...mods] }; this.emitStateChanged(this.state, origin); }
   async setArpSteps(steps: number[], origin: string) { this.state = { ...this.state, arpSteps: [...steps] }; this.emitStateChanged(this.state, origin); }
-  // Rispecchia StateChannel::applyPreset: un parametro non elencato nel preset
-  // torna al suo default di spec, cosi' il demo nel browser si comporta come il plugin.
+  // Rispecchia Source/bridge/StateChannel.cpp::applyPreset: un parametro non elencato
+  // nel preset torna al suo default di spec, cosi' il demo nel browser si comporta come
+  // il plugin. Le due implementazioni possono divergere senza che nessun test se ne accorga
+  // (XerumTests non compila Source/bridge/): se cambi questa logica, cambia anche l'altra.
   async loadPreset(index: number) {
     const preset = PRESETS[index];
     if (!preset) return;
