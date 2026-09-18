@@ -1,5 +1,4 @@
-import { lfoShape } from "./mod";
-import type { FilterType, LfoShape } from "./params";
+import { lfoShape, type FilterType, type LfoShape } from "./mod";
 
 /** Morph di frame: sine → saw → square → pulse lungo la posizione 0..1. Uscita -1..1. */
 export function sampleWave(pos: number, t: number, warp: number): number {

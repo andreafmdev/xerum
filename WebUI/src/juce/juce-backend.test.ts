@@ -63,6 +63,22 @@ describe("JuceBackend", () => {
     h.begin(); h.set(0.9); fire(0.1); expect(h.get()).toBeCloseTo(0.9); h.end(); expect(h.get()).toBeCloseTo(0.1);
   });
 
+  it("local set notifies subscribers immediately", async () => {
+    const { createJuceBackend } = await import("./juce-backend");
+    const b = await createJuceBackend();
+    // setNormalisedValue/setValue/setChoiceIndex non fanno scattare i listener del
+    // relay: senza la notifica locale il knob aspetterebbe l'eco del C++.
+    const slider = vi.fn(); b.param("cutoff").subscribe(slider);
+    b.param("cutoff").set(0.8);
+    expect(slider).toHaveBeenCalledTimes(1);
+    const toggle = vi.fn(); b.param("filtOn").subscribe(toggle);
+    b.param("filtOn").set(0);
+    expect(toggle).toHaveBeenCalledTimes(1);
+    const combo = vi.fn(); b.param("slope").subscribe(combo);
+    b.param("slope").set(0);
+    expect(combo).toHaveBeenCalledTimes(1);
+  });
+
   it("stops notifying after unsubscribe", async () => {
     const { createJuceBackend } = await import("./juce-backend");
     const b = await createJuceBackend();

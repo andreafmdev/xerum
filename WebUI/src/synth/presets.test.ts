@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { PRESETS, CATEGORIES, WAVETABLES, filterPresets, step } from "./presets";
+import { PRESETS, CATEGORIES, filterPresets, step } from "./presets";
 
 describe("presets", () => {
   it("ships the catalogue", () => {
     expect(PRESETS.length).toBeGreaterThan(10);
     expect(CATEGORIES[0]).toBe("All");
-    expect(WAVETABLES).toContain("Basic Shapes");
   });
   it("filters by category and query, case-insensitive", () => {
     expect(filterPresets(PRESETS, "All", "").length).toBe(PRESETS.length);

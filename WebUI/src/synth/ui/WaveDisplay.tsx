@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { toneStyle } from "@xerum/ui";
 import { sampleWave, spectrum } from "../curves";
-import { fmt } from "../format";
+import { formatValue } from "../mapping";
+import { PARAM_SPECS } from "../params.generated";
 
 type Props = { position: number; warp: number; level: number; lfo: number; name: string };
 
@@ -92,7 +93,7 @@ export function WaveDisplay({ position, warp, level, lfo, name }: Props) {
           Wavetable <b className="font-medium text-(--tone) [text-shadow:var(--tglow)]">{name}</b>
         </span>
         <span>
-          Frame <b className="font-medium text-(--tone) [text-shadow:var(--tglow)]">{fmt.frame(position).split(".")[0]!.padStart(2, "0")}</b>/64
+          Frame <b className="font-medium text-(--tone) [text-shadow:var(--tglow)]">{formatValue(PARAM_SPECS.wtpos, position).split(".")[0]!.padStart(2, "0")}</b>/64
         </span>
       </div>
       <div className="absolute top-2 right-3 font-mono text-2xs tracking-wider text-text-dim">SPECTRUM · {HARMONICS} h</div>

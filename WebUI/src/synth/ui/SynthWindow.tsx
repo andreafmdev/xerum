@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState } from "react";
-import { lfoHz, lfoShape, liveValue, modsFor, type SourceLevels } from "../mod";
-import { WAVETABLES } from "../presets";
-import { useClock } from "../useClock";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useBoolParam, useBridgeState, useChoiceParam, useFloatParam, useMeters } from "../../juce/hooks";
+import type { ModSource } from "../../juce/backend";
+import { modsFor, type SourceLevels } from "../mod";
+import type { ParamId } from "../params.generated";
 import { useSynth, type TabId } from "../useSynth";
 import { Footer } from "./Footer";
 import { Header } from "./Header";
 import { FilterPanel, MasterPanel, OscPanel } from "./Panels";
 import { PresetOverlay } from "./PresetOverlay";
+import { SynthContext, type SynthCtx } from "./SynthContext";
 import { ArpTab, EnvTab, FxTab, LfoTab, ModTab, TabArea } from "./Tabs";
 import { WaveDisplay } from "./WaveDisplay";
-import type { SynthKnobCtx } from "./ParamKnob";
 import "./synth.css";
 
 export type SynthVariant = "deep" | "soft" | "glow";
@@ -17,8 +18,6 @@ export type SynthVariant = "deep" | "soft" | "glow";
 export type SynthWindowProps = {
   /** Materiale del pannello. */
   variant?: SynthVariant;
-  /** Clock finto (LFO, meter, arp) per demo/Storybook. Default spento: i dati veri arrivano dal bridge JUCE. */
-  animate?: boolean;
   initialTab?: TabId;
   /** Scala fissa invece dell'adattamento al contenitore. */
   scale?: number;
@@ -27,23 +26,39 @@ export type SynthWindowProps = {
 const W = 900;
 const H = 600;
 
-/** Finestra del plugin: 900×600 scalata per stare nel contenitore. */
-export function SynthWindow({ variant = "deep", animate = false, initialTab = "env", scale: fixedScale }: SynthWindowProps) {
+/** Finestra del plugin: 900×600 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
+export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixedScale }: SynthWindowProps) {
   const s = useSynth(initialTab);
-  const { p, set, mods, addMod, tab, setTab, preset, pick, stepPreset, browse, setBrowse, bypass, setBypass, dirty } = s;
-  const t = useClock(animate);
+  const state = useBridgeState();
+  const meters = useMeters();
+  const bypass = useBoolParam("bypass");
+  const wtpos = useFloatParam("wtpos");
+  const warp = useFloatParam("warp");
+  const level = useFloatParam("level");
+  const wt = useChoiceParam("wtIndex");
 
-  const phase = (t * lfoHz(p.lrate, p.lsync) + p.lphase) % 1;
-  const lfo = lfoShape(p.lshape, phase);
-  const env = animate ? 0.55 + 0.25 * Math.sin(t * 1.7) + 0.1 * Math.sin(t * 7.3) : 0.6;
-  const sources: SourceLevels = { lfo, env, vel: 0.7, mw: 0.5 };
-  const ctx: SynthKnobCtx = { p, set, mods, sources, addMod };
+  // L'host manda solo il livello dell'LFO: le altre sorgenti restano valori di
+  // comodo finché il C++ non le espone.
+  const sources = useMemo<SourceLevels>(() => ({ lfo: meters.lfo, env: 0.6, vel: 0.7, mw: 0.5 }), [meters.lfo]);
 
-  const cutLive = liveValue(p.cutoff, modsFor(mods, "cutoff"), sources);
-  const posLive = modsFor(mods, "wtpos").reduce((a, m) => a + (m.src === "lfo" ? m.depth * lfo : 0), 0);
-  const arpStep = Math.floor(t * 8) % 16;
-  const inL = bypass ? 0 : env * p.level;
-  const outL = bypass ? env * 0.5 : env * p.volume * (p.filtOn ? 0.8 + 0.2 * cutLive : 1);
+  // addMod cambia identità a ogni render di useBridgeState: lo teniamo in un ref
+  // così il contesto si ricalcola solo quando cambia davvero qualcosa.
+  const addModRef = useRef(state.addMod);
+  addModRef.current = state.addMod;
+  const setTab = s.setTab;
+  const addMod = useCallback(
+    (src: ModSource, target: ParamId) => {
+      addModRef.current(src, target);
+      setTab("mod");
+    },
+    [setTab],
+  );
+  const ctx = useMemo<SynthCtx>(
+    () => ({ mods: state.mods, addMod, sources, markDirty: s.markDirty }),
+    [state.mods, addMod, sources, s.markDirty],
+  );
+
+  const posLive = modsFor(state.mods, "wtpos").reduce((a, m) => a + (m.src === "lfo" ? m.depth * meters.lfo : 0), 0);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const [sc, setSc] = useState(fixedScale ?? 1);
@@ -67,31 +82,31 @@ export function SynthWindow({ variant = "deep", animate = false, initialTab = "e
 
   return (
     <div className="sx-root" ref={rootRef}>
-      <div data-testid="chassis" className="sx-chassis" data-variant={variant} style={{ transform: `scale(${sc})`, opacity: bypass ? 0.9 : 1 }}>
-        <Header
-          preset={preset}
-          dirty={dirty}
-          bypass={bypass}
-          onBypass={setBypass}
-          onBrowse={() => setBrowse(true)}
-          onPrev={() => stepPreset(-1)}
-          onNext={() => stepPreset(1)}
-        />
-        <WaveDisplay position={p.wtpos} warp={p.warp} level={p.level} lfo={posLive} name={WAVETABLES[p.wtIndex]!} />
-        <div className="flex h-56 shrink-0 gap-2">
-          <OscPanel ctx={ctx} />
-          <FilterPanel ctx={ctx} cutLive={cutLive} />
-          <MasterPanel ctx={ctx} />
-        </div>
-        <TabArea tab={tab} setTab={setTab}>
-          {tab === "env" && <EnvTab ctx={ctx} />}
-          {tab === "lfo" && <LfoTab ctx={ctx} phase={phase} />}
-          {tab === "mod" && <ModTab mods={mods} setDepth={s.setDepth} remove={s.removeMod} />}
-          {tab === "fx" && <FxTab ctx={ctx} />}
-          {tab === "arp" && <ArpTab ctx={ctx} step={arpStep} />}
-        </TabArea>
-        <Footer inL={inL} outL={outL} voices={p.arpOn ? 1 : p.voiceMode === "Poly" ? 4 : 1} cpu={String(3 + (p.fx2On ? 2 : 0) + p.unison)} />
-        {browse && <PresetOverlay current={preset} onPick={pick} onClose={() => setBrowse(false)} />}
+      <div data-testid="chassis" className="sx-chassis" data-variant={variant} style={{ transform: `scale(${sc})`, opacity: bypass.checked ? 0.9 : 1 }}>
+        <SynthContext.Provider value={ctx}>
+          <Header
+            preset={s.preset}
+            dirty={s.dirty}
+            onBrowse={() => s.setBrowse(true)}
+            onPrev={() => s.stepPreset(-1)}
+            onNext={() => s.stepPreset(1)}
+          />
+          <WaveDisplay position={wtpos.value} warp={warp.value} level={level.value} lfo={posLive} name={wt.options.find((o) => o.value === wt.value)?.label ?? ""} />
+          <div className="flex h-56 shrink-0 gap-2">
+            <OscPanel />
+            <FilterPanel />
+            <MasterPanel />
+          </div>
+          <TabArea tab={s.tab} setTab={s.setTab}>
+            {s.tab === "env" && <EnvTab />}
+            {s.tab === "lfo" && <LfoTab />}
+            {s.tab === "mod" && <ModTab />}
+            {s.tab === "fx" && <FxTab />}
+            {s.tab === "arp" && <ArpTab />}
+          </TabArea>
+          <Footer />
+          {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
+        </SynthContext.Provider>
       </div>
     </div>
   );

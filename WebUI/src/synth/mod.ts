@@ -1,9 +1,13 @@
 import type { Tone } from "@xerum/ui";
-import type { LfoShape } from "./params";
 import type { ModAssignment, ModSource } from "../juce/backend";
 import type { ParamId } from "./params.generated";
 
 export type { ModAssignment, ModSource };
+
+// Unioni di stringhe dei parametri "choice" usati dalla matematica: devono
+// combaciare con i `value` delle opzioni in params.generated.ts.
+export type FilterType = "LP" | "HP" | "BP";
+export type LfoShape = "Sine" | "Tri" | "Saw" | "Square" | "S&H";
 /** Livello istantaneo di ogni sorgente: LFO bipolare -1..1, le altre 0..1. */
 export type SourceLevels = Record<ModSource, number>;
 

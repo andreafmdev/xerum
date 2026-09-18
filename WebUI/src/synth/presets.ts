@@ -1,7 +1,5 @@
 export type Preset = { name: string; cat: string };
 
-export const WAVETABLES = ["Basic Shapes", "Analog Saws", "Digital Grit", "Vocal Formant", "Glass Bells", "PWM Sweep"];
-
 export const CATEGORIES = ["All", "Bass", "Lead", "Pad", "Keys", "Pluck", "FX", "User"];
 
 export const PRESETS: Preset[] = (

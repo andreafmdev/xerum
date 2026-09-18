@@ -1,12 +1,11 @@
 import { Button } from "@xerum/ui";
 import { ChevronLeft, ChevronRight, LayoutGrid, Redo2, Save, Settings, Undo2 } from "lucide-react";
+import { useBoolParam } from "../../juce/hooks";
 import type { Preset } from "../presets";
 
 type Props = {
   preset: Preset;
   dirty: boolean;
-  bypass: boolean;
-  onBypass: (v: boolean) => void;
   onPrev: () => void;
   onNext: () => void;
   onBrowse: () => void;
@@ -14,7 +13,8 @@ type Props = {
 
 const iconBtn = "size-6.5! rounded-control! text-muted-foreground hover:text-foreground [&_svg]:size-3.5";
 
-export function Header({ preset, dirty, bypass, onBypass, onPrev, onNext, onBrowse }: Props) {
+export function Header({ preset, dirty, onPrev, onNext, onBrowse }: Props) {
+  const bypass = useBoolParam("bypass");
   return (
     <header className="flex h-10 shrink-0 items-center gap-2.5 px-1">
       <Logo>XERUM</Logo>
@@ -41,9 +41,9 @@ export function Header({ preset, dirty, bypass, onBypass, onPrev, onNext, onBrow
       <Button
         variant="secondary"
         size="xs"
-        aria-pressed={bypass}
-        onClick={() => onBypass(!bypass)}
-        className={`h-6.5! rounded-control! text-2xs tracking-wider uppercase ${bypass ? "text-env [text-shadow:var(--tglow)]" : "text-muted-foreground"}`}
+        aria-pressed={bypass.checked}
+        onClick={() => bypass.set(!bypass.checked)}
+        className={`h-6.5! rounded-control! text-2xs tracking-wider uppercase ${bypass.checked ? "text-env [text-shadow:var(--tglow)]" : "text-muted-foreground"}`}
       >
         Bypass
       </Button>

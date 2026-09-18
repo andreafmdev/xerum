@@ -1,31 +1,55 @@
+import { useEffect, useRef } from "react";
 import { Knob, type KnobProps } from "@xerum/ui";
-import { liveValue, modsFor, SOURCE_TONE, type ModAssignment, type ModSource, type SourceLevels } from "../mod";
-import type { KnobId, SynthParams } from "../params";
+import { useFloatParam } from "../../juce/hooks";
+import { formatValue } from "../mapping";
+import { liveValue, modsFor, SOURCE_TONE, type ModSource } from "../mod";
+import type { ParamId } from "../params.generated";
+import { useSynthCtx } from "./SynthContext";
 
-export type SynthKnobCtx = {
-  p: SynthParams;
-  set: <K extends keyof SynthParams>(id: K, v: SynthParams[K]) => void;
-  mods: ModAssignment[];
-  sources: SourceLevels;
-  addMod: (src: ModSource, target: KnobId) => void;
+type Props = Omit<KnobProps, "value" | "onChange" | "onChangeEnd" | "mods" | "liveValue" | "onDropMod" | "label"> & {
+  id: ParamId;
+  label?: string;
 };
 
-type Props = Omit<KnobProps, "value" | "onChange" | "mods" | "liveValue" | "onDropMod"> & {
-  id: KnobId;
-  ctx: SynthKnobCtx;
-};
+/** Knob legato a un parametro del bridge: valore, gesture, anelli e puntino live dalla mod matrix. */
+export function ParamKnob({ id, label, format, bipolar, ...rest }: Props) {
+  const p = useFloatParam(id);
+  const { mods, addMod, sources, markDirty } = useSynthCtx();
+  const mine = modsFor(mods, id);
 
-/** Knob legato a un parametro: valore, anelli e puntino live dalla mod matrix, bersaglio di drop. */
-export function ParamKnob({ id, ctx, ...rest }: Props) {
-  const mods = modsFor(ctx.mods, id);
-  const value = ctx.p[id];
+  // Gesture: begin al primo onChange di un drag, end quando il Knob smette di trascinare.
+  const inGesture = useRef(false);
+  const onChange = (v: number) => {
+    if (!inGesture.current) {
+      inGesture.current = true;
+      p.begin();
+    }
+    p.set(v);
+    markDirty();
+  };
+  const onChangeEnd = () => {
+    if (inGesture.current) {
+      inGesture.current = false;
+      p.end();
+    }
+  };
+  // Smontaggio a gesture aperta (cambio tab mentre si trascina): chiudila lo stesso,
+  // altrimenti l'host resterebbe in automazione.
+  const end = useRef(p.end);
+  end.current = p.end;
+  useEffect(() => () => { if (inGesture.current) end.current(); }, []);
+
   return (
     <Knob
-      value={value}
-      onChange={(v) => ctx.set(id, v)}
-      mods={mods.map((m) => ({ tone: SOURCE_TONE[m.src], depth: m.depth, bipolar: m.src === "lfo" }))}
-      liveValue={mods.length ? liveValue(value, mods, ctx.sources) : undefined}
-      onDropMod={(src) => ctx.addMod(src as ModSource, id)}
+      value={p.value}
+      onChange={onChange}
+      onChangeEnd={onChangeEnd}
+      label={label ?? p.spec.name}
+      format={format ?? ((v) => formatValue(p.spec, v))}
+      bipolar={bipolar ?? p.spec.bipolar}
+      mods={mine.map((m) => ({ tone: SOURCE_TONE[m.src], depth: m.depth, bipolar: m.src === "lfo" }))}
+      liveValue={mine.length ? liveValue(p.value, mine, sources) : undefined}
+      onDropMod={(src) => addMod(src as ModSource, id)}
       {...rest}
     />
   );

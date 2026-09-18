@@ -1,12 +1,13 @@
 import { useMemo, type ReactNode } from "react";
 import { Segmented, Tabs, Toggle, toneStyle } from "@xerum/ui";
 import { X } from "lucide-react";
+import { useBoolParam, useBridgeState, useChoiceParam, useFloatParam, useMeters } from "../../juce/hooks";
 import { envPath, lfoPath } from "../curves";
-import { fmt } from "../format";
-import { lfoShape, MOD_SOURCES, SOURCE_LABEL, SOURCE_TONE, type ModAssignment } from "../mod";
-import { LABELS, type ArpMode, type LfoShape } from "../params";
+import { formatValue, paramLabel } from "../mapping";
+import { MOD_SOURCES, SOURCE_LABEL, SOURCE_TONE, type LfoShape } from "../mod";
+import { PARAM_SPECS } from "../params.generated";
 import { ModChip } from "./ModChip";
-import { ParamKnob, type SynthKnobCtx } from "./ParamKnob";
+import { ParamKnob } from "./ParamKnob";
 import type { TabId } from "../useSynth";
 
 const TAB_ITEMS = [
@@ -40,11 +41,16 @@ const group = "flex items-end gap-2.5";
 const vsep = "w-px self-stretch bg-linear-to-b from-transparent via-edge-dark to-transparent";
 const screen = "shrink-0 overflow-hidden rounded-control bg-well shadow-well";
 
-export function EnvTab({ ctx }: { ctx: SynthKnobCtx }) {
-  const { p } = ctx;
+const signedInt = (v: number) => (v > 0 ? `+${v}` : `${v}`);
+
+export function EnvTab() {
+  const att = useFloatParam("att");
+  const dec = useFloatParam("dec");
+  const sus = useFloatParam("sus");
+  const rel = useFloatParam("rel");
   const W = 200;
   const H = 66;
-  const d = useMemo(() => envPath(p.att, p.dec, p.sus, p.rel, W, H), [p.att, p.dec, p.sus, p.rel]);
+  const d = useMemo(() => envPath(att.value, dec.value, sus.value, rel.value, W, H), [att.value, dec.value, sus.value, rel.value]);
   return (
     <div className={content}>
       <div className={screen} style={{ width: W, height: H }}>
@@ -54,15 +60,15 @@ export function EnvTab({ ctx }: { ctx: SynthKnobCtx }) {
         </svg>
       </div>
       <div className={`${group} gap-3.5`}>
-        <ParamKnob id="att" ctx={ctx} label="Attack" format={fmt.envMs} />
-        <ParamKnob id="dec" ctx={ctx} label="Decay" format={fmt.envMs} />
-        <ParamKnob id="sus" ctx={ctx} label="Sustain" format={fmt.pct} />
-        <ParamKnob id="rel" ctx={ctx} label="Release" format={fmt.envMs} />
+        <ParamKnob id="att" />
+        <ParamKnob id="dec" />
+        <ParamKnob id="sus" />
+        <ParamKnob id="rel" />
       </div>
       <div className={vsep} />
       <div className={group}>
-        <ParamKnob id="envVel" ctx={ctx} label="Vel → amp" size="sm" format={fmt.pct} />
-        <ParamKnob id="envCurve" ctx={ctx} label="Curve" size="sm" bipolar format={fmt.curve} />
+        <ParamKnob id="envVel" size="sm" />
+        <ParamKnob id="envCurve" size="sm" />
       </div>
       <div className={vsep} />
       <p className="max-w-38 text-[11px] leading-snug text-text-dim">
@@ -72,41 +78,50 @@ export function EnvTab({ ctx }: { ctx: SynthKnobCtx }) {
   );
 }
 
-const SHAPES: { value: LfoShape; label: string }[] = (["Sine", "Tri", "Saw", "Square", "S&H"] as const).map((s) => ({ value: s, label: s }));
+/** Divisioni di nota mostrate al posto degli hertz quando l'LFO è in sync (cfr. SYNC_HZ in mod.ts). */
+const DIVISIONS = ["1/16", "1/8", "1/4", "1/2", "1", "2"];
 
-export function LfoTab({ ctx, phase }: { ctx: SynthKnobCtx; phase: number }) {
-  const { p, set } = ctx;
+export function LfoTab() {
+  const lshape = useChoiceParam("lshape");
+  const lsync = useBoolParam("lsync");
+  const lretrig = useBoolParam("lretrig");
+  const lfo = useMeters().lfo;
   const W = 200;
   const H = 66;
-  const d = useMemo(() => lfoPath(p.lshape, W, H), [p.lshape]);
-  const cx = 6 + (((phase * 2) % 2) / 2) * (W - 12);
-  const cy = H / 2 - lfoShape(p.lshape, phase * 2) * (H / 2 - 8);
+  const d = useMemo(() => lfoPath(lshape.value as LfoShape, W, H), [lshape.value]);
+  // Il bridge manda il livello dell'LFO, non la sua fase: il puntino sta al centro
+  // dello schermo e sale/scende con il valore.
+  const cy = H / 2 - lfo * (H / 2 - 8);
   return (
     <div className={content}>
       <div className={screen} style={{ width: W, height: H }}>
         <svg width={W} height={H}>
           <line x1="6" x2={W - 6} y1={H / 2} y2={H / 2} className="stroke-line-strong" opacity={0.4} />
           <path d={d} className="fill-none stroke-(--tone) [filter:var(--glow)]" strokeWidth={1.6} />
-          <circle cx={cx} cy={cy} r="3.5" className="fill-foreground" />
+          <circle cx={W / 2} cy={cy} r="3.5" className="fill-foreground" />
         </svg>
       </div>
       <div className="flex flex-col gap-2">
-        <Segmented label="LFO shape" value={p.lshape} onChange={(v) => set("lshape", v)} options={SHAPES} />
+        <Segmented label="LFO shape" value={lshape.value} onChange={lshape.set} options={lshape.options} />
         <div className="flex items-center gap-2.5">
-          <Toggle checked={p.lsync} onChange={(v) => set("lsync", v)} label="Sync" />
-          <Toggle checked={p.lretrig} onChange={(v) => set("lretrig", v)} label="Retrig" />
+          <Toggle checked={lsync.checked} onChange={lsync.set} label="Sync" />
+          <Toggle checked={lretrig.checked} onChange={lretrig.set} label="Retrig" />
         </div>
       </div>
       <div className={`${group} gap-3.5`}>
-        <ParamKnob id="lrate" ctx={ctx} label="Rate" format={(v) => fmt.lfoRate(v, p.lsync)} />
-        <ParamKnob id="lphase" ctx={ctx} label="Phase" format={fmt.deg} />
-        <ParamKnob id="lfade" ctx={ctx} label="Fade in" format={fmt.fadeMs} />
+        <ParamKnob
+          id="lrate"
+          format={(v) => (lsync.checked ? DIVISIONS[Math.min(5, Math.floor(v * 6))]! : formatValue(PARAM_SPECS.lrate, v))}
+        />
+        <ParamKnob id="lphase" />
+        <ParamKnob id="lfade" />
       </div>
     </div>
   );
 }
 
-export function ModTab({ mods, setDepth, remove }: { mods: ModAssignment[]; setDepth: (i: number, d: number) => void; remove: (i: number) => void }) {
+export function ModTab() {
+  const { mods, setDepth, removeMod } = useBridgeState();
   if (!mods.length) {
     return (
       <div className={content}>
@@ -120,15 +135,16 @@ export function ModTab({ mods, setDepth, remove }: { mods: ModAssignment[]; setD
   return (
     <div className="grid flex-1 grid-cols-2 content-start gap-x-6 px-3.5 py-1.5">
       {mods.map((m, i) => {
-        const name = `${SOURCE_LABEL[m.src]} → ${LABELS[m.target]}`;
+        const target = paramLabel(PARAM_SPECS[m.target]);
+        const name = `${SOURCE_LABEL[m.src]} → ${target}`;
         return (
           <div key={`${m.src}-${m.target}`} className="flex h-5.5 items-center gap-2.5 text-[10px]" style={toneStyle(SOURCE_TONE[m.src])}>
             <span className="w-8 font-semibold tracking-wider text-(--tone)">{SOURCE_LABEL[m.src]}</span>
             <span className="text-text-dim">→</span>
-            <span className="w-22 truncate text-muted-foreground">{LABELS[m.target]}</span>
+            <span className="w-22 truncate text-muted-foreground">{target}</span>
             <input type="range" min="-1" max="1" step="0.01" value={m.depth} aria-label={`Depth ${name}`} onChange={(e) => setDepth(i, +e.target.value)} className="sx-range" />
-            <span className="w-8 text-right font-mono text-foreground tabular-nums">{fmt.signedInt(Math.round(m.depth * 100))}</span>
-            <button type="button" aria-label={`Remove ${name}`} onClick={() => remove(i)} className="text-text-dim hover:text-destructive">
+            <span className="w-8 text-right font-mono text-foreground tabular-nums">{signedInt(Math.round(m.depth * 100))}</span>
+            <button type="button" aria-label={`Remove ${name}`} onClick={() => removeMod(i)} className="text-text-dim hover:text-destructive">
               <X className="size-3" />
             </button>
           </div>
@@ -138,53 +154,54 @@ export function ModTab({ mods, setDepth, remove }: { mods: ModAssignment[]; setD
   );
 }
 
-export function FxTab({ ctx }: { ctx: SynthKnobCtx }) {
-  const { p, set } = ctx;
-  const slot = (id: "fx1On" | "fx2On", name: string, knobs: ReactNode) => (
-    <div className={`flex flex-1 items-center gap-2.5 rounded-control bg-surface-1 px-2.5 py-1 shadow-[inset_0_0_0_1px_var(--color-edge-dark),inset_0_1px_0_var(--color-edge-light)] ${p[id] ? "" : "[&_.fx-nm]:opacity-45 [&_[data-slot=knob]]:opacity-45"}`}>
-      <Toggle checked={p[id]} onChange={(v) => set(id, v)} label={`${name} on`} className="[&_label]:sr-only" />
+export function FxTab() {
+  const fx1On = useBoolParam("fx1On");
+  const fx2On = useBoolParam("fx2On");
+  const slot = (on: boolean, setOn: (v: boolean) => void, name: string, knobs: ReactNode) => (
+    <div className={`flex flex-1 items-center gap-2.5 rounded-control bg-surface-1 px-2.5 py-1 shadow-[inset_0_0_0_1px_var(--color-edge-dark),inset_0_1px_0_var(--color-edge-light)] ${on ? "" : "[&_.fx-nm]:opacity-45 [&_[data-slot=knob]]:opacity-45"}`}>
+      <Toggle checked={on} onChange={setOn} label={`${name} on`} className="[&_label]:sr-only" />
       <span className="fx-nm w-18 text-2xs font-semibold tracking-widest text-(--tone) uppercase">{name}</span>
       <div className={`${group} flex-1 justify-around gap-3`}>{knobs}</div>
     </div>
   );
   return (
     <div className={`${content} gap-2.5`} style={toneStyle("fx")}>
-      {slot("fx1On", "Chorus", (
+      {slot(fx1On.checked, fx1On.set, "Chorus", (
         <>
-          <ParamKnob id="chRate" ctx={ctx} label="Rate" size="sm" format={fmt.chorusHz} />
-          <ParamKnob id="chDepth" ctx={ctx} label="Depth" size="sm" format={fmt.pct} />
-          <ParamKnob id="chMix" ctx={ctx} label="Mix" size="sm" format={fmt.pct} />
+          <ParamKnob id="chRate" size="sm" />
+          <ParamKnob id="chDepth" size="sm" />
+          <ParamKnob id="chMix" size="sm" />
         </>
       ))}
-      {slot("fx2On", "Reverb", (
+      {slot(fx2On.checked, fx2On.set, "Reverb", (
         <>
-          <ParamKnob id="rvSize" ctx={ctx} label="Size" size="sm" format={fmt.pct} />
-          <ParamKnob id="rvDamp" ctx={ctx} label="Damp" size="sm" format={fmt.pct} />
-          <ParamKnob id="rvMix" ctx={ctx} label="Mix" size="sm" format={fmt.pct} />
+          <ParamKnob id="rvSize" size="sm" />
+          <ParamKnob id="rvDamp" size="sm" />
+          <ParamKnob id="rvMix" size="sm" />
         </>
       ))}
     </div>
   );
 }
 
-const ARP_MODES: { value: ArpMode; label: string }[] = (["Up", "Down", "UpDn", "Rand"] as const).map((m) => ({ value: m, label: m }));
-
-export function ArpTab({ ctx, step }: { ctx: SynthKnobCtx; step: number }) {
-  const { p, set } = ctx;
-  const steps = p.arpSteps;
+export function ArpTab() {
+  const arpOn = useBoolParam("arpOn");
+  const arpMode = useChoiceParam("arpMode");
+  const { arpSteps, setArpSteps } = useBridgeState();
+  const step = useMeters().arpStep;
   const setStep = (i: number, v: number) => {
-    const n = steps.slice();
+    const n = arpSteps.slice();
     n[i] = Math.min(1, Math.max(0, v));
-    set("arpSteps", n);
+    setArpSteps(n);
   };
   return (
     <div className={content}>
       <div className="flex flex-col gap-1.5">
-        <Toggle checked={p.arpOn} onChange={(v) => set("arpOn", v)} label="Arp on" />
-        <Segmented label="Arp mode" value={p.arpMode} onChange={(v) => set("arpMode", v)} options={ARP_MODES} />
+        <Toggle checked={arpOn.checked} onChange={arpOn.set} label="Arp on" />
+        <Segmented label="Arp mode" value={arpMode.value} onChange={arpMode.set} options={arpMode.options} />
       </div>
       <div className="flex h-16 items-end gap-[3px] rounded-control bg-well p-1.5 shadow-well">
-        {steps.map((v, i) => (
+        {arpSteps.map((v, i) => (
           <button
             key={i}
             type="button"
@@ -192,7 +209,7 @@ export function ArpTab({ ctx, step }: { ctx: SynthKnobCtx; step: number }) {
             aria-pressed={v > 0}
             onClick={() => setStep(i, v > 0 ? 0 : 0.8)}
             onWheel={(e) => setStep(i, v + (e.deltaY < 0 ? 0.1 : -0.1))}
-            className={`relative h-full w-4 rounded-[2px] bg-surface-2 ${p.arpOn && step === i ? "outline outline-offset-1 outline-foreground" : ""}`}
+            className={`relative h-full w-4 rounded-[2px] bg-surface-2 ${arpOn.checked && step === i ? "outline outline-offset-1 outline-foreground" : ""}`}
           >
             <i
               className={`absolute inset-x-0 bottom-0 rounded-[2px] bg-(--tone) transition-[height] duration-100 ${v > 0 ? "opacity-100 shadow-[0_0_6px_color-mix(in_oklch,var(--tone)_60%,transparent)]" : "opacity-35"}`}
@@ -202,10 +219,10 @@ export function ArpTab({ ctx, step }: { ctx: SynthKnobCtx; step: number }) {
         ))}
       </div>
       <div className={`${group} gap-3`}>
-        <ParamKnob id="arpRate" ctx={ctx} label="Rate" size="sm" format={fmt.arpRate} />
-        <ParamKnob id="arpGate" ctx={ctx} label="Gate" size="sm" format={fmt.pct} />
-        <ParamKnob id="arpOct" ctx={ctx} label="Octaves" size="sm" format={fmt.octaves} />
-        <ParamKnob id="arpSwing" ctx={ctx} label="Swing" size="sm" format={fmt.pct} />
+        <ParamKnob id="arpRate" size="sm" />
+        <ParamKnob id="arpGate" size="sm" />
+        <ParamKnob id="arpOct" size="sm" />
+        <ParamKnob id="arpSwing" size="sm" />
       </div>
     </div>
   );

@@ -32,7 +32,10 @@ class SliderHandle implements ParamHandle {
   private local = 0;
   constructor(private st: Juce.SliderState) { subscribeTo(st.valueChangedEvent, this.subs); }
   get() { return this.dragging ? this.local : this.st.getNormalisedValue(); }
-  set(v: number) { this.local = v; this.st.setNormalisedValue(v); }
+  // setNormalisedValue non fa scattare i listener del relay: notifichiamo noi,
+  // altrimenti il knob si ridisegnerebbe solo all'eco del C++ (un giro di ritardo).
+  set(v: number) { this.local = v; this.st.setNormalisedValue(v); this.notify(); }
+  private notify() { for (const s of this.subs) s(); }
   begin() { this.dragging = true; this.local = this.st.getNormalisedValue(); this.st.sliderDragStarted(); }
   end() { this.dragging = false; this.st.sliderDragEnded(); for (const s of this.subs) s(); }
   subscribe(cb: () => void) { this.subs.add(cb); return () => { this.subs.delete(cb); }; }
@@ -43,7 +46,7 @@ class ToggleHandle implements ParamHandle {
   private subs: Subs = new Set();
   constructor(private st: Juce.ToggleState) { subscribeTo(st.valueChangedEvent, this.subs); }
   get() { return this.st.getValue() ? 1 : 0; }
-  set(v: number) { this.st.setValue(v >= 0.5); }
+  set(v: number) { this.st.setValue(v >= 0.5); for (const s of this.subs) s(); }
   begin() {} end() {}
   subscribe(cb: () => void) { this.subs.add(cb); return () => { this.subs.delete(cb); }; }
 }
@@ -53,7 +56,7 @@ class ComboHandle implements ParamHandle {
   private subs: Subs = new Set();
   constructor(private st: Juce.ComboBoxState, private id: ParamId) { subscribeTo(st.valueChangedEvent, this.subs); }
   get() { return fromIndex(PARAM_SPECS[this.id], this.st.getChoiceIndex()); }
-  set(v: number) { this.st.setChoiceIndex(toIndex(PARAM_SPECS[this.id], v)); }
+  set(v: number) { this.st.setChoiceIndex(toIndex(PARAM_SPECS[this.id], v)); for (const s of this.subs) s(); }
   begin() {} end() {}
   subscribe(cb: () => void) { this.subs.add(cb); return () => { this.subs.delete(cb); }; }
 }
