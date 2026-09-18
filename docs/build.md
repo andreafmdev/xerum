@@ -49,3 +49,14 @@ Vite serves `http://localhost:5173`. Debug builds of the editor navigate there a
 4. Send MIDI — no crash; silence is expected
 5. Automate **Master Gain** from the host
 6. With `npm run dev`, open the editor and confirm the React placeholder
+
+## Web UI
+
+Requires pnpm 11 (`corepack enable`).
+
+    cd WebUI
+    pnpm install
+    pnpm ui:build        # @xerum/ui -> packages/ui/dist
+    pnpm dev             # app shell on http://localhost:5173
+    pnpm ui:storybook    # component catalogue on http://localhost:6006
+    pnpm ui:test         # Vitest

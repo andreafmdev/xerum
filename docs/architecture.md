@@ -12,7 +12,8 @@
 | Parameters | `Source/parameters/` | Single source of parameter IDs + layout |
 | Engine | `Source/engine/` | MIDI dispatch, voice pool, block render |
 | DSP stubs | `Source/dsp/` | Oscillator / filter / envelope / future `WavetableStore` |
-| Web UI | `WebUI/` | React + Vite (dev server → WebView) |
+| Web UI | `WebUI/` | App shell React + Vite (dev server → WebView); consuma `@xerum/ui` |
+| UI library | `WebUI/packages/ui/` | `@xerum/ui`: componenti synth (Tailwind v4, shadcn base-nova), Storybook, test |
 
 ```
 DAW MIDI ──► PluginProcessor ──► SynthEngine ──► VoiceManager ──► SynthVoice
