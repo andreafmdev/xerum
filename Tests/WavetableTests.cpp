@@ -4,6 +4,7 @@
 #include "dsp/WavetableStore.h"
 
 #include <juce_core/juce_core.h>
+#include <juce_dsp/juce_dsp.h>
 
 #include <cmath>
 #include <cstring>
@@ -153,16 +154,113 @@ struct MipTableTests final : juce::UnitTest
             expect (maxError < 1.0e-4f, "errore massimo " + juce::String (maxError));
         }
 
-        beginTest ("i livelli alti tagliano le armoniche sopra la loro Nyquist");
+        beginTest ("i livelli alti tagliano davvero le armoniche sopra la loro Nyquist");
         {
             const auto bytes = makeHarmonicBlob (2048, 200);
             const auto view = dsp::parseXwt (bytes.data(), bytes.size());
             const auto table = dsp::buildMipTable (*view);
 
-            // Livello 4 → 128 campioni → al massimo 64 armoniche.
-            const auto* level4 = table->samples (0, 4);
+            const auto* level0 = table->samples (0, 0);
+            const auto* level4 = table->samples (0, 4); // 128 campioni -> Nyquist a 64 armoniche
+
+            // Il vecchio test confrontava l'armonica 63 (legittimamente conservata: sta appena
+            // sotto la Nyquist del livello 4) con una soglia assoluta di 0.05 — soddisfatta
+            // comunque dal rolloff 1/h della sorgente sintetica (0.0159 gia' al livello 0, senza
+            // alcun filtro), quindi il test era verde anche togliendo il filtro. Qui si guarda
+            // davvero sopra la Nyquist: l'armonica 100.
+            //
+            // Un buffer reale lungo 128 campioni pero' non puo' rappresentare l'armonica 100 in
+            // modo indipendente dalla sua immagine speculare 128-100=28 (simmetria hermitiana di
+            // qualunque segnale reale campionato): harmonicAmplitude(level4, 128, 100) misura
+            // percio' sempre esattamente lo stesso valore di harmonicAmplitude(level4, 128, 28)
+            // — verificato sotto. Se il taglio spettrale funziona, quel bin contiene solo la vera
+            // armonica 28 (stessa ampiezza del livello 0); se il filtro perde colpi (o e'
+            // disattivato), l'armonica 100 vi si mescola e il valore misurato si allontana dalla
+            // vera armonica 28 — confronto relativo, non contro una soglia assoluta, cosi' il
+            // rolloff 1/h non puo' soddisfarlo da solo. Verificato disattivando temporaneamente
+            // il taglio (harmonics = size invece di size/2 in buildMipTable): il valore misurato
+            // crolla a ~0.0129 contro i ~0.0357 attesi, ben sotto la soglia qui sotto.
+            const auto amp100AtLevel4 = harmonicAmplitude (level4, 128, 100);
+            const auto amp28AtLevel4 = harmonicAmplitude (level4, 128, 28);
+            expectWithinAbsoluteError (amp100AtLevel4, amp28AtLevel4, 1.0e-4f,
+                    "harmonicAmplitude(h=100) e harmonicAmplitude(h=28) devono coincidere su un buffer reale a 128 campioni");
+
+            const auto trueHarmonic28 = harmonicAmplitude (level0, 2048, 28);
+            expect (trueHarmonic28 > 0.02f, "l'armonica 28 deve essere misurabile al livello 0, ampiezza " + juce::String (trueHarmonic28));
+            expectWithinAbsoluteError (amp100AtLevel4, trueHarmonic28, trueHarmonic28 * 0.2f,
+                    "l'armonica 100 (alias del bin 28 a 128 campioni) deve valere quanto la vera armonica 28, non meno: misurato "
+                        + juce::String (amp100AtLevel4) + ", atteso " + juce::String (trueHarmonic28));
+
+            // Le armoniche davvero sotto la Nyquist del livello devono restare intatte.
             expect (harmonicAmplitude (level4, 128, 10) > 0.05f, "l'armonica 10 deve restare");
-            expect (harmonicAmplitude (level4, 128, 63) < 0.05f, "l'armonica 63 deve essere attenuata o assente");
+        }
+
+        beginTest ("una sega ad una nota alta: l'oscillatore vero non porta a spasso l'armonica 100");
+        {
+            // Controllo end-to-end (spec 10): non basta che il MipTable sia corretto in
+            // isolamento (test sopra, che chiama table->samples() direttamente) — deve restare
+            // corretto quando l'oscillatore lo suona per davvero: setFrequencyHz() sceglie il
+            // livello da solo (levelForFrequency), poi getSample() lo legge. Questo test
+            // esercita quel percorso intero, non la tavola a mano.
+            //
+            // La nota e' scelta apposta a sampleRate/128 = 344.53125 Hz: levelForFrequency()
+            // sceglie il livello 4 (128 campioni), e 128 campioni per ciclo e' ESATTAMENTE
+            // quanti campioni di uscita servono per un ciclo a questa nota e questa sample
+            // rate — l'oscillatore quindi legge la tavola un campione alla volta, senza
+            // interpolare fra campioni diversi. L'uscita e' percio' la tavola stessa, ripetuta:
+            // stessa identita' del test sopra (un buffer reale a 128 campioni non puo'
+            // rappresentare l'armonica 100 indipendentemente dalla sua immagine speculare
+            // 128-100=28), verificata pero' sull'uscita vera dell'oscillatore, non su
+            // table->samples() letto a mano.
+            const auto bytes = makeHarmonicBlob (2048, 200);
+            const auto view = dsp::parseXwt (bytes.data(), bytes.size());
+            const auto table = dsp::buildMipTable (*view);
+
+            constexpr double sampleRate = 44100.0;
+            constexpr int cyclesRendered = 64;
+            constexpr int tableSize = 128;                              // dimensione del livello 4
+            constexpr int numSamples = cyclesRendered * tableSize;      // 8192, potenza di due
+            constexpr int fftOrder = 13;                                // 2^13 == numSamples
+            constexpr int fundamentalBin = cyclesRendered;              // niente leakage spettrale
+            const auto noteHz = (float) (sampleRate / (double) tableSize); // 344.53125 Hz
+
+            const auto level = dsp::levelForFrequency (noteHz, sampleRate, table->getFrameSize());
+            expectEquals (level, 4, "il test assume che questa nota scelga il livello 4 (128 campioni)");
+
+            dsp::WavetableOscillator osc;
+            osc.prepare (sampleRate);
+            osc.setTable (table.get());
+            osc.setFramePosition (0.0f);
+            osc.setFrequencyHz (noteHz);
+
+            std::vector<float> fftData ((size_t) numSamples * 2, 0.0f);
+            for (int i = 0; i < numSamples; ++i)
+                fftData[(size_t) i] = osc.getSample();
+
+            juce::dsp::FFT fft (fftOrder);
+            fft.performFrequencyOnlyForwardTransform (fftData.data(), true);
+
+            // La "vera" armonica 28, misurata sul livello 0 (non filtrato): riferimento.
+            const auto trueHarmonic28 = harmonicAmplitude (table->samples (0, 0), 2048, 28);
+            expect (trueHarmonic28 > 0.02f, "l'armonica 28 deve essere misurabile al livello 0, ampiezza " + juce::String (trueHarmonic28));
+
+            // Il bin dell'armonica 100 (fundamentalBin*100 = 6400) supera la Nyquist di questo
+            // buffer (4096): per la simmetria hermitiana di un segnale reale campionato,
+            // vale esattamente quanto il bin della sua immagine speculare 8192-6400=1792, cioe'
+            // l'armonica 28 (fundamentalBin*28 = 1792) — la stessa identita' del test sopra,
+            // solo un livello di indirezione più in la' (qui il "ciclo" e' il livello 4 ripetuto
+            // 64 volte, non il livello 4 letto una volta sola). Si interroga percio' il bin 28:
+            // se il taglio spettrale funziona contiene solo la vera armonica 28 (stessa ampiezza
+            // del livello 0); se l'armonica 100 vi si e' mescolata, il valore si allontana.
+            const auto magnitudeAt28 = fftData[(size_t) (fundamentalBin * 28)];
+
+            // Normalizza il bin FFT (ampiezza raw, scala con numSamples) sulla stessa
+            // convenzione di harmonicAmplitude (2*modulo/size) cosi' i due sono confrontabili.
+            const auto measuredHarmonic28 = 2.0f * magnitudeAt28 / (float) numSamples;
+
+            expectWithinAbsoluteError (measuredHarmonic28, trueHarmonic28, trueHarmonic28 * 0.2f,
+                    "armonica 28 (== alias dell'armonica 100 su un ciclo a 128 campioni) misurata sull'uscita reale "
+                        "dell'oscillatore: " + juce::String (measuredHarmonic28) + ", attesa " + juce::String (trueHarmonic28));
         }
 
         beginTest ("un frame troppo corto per tutti i livelli viene rifiutato, non crasha");
