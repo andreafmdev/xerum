@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bridge/MeterChannel.h"
 #include "bridge/StateChannel.h"
 #include "bridge/WebRelays.h"
 #include "plugin/PluginProcessor.h"
@@ -29,6 +30,10 @@ private:
     bridge::StateChannel stateChannel_;
 
     juce::WebBrowserComponent webView_;
+
+    /** Timer a 30 Hz che manda i picchi dei meter alla WebView: tiene un riferimento a
+        webView_, quindi va dichiarato dopo di lei per essere distrutto prima. */
+    bridge::MeterChannel meters_;
 
     /** Native on-screen keyboard strip under the WebView (Serum/Vital style).
         Feeds the processor's MidiKeyboardState, which is merged into the host

@@ -84,6 +84,7 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
       processorRef_ (p),
       stateChannel_ (p.getAPVTS(), p.getStateReplacedBroadcaster()),
       webView_ (makeWebOptions (relays_, stateChannel_)),
+      meters_ (p.getMeters(), webView_),
       keyboard_ (p.getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard)
 {
     // Gli attachment vanno creati dopo la WebView, mai prima.
