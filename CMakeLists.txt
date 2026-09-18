@@ -34,6 +34,7 @@ target_sources(SerumStyleSynth
     PRIVATE
         Source/plugin/PluginProcessor.cpp
         Source/plugin/PluginEditor.cpp
+        Source/bridge/WebRelays.cpp
         Source/engine/SynthEngine.cpp
         Source/engine/VoiceManager.cpp
         Source/engine/SynthVoice.cpp

@@ -45,7 +45,7 @@ juce::WebBrowserComponent::Resource makeFallbackIndexHtml()
     return resource;
 }
 
-juce::WebBrowserComponent::Options makeWebOptions()
+juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& relays)
 {
     auto options = juce::WebBrowserComponent::Options {}
                        .withNativeIntegrationEnabled()
@@ -67,6 +67,9 @@ juce::WebBrowserComponent::Options makeWebOptions()
                           juce::File::getSpecialLocation (juce::File::tempDirectory)));
    #endif
 
+    // I relay aggiungono a initialisationData la voce di ogni parametro.
+    options = relays.applyTo (options);
+
     return options;
 }
 } // namespace
@@ -75,9 +78,12 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
     SerumStyleSynthAudioProcessor& p)
     : AudioProcessorEditor (&p),
       processorRef_ (p),
-      webView_ (makeWebOptions()),
+      webView_ (makeWebOptions (relays_)),
       keyboard_ (p.getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard)
 {
+    // Gli attachment vanno creati dopo la WebView, mai prima.
+    relays_.attach (processorRef_.getAPVTS());
+
     addAndMakeVisible (webView_);
     addAndMakeVisible (keyboard_);
     configureKeyboard();

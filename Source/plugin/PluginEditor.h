@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bridge/WebRelays.h"
 #include "plugin/PluginProcessor.h"
 
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -18,6 +19,11 @@ private:
     void configureKeyboard();
 
     SerumStyleSynthAudioProcessor& processorRef_;
+
+    /** Relay dei parametri verso la WebView: dichiarati prima di webView_ perché le
+        Options della WebView vengono costruite a partire da loro. */
+    bridge::WebRelays relays_;
+
     juce::WebBrowserComponent webView_;
 
     /** Native on-screen keyboard strip under the WebView (Serum/Vital style).
