@@ -164,6 +164,18 @@ struct MipTableTests final : juce::UnitTest
             expect (harmonicAmplitude (level4, 128, 10) > 0.05f, "l'armonica 10 deve restare");
             expect (harmonicAmplitude (level4, 128, 63) < 0.05f, "l'armonica 63 deve essere attenuata o assente");
         }
+
+        beginTest ("un frame troppo corto per tutti i livelli viene rifiutato, non crasha");
+        {
+            // 32 campioni < 2^kMaxLevel (64): al livello piu alto la dimensione andrebbe
+            // a zero e l'ordine della FFT sarebbe negativo. Deve tornare nullptr, non UB.
+            const auto bytes = makeHarmonicBlob (32, 1);
+            const auto view = dsp::parseXwt (bytes.data(), bytes.size());
+            expect (view.has_value());
+
+            const auto table = dsp::buildMipTable (*view);
+            expect (table == nullptr, "un frame da 32 campioni non puo riempire tutti i livelli");
+        }
     }
 };
 
@@ -296,6 +308,34 @@ struct OscillatorTests final : juce::UnitTest
 
             osc.setFramePosition (0.0f);
             expectWithinAbsoluteError (osc.getSample(), -1.0f, 0.05f);
+        }
+
+        beginTest ("frequenze negative o sopra la sample rate restano finite e in range");
+        {
+            const auto bytes = makeHarmonicBlob (2048, 1);
+            const auto view = dsp::parseXwt (bytes.data(), bytes.size());
+            const auto table = dsp::buildMipTable (*view);
+
+            dsp::WavetableOscillator osc;
+            osc.prepare (44100.0);
+            osc.setTable (table.get());
+            osc.setFramePosition (0.0f);
+
+            osc.setFrequencyHz (-441.0f); // frequenza negativa
+            for (int i = 0; i < 200; ++i)
+            {
+                const auto sample = osc.getSample();
+                expect (std::isfinite (sample), "campione " + juce::String (i) + " non finito");
+                expect (std::abs (sample) < 10.0f, "campione " + juce::String (i) + " fuori range");
+            }
+
+            osc.setFrequencyHz (96000.0f); // sopra la sample rate (44100 Hz)
+            for (int i = 0; i < 200; ++i)
+            {
+                const auto sample = osc.getSample();
+                expect (std::isfinite (sample), "campione " + juce::String (i) + " non finito");
+                expect (std::abs (sample) < 10.0f, "campione " + juce::String (i) + " fuori range");
+            }
         }
     }
 };

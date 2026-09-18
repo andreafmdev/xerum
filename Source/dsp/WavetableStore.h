@@ -9,7 +9,8 @@
 
 namespace dsp
 {
-/** Costruisce la piramide band-limited di un blob. Alloca: mai dal thread audio. */
+/** Costruisce la piramide band-limited di un blob. Alloca: mai dal thread audio.
+    nullptr se il frame è troppo corto per tutti i livelli (sotto 2^MipTable::kMaxLevel campioni). */
 std::unique_ptr<MipTable> buildMipTable (const BlobView& blob);
 
 /**

@@ -60,6 +60,14 @@ std::optional<BlobView> lookupBlob (const char* fileName, std::vector<float>& st
 
 std::unique_ptr<MipTable> buildMipTable (const BlobView& blob)
 {
+    // MipTable::kMaxLevel è fisso: al livello più alto la dimensione è frameSize >> kMaxLevel.
+    // Sotto 2^kMaxLevel campioni quella dimensione scende a zero (o l'ordine della FFT
+    // diventerebbe negativo, undefined behaviour), e comunque un livello "esistente ma mai
+    // scritto" sarebbe peggio di nessun livello: si rifiuta prima di costruire qualunque cosa.
+    // Le vere wavetable sono sempre da 2048 campioni, quindi questo non tocca l'uso reale.
+    if (blob.frameSize < (1 << MipTable::kMaxLevel))
+        return nullptr;
+
     auto table = std::make_unique<MipTable> (blob.frames, blob.frameSize);
 
     // Costruzione tavola: solo message thread (buildMipTable non è mai chiamata dal thread audio),

@@ -51,7 +51,14 @@ void WavetableOscillator::setTable (const MipTable* table) noexcept
 void WavetableOscillator::setFrequencyHz (float hz) noexcept
 {
     frequencyHz_ = hz;
-    phaseIncrement_ = (double) hz / sampleRate_;
+
+    // L'avvolgimento per campione in getSample() somma o sottrae 1 una sola volta:
+    // basta finché |phaseIncrement_| < 1. Con un incremento più grande (frequenza
+    // sopra la sample rate, positiva o negativa) un solo passo non riporterebbe la
+    // fase in [0, 1) e il cast a intero su una fase fuori range sarebbe undefined
+    // behaviour. juce::jlimit è solo un confronto: niente libm.
+    const double increment = (double) hz / sampleRate_;
+    phaseIncrement_ = juce::jlimit (-1.0, 1.0, increment);
     updateLevel();
 }
 
@@ -86,9 +93,14 @@ float WavetableOscillator::getSample() noexcept
     const float lo = sampleAt (table_->samples (frameLo_, level_), size, index, fraction);
     const float hi = sampleAt (table_->samples (frameHi_, level_), size, index, fraction);
 
+    // |phaseIncrement_| <= 1 (garantito in setFrequencyHz): un solo passo in ciascuna
+    // direzione riporta sempre phase_ in [0, 1), che è ciò che rende sicuro il cast
+    // sopra a ogni chiamata successiva.
     phase_ += phaseIncrement_;
     if (phase_ >= 1.0)
         phase_ -= 1.0;
+    else if (phase_ < 0.0)
+        phase_ += 1.0;
 
     return lo + (hi - lo) * frameMix_;
 }
