@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/MeterFrame.h"
 #include "engine/SynthEngine.h"
 #include "parameters/ParameterLayout.h"
 
@@ -42,10 +43,14 @@ public:
     /** Shared with the editor's on-screen keyboard; merged into the MIDI stream in processBlock(). */
     juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState_; }
 
+    /** Picchi per blocco pubblicati dal thread audio; letti dal timer dell'editor (task successivo). */
+    engine::MeterFrame& getMeters() noexcept { return meters_; }
+
 private:
     juce::AudioProcessorValueTreeState apvts_;
     juce::MidiKeyboardState keyboardState_;
     std::unique_ptr<engine::SynthEngine> engine_;
+    engine::MeterFrame meters_;
 
     // Puntatori grezzi ai valori normalizzati 0..1 dell'APVTS: letti solo con load() sul thread audio.
     std::atomic<float>* volumeParam_ { nullptr };

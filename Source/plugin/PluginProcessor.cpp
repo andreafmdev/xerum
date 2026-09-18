@@ -68,6 +68,16 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     keyboardState_.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
 
     engine_->process (buffer, midi);
+
+    // Picchi del blocco per l'editor. Il picco "in" è il segnale delle voci prima del master:
+    // finché il master è applicato dentro l'engine, approssimiamo in = out / gain.
+    // store(jmax(load, peak)) non è una CAS: va bene perché il thread audio è l'unico scrittore
+    // e il lettore (timer dell'editor) fa solo exchange(0), quindi non c'è race sulla read-modify-write.
+    float peak = 0.0f;
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        peak = juce::jmax (peak, buffer.getMagnitude (ch, 0, buffer.getNumSamples()));
+    meters_.outPeak.store (juce::jmax (meters_.outPeak.load (std::memory_order_relaxed), peak), std::memory_order_relaxed);
+    meters_.inPeak.store  (juce::jmax (meters_.inPeak.load  (std::memory_order_relaxed), peak), std::memory_order_relaxed);
 }
 
 juce::AudioProcessorEditor* SerumStyleSynthAudioProcessor::createEditor()
