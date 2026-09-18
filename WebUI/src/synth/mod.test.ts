@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { lfoHz, lfoShape, liveValue, addMod, modsFor, SOURCE_TONE, type ModAssignment } from "./mod";
+import { lfoHz, lfoShape, liveValue, modsFor, SOURCE_TONE, type ModAssignment } from "./mod";
+import { addModPure } from "../juce/hooks";
 
 describe("lfoShape", () => {
   it("sine", () => {
@@ -50,13 +51,13 @@ describe("liveValue", () => {
   });
 });
 
-describe("addMod / modsFor", () => {
+describe("addModPure / modsFor", () => {
   const mods: ModAssignment[] = [{ src: "lfo", target: "cutoff", depth: 0.25 }];
   it("adds a new assignment with default depth", () => {
-    expect(addMod(mods, "env", "wtpos")).toEqual([...mods, { src: "env", target: "wtpos", depth: 0.3 }]);
+    expect(addModPure(mods, "env", "wtpos")).toEqual([...mods, { src: "env", target: "wtpos", depth: 0.3 }]);
   });
   it("does not duplicate an existing pair", () => {
-    expect(addMod(mods, "lfo", "cutoff")).toBe(mods);
+    expect(addModPure(mods, "lfo", "cutoff")).toBe(mods);
   });
   it("filters by target", () => {
     expect(modsFor(mods, "cutoff")).toHaveLength(1);
