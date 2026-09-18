@@ -55,7 +55,7 @@ export function Fader({
         data-slot="fader-track"
         data-dragging={dragging}
         className={cn(
-          "flex items-stretch gap-2",
+          "flex items-stretch gap-1.5",
           vertical ? "flex-row" : "flex-col",
           disabled && "opacity-50",
         )}
@@ -115,11 +115,11 @@ export function Fader({
       </div>
 
       <div className="flex flex-col items-center">
-        <span className={cn("text-label", disabled ? "text-text-dim" : "text-muted-foreground")}>{label}</span>
+        <span className={cn("text-(length:--text-label)/4", disabled ? "text-text-dim" : "text-muted-foreground")}>{label}</span>
         <span
           data-testid="fader-readout"
           className={cn(
-            "font-mono text-label tabular-nums",
+            "font-mono text-(length:--text-label)/4 tabular-nums",
             disabled ? "text-text-dim" : dragging ? "text-(--tone)" : "text-foreground",
           )}
         >

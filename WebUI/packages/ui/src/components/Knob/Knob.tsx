@@ -195,12 +195,12 @@ export function Knob({
       </div>
 
       <div className="flex flex-col items-center">
-        <span className={cn("text-label", disabled ? "text-text-dim" : "text-muted-foreground")}>{label}</span>
+        <span className={cn("text-(length:--text-label)/4", disabled ? "text-text-dim" : "text-muted-foreground")}>{label}</span>
         <span
           data-testid="knob-readout"
           data-dragging={dragging}
           className={cn(
-            "font-mono text-label tabular-nums",
+            "font-mono text-(length:--text-label)/4 tabular-nums",
             disabled ? "text-text-dim" : dragging ? "text-(--tone)" : "text-foreground",
           )}
         >

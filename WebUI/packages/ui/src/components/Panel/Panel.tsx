@@ -20,7 +20,7 @@ export function Panel({ title, tone, actions, children, className }: PanelProps)
       data-slot="panel"
       size="sm"
       className={cn(
-        "gap-2 overflow-visible rounded-plate bg-surface-1 pt-2 pb-0 shadow-panel ring-0",
+        "gap-2 overflow-visible rounded-plate! bg-surface-1 pt-2 pb-0 shadow-panel ring-0",
         className,
       )}
       style={toneStyle(tone)}
@@ -30,7 +30,7 @@ export function Panel({ title, tone, actions, children, className }: PanelProps)
           <SectionHeader title={title} actions={actions} />
         </div>
       )}
-      <CardContent className="flex flex-col gap-3 px-3 pb-3">{children}</CardContent>
+      <CardContent className="flex flex-1 flex-col gap-3 px-3 pb-3">{children}</CardContent>
     </Card>
   );
 }

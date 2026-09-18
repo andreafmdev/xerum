@@ -16,12 +16,12 @@ export function ValueReadout({ value, label, mono = true, className }: ValueRead
       data-slot="value-readout"
       className={cn(
         // Finestrella incassata: il valore si legge come su un display, non come un badge.
-        "h-6 gap-1.5 rounded-control bg-well px-1.5 text-label text-(--tone) shadow-well",
+        "h-6 gap-1.5 rounded-control! bg-well px-1.5 text-(length:--text-label)/4 text-(--tone) shadow-well",
         mono && "font-mono tabular-nums",
         className,
       )}
     >
-      {label && <span className="text-label text-muted-foreground">{label}</span>}
+      {label && <span className="text-(length:--text-label)/4 text-muted-foreground">{label}</span>}
       <span>{value}</span>
     </Badge>
   );

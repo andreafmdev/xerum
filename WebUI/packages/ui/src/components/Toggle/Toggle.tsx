@@ -32,7 +32,7 @@ export function Toggle({ checked, onChange, label, tone, disabled = false, class
         aria-label={label}
         className={cn(
           // Interruttore quadrato incassato: il pill iOS non appartiene a un pannello.
-          "rounded-control border-0 bg-well! px-0.5 shadow-well data-[size=sm]:h-4 data-[size=sm]:w-7",
+          "rounded-control! border-0 bg-well! px-0.5 shadow-well data-[size=sm]:h-4 data-[size=sm]:w-7",
           "focus-visible:ring-2 focus-visible:ring-(--tone) focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           "[&_[data-slot=switch-thumb]]:size-3 [&_[data-slot=switch-thumb]]:rounded-[2px]",
           "[&_[data-slot=switch-thumb]]:bg-linear-to-b [&_[data-slot=switch-thumb]]:from-cap-hi [&_[data-slot=switch-thumb]]:to-cap-lo",
@@ -52,7 +52,7 @@ export function Toggle({ checked, onChange, label, tone, disabled = false, class
         <label
           htmlFor={switchId}
           className={cn(
-            "cursor-pointer text-label select-none",
+            "cursor-pointer text-(length:--text-label)/4 select-none",
             checked ? "text-foreground" : "text-muted-foreground",
             disabled && "opacity-50",
           )}

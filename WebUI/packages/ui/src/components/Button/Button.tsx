@@ -16,7 +16,7 @@ export function Button({ tone, variant = "default", className, style, ...props }
       variant={variant}
       style={{ ...toneStyle(tone), ...style }}
       className={cn(
-        "rounded-control",
+        "rounded-control!",
         // Tasto rialzato: bordo scuro alla base, ombra di contatto, affonda alla pressione.
         raised && "border border-edge-dark shadow-cap active:shadow-none",
         variant === "default" && !toned && "bg-cap-lo bg-linear-to-b from-cap-hi to-cap-lo text-foreground hover:from-cap-rim",

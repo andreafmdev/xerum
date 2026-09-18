@@ -29,7 +29,7 @@ export function Tabs({ value, onChange, items, tone, className }: TabsProps) {
             value={item.value}
             className={cn(
               // Due piastrine: quella attiva è premuta dentro la piastra, non sottolineata.
-              "h-6 flex-none rounded-control border border-transparent px-2 text-label font-medium text-muted-foreground after:hidden hover:text-foreground",
+              "h-6 flex-none rounded-control! border border-transparent px-2 text-(length:--text-label)/4 font-medium text-muted-foreground after:hidden hover:text-foreground",
               "data-active:border-edge-dark data-active:bg-well! data-active:text-(--tone) data-active:shadow-well",
             )}
           >
