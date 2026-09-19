@@ -393,6 +393,54 @@ struct EngineParamsTests final : juce::UnitTest
             expect (maxJump < 0.03f, "salto massimo fra campioni " + juce::String (maxJump));
         }
 
+        beginTest ("ribattere una nota che suona gia\' non produce un gradino");
+        {
+            // Legato ribattuto: note-on sulla stessa nota senza note-off in mezzo. Prima di
+            // questo test VoiceManager::noteOn faceva kill() sulla voce esistente, cioe'
+            // azzerava di colpo inviluppo, fase dell'oscillatore e stato del filtro: un gradino
+            // da ampiezza piena a zero, misurato a 0.176 a fondo scala. E' il clic che si sente
+            // a ogni nota ripetuta.
+            engine::SynthEngine synth;
+            prepareEngine (synth, store);
+
+            auto p = defaultParams();
+            p.attackSeconds = 0.005f;
+            p.decaySeconds = 0.005f;
+            p.sustain = 1.0f;
+            p.filterOn = false;
+            synth.setParams (p);
+            synth.setMasterGainLinear (1.0f);
+
+            juce::AudioBuffer<float> buffer (2, 128);
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            buffer.clear();
+            synth.process (buffer, midi);
+            midi.clear();
+
+            // Regime: l'inviluppo e' arrivato al sustain e l'onda scorre.
+            float previous = 0.0f;
+            for (int b = 0; b < 40; ++b)
+            {
+                buffer.clear();
+                synth.process (buffer, midi);
+                previous = buffer.getSample (0, buffer.getNumSamples() - 1);
+            }
+
+            // Secondo note-on sulla stessa nota, senza note-off.
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            buffer.clear();
+            synth.process (buffer, midi);
+
+            float maxJump = std::abs (buffer.getSample (0, 0) - previous);
+            for (int i = 1; i < buffer.getNumSamples(); ++i)
+                maxJump = juce::jmax (maxJump, std::abs (buffer.getSample (0, i) - buffer.getSample (0, i - 1)));
+
+            // La soglia e' la pendenza naturale dell'onda a questa nota (~0.02 fra campioni
+            // adiacenti), con margine: un kill() mascherato ricadrebbe a 0.17 e verrebbe preso.
+            expect (maxJump < 0.05f, "salto massimo fra campioni " + juce::String (maxJump));
+        }
+
         beginTest ("oct/semi: il valore normalizzato si arrotonda, non si tronca");
         {
             // Combinazioni segnalate dalla review come sbagliate con un cast troncante
@@ -825,3 +873,39 @@ struct ParamCollectTests final : juce::UnitTest
 };
 
 static ParamCollectTests paramCollectTests;
+
+/**
+ * Le conversioni da valore normalizzato a valore reale sono state estratte da
+ * collectEngineParams in funzioni proprie (params::cutoffHzFromRaw e compagne) perche' il
+ * percorso modulato deve usare le stesse: questo test e' il guardiano che le tiene allineate.
+ * Se qualcuno cambia una formula in un posto solo, qui si spacca.
+ */
+struct ParamConversionTests final : juce::UnitTest
+{
+    ParamConversionTests() : juce::UnitTest ("conversioni dei parametri", "params") {}
+
+    void runTest() override
+    {
+        beginTest ("le conversioni estratte coincidono con quelle di collectEngineParams");
+        {
+            // Griglia fitta: una divergenza anche solo agli estremi della corsa si vede.
+            for (int i = 0; i <= 20; ++i)
+            {
+                const auto raw = (float) i / 20.0f;
+
+                const auto p = params::collectEngineParams (
+                    [raw] (params::ParamSlot) noexcept { return raw; });
+
+                expectWithinAbsoluteError (params::cutoffHzFromRaw (raw), p.cutoffHz, 1.0e-2f);
+                expectWithinAbsoluteError (params::resonanceQFromRaw (raw), p.resonanceQ, 1.0e-4f);
+                expectWithinAbsoluteError (params::framePositionFromRaw (raw), p.framePosition, 1.0e-6f);
+                expectWithinAbsoluteError (params::levelGainFromRaw (raw), p.level, 1.0e-6f);
+                expectWithinAbsoluteError (params::panFromRaw (raw), p.pan, 1.0e-6f);
+                expectWithinAbsoluteError (params::fineCentsFromRaw (raw), p.fineCents, 1.0e-3f);
+                expectWithinAbsoluteError (params::driveGainFromRaw (raw), p.driveGain, 1.0e-4f);
+            }
+        }
+    }
+};
+
+static ParamConversionTests paramConversionTests;

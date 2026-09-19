@@ -2,6 +2,7 @@
 
 #include "dsp/StateVariableFilter.h"
 #include "engine/EngineParams.h"
+#include "parameters/ParamSlot.h"
 #include "parameters/ParameterDenormalise.h"
 #include "parameters/ParameterTable.h"
 
@@ -12,21 +13,6 @@
 
 namespace params
 {
-/**
- * Identifica un parametro grezzo per `collectEngineParams` senza passare per il suo nome:
- * l'accessore (`RawAccessor` sotto) prende uno `ParamSlot`, non una stringa, cosi' non c'e'
- * niente da instradare a runtime — chi implementa l'accessore risolve `id -> puntatore` una
- * volta sola, alla costruzione (vedi PluginProcessor::paramSlots_), e qui dentro e' solo un
- * indice di array. Ordine arbitrario, ma stabile: e' un dettaglio interno fra questo header e
- * chi scrive l'accessore, non un ABI pubblico.
- */
-enum class ParamSlot : int
-{
-    oscOn, wtpos, oct, semi, fine, level, filtOn, ftype, slope, cutoff,
-    res, drive, keytrk, att, dec, sus, rel, envVel, pan, bypass,
-    count
-};
-
 /** `ftype` è un AudioParameterChoice: il valore grezzo è già l'indice 0/1/2. */
 inline dsp::StateVariableFilter::Type filterTypeFromChoice (float rawIndex) noexcept
 {
@@ -36,6 +22,66 @@ inline dsp::StateVariableFilter::Type filterTypeFromChoice (float rawIndex) noex
         case 2:  return dsp::StateVariableFilter::Type::bandPass;
         default: return dsp::StateVariableFilter::Type::lowPass;
     }
+}
+
+/**
+ * Da valore normalizzato 0..1 a valore reale, un target per funzione.
+ *
+ * Esistono come funzioni e non in linea dentro collectEngineParams perche' il percorso
+ * modulato (SynthVoice, quando il mod matrix ha una route su quel parametro) deve applicare
+ * esattamente la stessa aritmetica: due copie della stessa formula divergono alla prima
+ * modifica, e il sintomo sarebbe un cutoff che finisce altrove a seconda che lo muova un LFO
+ * o la mano dell'utente.
+ */
+inline float cutoffHzFromRaw (float raw) noexcept
+{
+    constexpr auto* spec = params::find ("cutoff");
+    static_assert (spec != nullptr, "cutoff non e' in ParameterTable.h");
+    return params::denormalise (*spec, raw);
+}
+
+inline float resonanceQFromRaw (float raw) noexcept
+{
+    constexpr auto* spec = params::find ("res");
+    static_assert (spec != nullptr, "res non e' in ParameterTable.h");
+
+    // res 0..100 % -> Q, esponenziale da Butterworth (0.707) a 12. Esponenziale e non lineare
+    // perche' Q e' percepito in rapporti: con una mappa lineare la meta' bassa della corsa era
+    // gia' tutta risonante (a res 30 % il vecchio jmap dava Q 6.5, +16 dB di picco) e la meta'
+    // alta non cambiava quasi nulla. Il tetto scende da 20 a 12: sopra, il filtro e' di fatto
+    // un oscillatore e il picco non e' piu' governabile. std::pow gira una volta per blocco.
+    return dsp::StateVariableFilter::kButterworthQ
+               * std::pow (12.0f / dsp::StateVariableFilter::kButterworthQ,
+                           params::denormalise (*spec, raw) * 0.01f);
+}
+
+/** wtpos e' gia' 0..1 sul set di frame: nessuna denormalizzazione. */
+inline float framePositionFromRaw (float raw) noexcept { return params::clamp01 (raw); }
+
+/** `level` ha mappa Db ma il valore grezzo e' gia' il guadagno lineare (vedi
+    WebUI/src/synth/mapping.ts): denormalise() qui darebbe un dB, sbagliato. */
+inline float levelGainFromRaw (float raw) noexcept { return params::clamp01 (raw); }
+
+inline float panFromRaw (float raw) noexcept
+{
+    constexpr auto* spec = params::find ("pan");
+    static_assert (spec != nullptr, "pan non e' in ParameterTable.h");
+    return params::denormalise (*spec, raw) * 0.02f; // -50..50 -> -1..1
+}
+
+inline float fineCentsFromRaw (float raw) noexcept
+{
+    constexpr auto* spec = params::find ("fine");
+    static_assert (spec != nullptr, "fine non e' in ParameterTable.h");
+    return params::denormalise (*spec, raw);
+}
+
+/** drive 0..24 dB -> guadagno lineare pre-saturazione. */
+inline float driveGainFromRaw (float raw) noexcept
+{
+    constexpr auto* spec = params::find ("drive");
+    static_assert (spec != nullptr, "drive non e' in ParameterTable.h");
+    return juce::Decibels::decibelsToGain (params::denormalise (*spec, raw));
 }
 
 /**
@@ -59,30 +105,24 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
 
     constexpr auto* specOct = params::find ("oct");
     constexpr auto* specSemi = params::find ("semi");
-    constexpr auto* specFine = params::find ("fine");
-    constexpr auto* specCutoff = params::find ("cutoff");
-    constexpr auto* specRes = params::find ("res");
-    constexpr auto* specDrive = params::find ("drive");
     constexpr auto* specKeytrk = params::find ("keytrk");
     constexpr auto* specAtt = params::find ("att");
     constexpr auto* specDec = params::find ("dec");
     constexpr auto* specSus = params::find ("sus");
     constexpr auto* specRel = params::find ("rel");
     constexpr auto* specEnvVel = params::find ("envVel");
-    constexpr auto* specPan = params::find ("pan");
 
     // Se uno di questi manca vuol dire che parameters.json/ParameterTable.h e' cambiato
     // sotto i piedi: meglio un errore di compilazione qui che una dereferenziazione di un
-    // puntatore nullo a runtime.
-    static_assert (specOct != nullptr && specSemi != nullptr && specFine != nullptr
-                       && specCutoff != nullptr && specRes != nullptr && specDrive != nullptr
-                       && specKeytrk != nullptr && specAtt != nullptr && specDec != nullptr
-                       && specSus != nullptr && specRel != nullptr && specEnvVel != nullptr
-                       && specPan != nullptr,
+    // puntatore nullo a runtime. I sette target modulabili non compaiono qui: le loro spec
+    // stanno dentro le funzioni di conversione sopra, con lo stesso static_assert.
+    static_assert (specOct != nullptr && specSemi != nullptr && specKeytrk != nullptr
+                       && specAtt != nullptr && specDec != nullptr && specSus != nullptr
+                       && specRel != nullptr && specEnvVel != nullptr,
                    "una spec di parametro usata da collectEngineParams non e' in ParameterTable.h");
 
     p.oscOn = rawFor (ParamSlot::oscOn) >= 0.5f;
-    p.framePosition = rawFor (ParamSlot::wtpos); // gia' 0..1 sul set di frame, nessuna denormalizzazione
+    p.framePosition = framePositionFromRaw (rawFor (ParamSlot::wtpos));
 
     // roundToInt, non un cast troncante: denormalise() torna un float che per via degli
     // arrotondamenti in virgola mobile puo' cadere leggermente sotto l'intero vero (es.
@@ -90,29 +130,15 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     // un semitono/ottava (bug corretto nella Task 7).
     p.octave = juce::roundToInt (params::denormalise (*specOct, rawFor (ParamSlot::oct)));
     p.semitones = juce::roundToInt (params::denormalise (*specSemi, rawFor (ParamSlot::semi)));
-    p.fineCents = params::denormalise (*specFine, rawFor (ParamSlot::fine));
-
-    // `level` ha mappa Db, ma il valore grezzo e' gia' il guadagno lineare (vedi
-    // WebUI/src/synth/mapping.ts): denormalise() qui darebbe un dB, sbagliato.
-    p.level = rawFor (ParamSlot::level);
+    p.fineCents = fineCentsFromRaw (rawFor (ParamSlot::fine));
+    p.level = levelGainFromRaw (rawFor (ParamSlot::level));
 
     p.filterOn = rawFor (ParamSlot::filtOn) >= 0.5f;
     p.filterType = filterTypeFromChoice (rawFor (ParamSlot::ftype));
     p.filterStages = rawFor (ParamSlot::slope) >= 0.5f ? 2 : 1;
-    p.cutoffHz = params::denormalise (*specCutoff, rawFor (ParamSlot::cutoff));
-
-    // res 0..100 % -> Q, esponenziale da Butterworth (0.707) a 12. Esponenziale e non
-    // lineare perche' Q e' percepito in rapporti: con una mappa lineare la meta' bassa della
-    // corsa era gia' tutta risonante (a res 30 % il vecchio jmap dava Q 6.5, +16 dB di picco)
-    // e la meta' alta non cambiava quasi nulla. Il tetto scende da 20 a 12: sopra, il filtro
-    // e' di fatto un oscillatore e il picco non e' piu' governabile dalla compensazione in
-    // StateVariableFilter. std::pow gira una volta per blocco, non per campione.
-    p.resonanceQ = dsp::StateVariableFilter::kButterworthQ
-                       * std::pow (12.0f / dsp::StateVariableFilter::kButterworthQ,
-                                   params::denormalise (*specRes, rawFor (ParamSlot::res)) * 0.01f);
-
-    // drive 0..24 dB -> guadagno lineare pre-saturazione.
-    p.driveGain = juce::Decibels::decibelsToGain (params::denormalise (*specDrive, rawFor (ParamSlot::drive)));
+    p.cutoffHz = cutoffHzFromRaw (rawFor (ParamSlot::cutoff));
+    p.resonanceQ = resonanceQFromRaw (rawFor (ParamSlot::res));
+    p.driveGain = driveGainFromRaw (rawFor (ParamSlot::drive));
     p.keyTrack = params::denormalise (*specKeytrk, rawFor (ParamSlot::keytrk)) * 0.01f;
 
     p.attackSeconds = params::denormalise (*specAtt, rawFor (ParamSlot::att)) * 0.001f;   // la mappa e' in ms
@@ -121,7 +147,7 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.releaseSeconds = params::denormalise (*specRel, rawFor (ParamSlot::rel)) * 0.001f;
     p.velocityAmount = params::denormalise (*specEnvVel, rawFor (ParamSlot::envVel)) * 0.01f;
 
-    p.pan = params::denormalise (*specPan, rawFor (ParamSlot::pan)) * 0.02f;             // -50..50 -> -1..1
+    p.pan = panFromRaw (rawFor (ParamSlot::pan));
     p.bypass = rawFor (ParamSlot::bypass) >= 0.5f;
 
     return p;
