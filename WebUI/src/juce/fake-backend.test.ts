@@ -106,4 +106,27 @@ describe("mask delle note", () => {
     const mask = noteMaskOf(ZERO_METERS);
     for (let n = 0; n < 128; n++) expect(isNoteActive(mask, n)).toBe(false);
   });
+
+  it("il bit più alto di ognuna delle quattro parole è vero: 31, 63, 95, 127", () => {
+    // Ognuna delle quattro parole con solo il proprio bit 31 acceso: qui `1 << 31` è negativo
+    // (coercizione a int32 di JS) in tutte e quattro le posizioni, non solo in una.
+    const frame = { ...ZERO_METERS, n0: 1 << 31, n1: 1 << 31, n2: 1 << 31, n3: 1 << 31 };
+    const mask = noteMaskOf(frame);
+    expect(isNoteActive(mask, 31)).toBe(true);
+    expect(isNoteActive(mask, 63)).toBe(true);
+    expect(isNoteActive(mask, 95)).toBe(true);
+    expect(isNoteActive(mask, 127)).toBe(true);
+  });
+
+  it("il confine 63/64 fra n1 e n2 cade dalla parte giusta in entrambe le direzioni", () => {
+    // Solo il bit più alto di n1 (nota 63): 63 vero, 64 falso.
+    const onlyN1Top = noteMaskOf({ ...ZERO_METERS, n1: 1 << 31 });
+    expect(isNoteActive(onlyN1Top, 63)).toBe(true);
+    expect(isNoteActive(onlyN1Top, 64)).toBe(false);
+
+    // Solo il bit più basso di n2 (nota 64): 64 vero, 63 falso.
+    const onlyN2Bottom = noteMaskOf({ ...ZERO_METERS, n2: 1 << 0 });
+    expect(isNoteActive(onlyN2Bottom, 64)).toBe(true);
+    expect(isNoteActive(onlyN2Bottom, 63)).toBe(false);
+  });
 });
