@@ -86,6 +86,14 @@ export class FakeBackend implements Backend {
         const env = since < 0.08 ? since / 0.08 : 0.35 + 0.65 * Math.exp(-6 * (since - 0.08));
         const env2 = Math.sin(Math.min(1, since * 1.4) * Math.PI * 0.5);
 
+        // La stessa nota finta che muove env/vel accende il suo bit: senza, in Storybook la
+        // tastiera resterebbe spenta mentre tutto il resto respira. Questo clock non conosce un
+        // "rilascio" — le note finte si susseguono senza pause — quindi la nota corrente e'
+        // sempre accesa, non solo durante l'attacco.
+        const fakeNote = 48 + (note % 12);
+        const bits = [0, 0, 0, 0];
+        bits[fakeNote >> 5] |= 1 << (fakeNote & 31);
+
         this.emitMeters({
           in: audio * this.param("level").get(),
           out: audio * this.param("volume").get(),
@@ -95,6 +103,7 @@ export class FakeBackend implements Backend {
           vel: 0.55 + 0.4 * Math.sin(note * 2.1),
           mw: 0.5 + 0.5 * Math.sin(t * 0.3),
           arpStep: Math.floor(t * 8) % 16,
+          n0: bits[0]!, n1: bits[1]!, n2: bits[2]!, n3: bits[3]!,
         });
       }
       this.raf = requestAnimationFrame(tick);

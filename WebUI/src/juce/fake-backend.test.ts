@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { FakeBackend } from "./fake-backend";
-import { ZERO_METERS } from "./backend";
+import { isNoteActive, noteMaskOf, ZERO_METERS } from "./backend";
 import { PARAM_SPECS } from "../synth/params.generated";
 import { PRESETS } from "../synth/presets.generated";
 
@@ -87,5 +87,23 @@ describe("FakeBackend loadPreset", () => {
     b.param("cutoff").set(0.1);
     await b.loadPreset(9999);
     expect(b.param("cutoff").get()).toBe(0.1);
+  });
+});
+
+describe("mask delle note", () => {
+  it("legge il bit giusto in ognuna delle quattro parole", () => {
+    const frame = { ...ZERO_METERS, n0: 1 << 5, n1: 1 << 0, n2: 1 << 31, n3: 1 << 7 };
+    const mask = noteMaskOf(frame);
+    expect(isNoteActive(mask, 5)).toBe(true);
+    expect(isNoteActive(mask, 32)).toBe(true);
+    expect(isNoteActive(mask, 95)).toBe(true);
+    expect(isNoteActive(mask, 103)).toBe(true);
+    expect(isNoteActive(mask, 6)).toBe(false);
+    expect(isNoteActive(mask, 127)).toBe(false);
+  });
+
+  it("un frame a zero non ha note accese", () => {
+    const mask = noteMaskOf(ZERO_METERS);
+    for (let n = 0; n < 128; n++) expect(isNoteActive(mask, n)).toBe(false);
   });
 });

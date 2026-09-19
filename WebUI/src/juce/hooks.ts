@@ -161,6 +161,11 @@ export function useMeters(): MeterFrame {
           vel: finite(m.vel),
           mw: finite(m.mw),
           arpStep: finite(m.arpStep),
+          // Il mask, come lfo/mw, e' uno stato istantaneo: passa intatto, nessun decay.
+          n0: finite(m.n0),
+          n1: finite(m.n1),
+          n2: finite(m.n2),
+          n3: finite(m.n3),
         }));
       }),
     [backend],
