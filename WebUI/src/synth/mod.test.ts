@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lfoShape, liveValue, modsFor, SOURCE_TONE, type ModAssignment } from "./mod";
+import { lfoShape, liveValue, modsFor, MOD_SOURCES, SOURCE_LABEL, SOURCE_TONE, type ModAssignment } from "./mod";
 import { addModPure } from "../juce/hooks";
 
 describe("lfoShape", () => {
@@ -26,8 +26,18 @@ describe("lfoShape", () => {
   it("wraps phase", () => expect(lfoShape("Saw", 1.25)).toBeCloseTo(lfoShape("Saw", 0.25)));
 });
 
+describe("le sorgenti del matrix", () => {
+  it("ogni sorgente ha tono ed etichetta, e nessuna etichetta e' ripetuta", () => {
+    for (const src of MOD_SOURCES) {
+      expect(SOURCE_TONE[src]).toBeTruthy();
+      expect(SOURCE_LABEL[src]).toBeTruthy();
+    }
+    expect(new Set(MOD_SOURCES.map((s) => SOURCE_LABEL[s])).size).toBe(MOD_SOURCES.length);
+  });
+});
+
 describe("liveValue", () => {
-  const sources = { lfo: 1, env: 0.5, vel: 0.7, mw: 0.5 };
+  const sources = { lfo: 1, env: 0.5, env2: 0.25, vel: 0.7, mw: 0.5 };
   it("returns value without mods", () => expect(liveValue(0.4, [], sources)).toBe(0.4));
   it("lfo is bipolar depth × lfo", () => {
     expect(liveValue(0.4, [{ src: "lfo", target: "cutoff", depth: 0.2 }], { ...sources, lfo: -1 })).toBeCloseTo(0.2);
@@ -37,6 +47,12 @@ describe("liveValue", () => {
   });
   it("clamps to 0..1", () => {
     expect(liveValue(0.9, [{ src: "env", target: "cutoff", depth: 1 }], sources)).toBe(1);
+  });
+  it("env2 is a source of its own: same route, same depth, different level", () => {
+    const viaEnv = liveValue(0.4, [{ src: "env", target: "cutoff", depth: 0.4 }], sources);
+    const viaEnv2 = liveValue(0.4, [{ src: "env2", target: "cutoff", depth: 0.4 }], sources);
+    expect(viaEnv).toBeCloseTo(0.6);
+    expect(viaEnv2).toBeCloseTo(0.5);
   });
 });
 
@@ -53,7 +69,10 @@ describe("addModPure / modsFor", () => {
     expect(modsFor(mods, "res")).toHaveLength(0);
   });
   it("maps sources to tones", () => {
-    expect(SOURCE_TONE).toEqual({ lfo: "lfo", env: "env", vel: "master", mw: "filter" });
+    expect(SOURCE_TONE).toEqual({ lfo: "lfo", env: "env", env2: "fx", vel: "master", mw: "filter" });
+    // Nessuna sorgente puo' condividere il tono con un'altra: e' l'unica cosa che distingue due
+    // anelli di modulazione sullo stesso knob.
+    expect(new Set(Object.values(SOURCE_TONE)).size).toBe(MOD_SOURCES.length);
   });
 });
 

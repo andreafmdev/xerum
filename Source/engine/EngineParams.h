@@ -40,6 +40,18 @@ struct EngineParams
     float releaseSeconds { 0.1f };
     float velocityAmount { 0.0f };   // 0..1: quanto la velocity scala il picco
 
+    /**
+     * Il secondo inviluppo, quello che non governa l'ampiezza: alimenta la sorgente
+     * engine::ModSource::env2 e nient'altro. Stesse mappe e stessi default dei quattro
+     * corrispondenti d'ampiezza, cosi' un patch che non lo tocca si comporta in modo
+     * prevedibile; la velocity non lo scala (il suo picco e' sempre 1), perche' `vel` e' gia'
+     * una sorgente per conto suo e moltiplicare le due qui renderebbe impossibile separarle.
+     */
+    float attack2Seconds { 0.01f };
+    float decay2Seconds { 0.1f };
+    float sustain2 { 1.0f };
+    float release2Seconds { 0.1f };
+
     float pan { 0.0f };              // -1..1
     bool bypass { false };
 

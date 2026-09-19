@@ -10,6 +10,8 @@ bool sourceFromString (const juce::String& id, ModSource& out) noexcept
 {
     if (id == "lfo") { out = ModSource::lfo; return true; }
     if (id == "env") { out = ModSource::env; return true; }
+    // Confronto esatto, non un prefisso: "env" e "env2" sono due sorgenti diverse.
+    if (id == "env2") { out = ModSource::env2; return true; }
     if (id == "vel") { out = ModSource::vel; return true; }
     if (id == "mw")  { out = ModSource::mw;  return true; }
     return false;

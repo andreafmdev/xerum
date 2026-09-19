@@ -1252,6 +1252,46 @@ struct ParamCollectTests final : juce::UnitTest
             expectWithinAbsoluteError (p.velocityAmount, 0.6f, 1.0e-5f);
         }
 
+        beginTest ("att2/dec2/sus2/rel2: il secondo inviluppo arriva in secondi e frazione");
+        {
+            FakeRaw raw;
+            raw.values[params::ParamSlot::att2] = rawForMsSquared ("att2", 250.0f);
+            raw.values[params::ParamSlot::dec2] = rawForMsSquared ("dec2", 750.0f);
+            raw.values[params::ParamSlot::sus2] = rawForLinear ("sus2", 30.0f);
+            raw.values[params::ParamSlot::rel2] = rawForMsSquared ("rel2", 1500.0f);
+            const auto p = params::collectEngineParams (raw);
+
+            expectWithinAbsoluteError (p.attack2Seconds, 0.25f, 1.0e-4f);
+            expectWithinAbsoluteError (p.decay2Seconds, 0.75f, 1.0e-4f);
+            expectWithinAbsoluteError (p.sustain2, 0.3f, 1.0e-5f);
+            expectWithinAbsoluteError (p.release2Seconds, 1.5f, 1.0e-4f);
+        }
+
+        beginTest ("env2 riusa mappe, range e default dei quattro di env");
+        {
+            // Non e' pignoleria: e' la promessa fatta a chi carica un patch vecchio. I quattro
+            // parametri nuovi non compaiono in nessuno stato salvato ne' in nessun preset di
+            // fabbrica, quindi cadono sul default — e un default diverso da quello dell'env
+            // d'ampiezza renderebbe il secondo inviluppo una sorpresa invece che un punto di
+            // partenza prevedibile.
+            const std::pair<const char*, const char*> pairs[] = {
+                { "att", "att2" }, { "dec", "dec2" }, { "sus", "sus2" }, { "rel", "rel2" }
+            };
+
+            for (const auto& [firstId, secondId] : pairs)
+            {
+                const auto* a = params::find (firstId);
+                const auto* b = params::find (secondId);
+                expect (a != nullptr && b != nullptr, juce::String (firstId) + "/" + secondId + ": spec mancante");
+
+                expect (a->kind == b->kind, juce::String (secondId) + ": kind diverso da " + firstId);
+                expect (a->map == b->map, juce::String (secondId) + ": mappa diversa da " + firstId);
+                expectWithinAbsoluteError (b->min, a->min, 0.0f, juce::String (secondId) + ": min diverso");
+                expectWithinAbsoluteError (b->max, a->max, 0.0f, juce::String (secondId) + ": max diverso");
+                expectWithinAbsoluteError (b->def, a->def, 0.0f, juce::String (secondId) + ": default diverso");
+            }
+        }
+
         beginTest ("pan: da -50..+50 a -1..+1");
         {
             for (float target : { -50.0f, 0.0f, 25.0f, 50.0f })
@@ -1562,6 +1602,162 @@ struct ModulationVoiceTests final : juce::UnitTest
             expectEquals ((int) withNull.size(), (int) withEmpty.size());
             for (size_t i = 0; i < withNull.size(); ++i)
                 expectWithinAbsoluteError (withEmpty[i], withNull[i], 0.0f);
+        }
+
+        beginTest ("env2 e' indipendente da env: stessa route, tempi diversi, traiettorie diverse");
+        {
+            // Il buco che questo test chiude. Finche' la sorgente `env` era l'inviluppo
+            // d'ampiezza, una route env -> cutoff era costretta alla forma del volume: con
+            // `sus` a 1 (nota tenuta a livello costante) il cutoff *non poteva* muoversi.
+            // `env2` ha i propri quattro tempi, quindi puo' chiudere il filtro mentre la nota
+            // tiene — ed e' esattamente cio' che si misura qui.
+            dsp::WavetableStore store; store.setActive (1);
+
+            struct Run { float early; float late; };
+
+            // Tutto identico fra le due rese tranne la sorgente della singola route: stesso
+            // depth, stessa base di cutoff, stesso inviluppo d'ampiezza. Se `env2` fosse un
+            // alias di `env` i due risultati coinciderebbero campione per campione.
+            const auto run = [&store] (engine::ModSource src) -> Run
+            {
+                engine::SynthEngine synth; prepareEngine (synth, store);
+
+                engine::ModSnapshot mods;
+                mods.count = 1;
+                mods.routes[0] = { src, engine::modTargetIndexFor (params::ParamSlot::cutoff), 1.0f };
+
+                auto p = defaultParams();
+                p.filterOn = true;
+                p.modBase[(size_t) engine::modTargetIndexFor (params::ParamSlot::cutoff)] = 0.15f;
+
+                // Inviluppo d'ampiezza: sale in un millisecondo e poi tiene. Il volume e'
+                // quindi costante per tutta la misura, e `env` vale ~1 fisso: una route env ->
+                // cutoff lascia il filtro spalancato e immobile.
+                p.attackSeconds = 0.001f;
+                p.decaySeconds = 0.01f;
+                p.sustain = 1.0f;
+
+                // Il secondo inviluppo, con tempi suoi: scatta e poi scende a zero in 150 ms,
+                // mentre la nota continua a suonare al massimo. E' la forma che con il solo
+                // `env` non era esprimibile.
+                p.attack2Seconds = 0.001f;
+                p.decay2Seconds = 0.15f;
+                p.sustain2 = 0.0f;
+                p.release2Seconds = 0.05f;
+
+                p.mods = &mods;
+                synth.setParams (p);
+                synth.setMasterGainLinear (1.0f);
+
+                juce::MidiBuffer m;
+                m.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+                juce::AudioBuffer<float> first (2, 128);
+                first.clear();
+                synth.process (first, m);
+
+                const auto early = renderRms (synth, 20);   // ~53 ms: env2 e' ancora alto
+                const auto late  = renderRms (synth, 60);   // ~160 ms dopo: env2 e' a zero
+                return { early, late };
+            };
+
+            const auto viaEnv = run (engine::ModSource::env);
+            const auto viaEnv2 = run (engine::ModSource::env2);
+
+            logMessage ("env -> cutoff: early " + juce::String (viaEnv.early) + ", late " + juce::String (viaEnv.late));
+            logMessage ("env2 -> cutoff: early " + juce::String (viaEnv2.early) + ", late " + juce::String (viaEnv2.late));
+
+            // Con `env` il filtro resta aperto: la coda non e' piu' scura dell'inizio.
+            expect (viaEnv.late > viaEnv.early * 0.8f,
+                    "con env (sustain 1) il cutoff doveva restare fermo, invece si e' chiuso");
+
+            // Con `env2` il filtro si richiude mentre la nota tiene.
+            expect (viaEnv2.late < viaEnv2.early * 0.5f,
+                    "env2 non ha chiuso il filtro: il suo decay non sta arrivando al cutoff");
+
+            // E le due traiettorie sono davvero diverse, non due misure della stessa cosa.
+            expect (viaEnv.late > viaEnv2.late * 3.0f,
+                    "le due route producono la stessa coda: env2 non e' un inviluppo a se'");
+        }
+
+        beginTest ("env2 non gata la voce: release cortissimo, la nota continua a suonare");
+        {
+            // La trappola e' in stop(): `active_ = envelope_.isActive()`. Farlo dipendere anche
+            // da envelope2_ (o dai due in and) troncherebbe la coda di ogni nota non appena il
+            // modulatore finisce — un modulatore che spegne cio' che modula.
+            dsp::WavetableStore store; store.setActive (1);
+
+            // Una route env2 -> level, non env2 -> cutoff: serve un bersaglio che renda
+            // *osservabile* la fine del secondo inviluppo senza portare l'uscita a zero, o il
+            // test non distinguerebbe "voce uccisa" da "filtro chiuso".
+            struct Run { float sounding; float afterNoteOff; };
+
+            const auto run = [&store] (float release2Seconds) -> Run
+            {
+                engine::SynthEngine synth; prepareEngine (synth, store);
+
+                engine::ModSnapshot mods;
+                mods.count = 1;
+                mods.routes[0] = { engine::ModSource::env2,
+                                   engine::modTargetIndexFor (params::ParamSlot::level), 0.5f };
+
+                auto p = defaultParams();
+                p.level = 0.5f;
+                p.modBase[(size_t) engine::modTargetIndexFor (params::ParamSlot::level)] = 0.5f;
+
+                // Rilascio d'ampiezza lungo un secondo: la nota ha una coda vera da difendere.
+                p.attackSeconds = 0.001f;
+                p.decaySeconds = 0.01f;
+                p.sustain = 1.0f;
+                p.releaseSeconds = 1.0f;
+
+                p.attack2Seconds = 0.001f;
+                p.decay2Seconds = 0.01f;
+                p.sustain2 = 1.0f;
+                p.release2Seconds = release2Seconds;
+
+                p.mods = &mods;
+                synth.setParams (p);
+                synth.setMasterGainLinear (1.0f);
+
+                juce::MidiBuffer on;
+                on.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+                juce::AudioBuffer<float> b (2, 128);
+                b.clear();
+                synth.process (b, on);
+
+                const auto sounding = renderRms (synth, 20);
+
+                juce::MidiBuffer off;
+                off.addEvent (juce::MidiMessage::noteOff (1, 60), 0);
+                juce::AudioBuffer<float> b2 (2, 128);
+                b2.clear();
+                synth.process (b2, off);
+
+                // 26 ms di scarto: il release di env2 (1 ms nel caso corto) e' finito da un
+                // pezzo e la rampa di 20 ms sul livello si e' assestata.
+                renderRms (synth, 10);
+                return { sounding, renderRms (synth, 20) };
+            };
+
+            const auto shortRelease = run (0.001f);
+            const auto longRelease = run (1.0f);
+
+            logMessage ("env2 rel 1 ms: durante " + juce::String (shortRelease.sounding)
+                            + ", dopo il note-off " + juce::String (shortRelease.afterNoteOff));
+            logMessage ("env2 rel 1 s: dopo il note-off " + juce::String (longRelease.afterNoteOff));
+
+            expect (shortRelease.sounding > 1.0e-3f, "la nota non ha mai suonato: il test non prova niente");
+
+            // Il punto: la coda c'e' ancora, molto dopo che il secondo inviluppo si e' spento.
+            // Se env2 gatasse la voce qui ci sarebbe silenzio esatto.
+            expect (shortRelease.afterNoteOff > shortRelease.sounding * 0.15f,
+                    "la nota si e' spenta con env2 invece che con l'inviluppo d'ampiezza");
+
+            // E il contrappeso: con un release lungo su env2 la coda e' piu' forte, perche' la
+            // route sul livello sta ancora spingendo. Senza questo, il test passerebbe anche se
+            // rel2 non fosse letto da nessuno.
+            expect (longRelease.afterNoteOff > shortRelease.afterNoteOff * 1.3f,
+                    "il release di env2 non cambia niente: il parametro non arriva all'inviluppo");
         }
     }
 };

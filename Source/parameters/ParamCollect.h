@@ -133,13 +133,19 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     constexpr auto* specSus = params::find ("sus");
     constexpr auto* specRel = params::find ("rel");
     constexpr auto* specEnvVel = params::find ("envVel");
+    constexpr auto* specAtt2 = params::find ("att2");
+    constexpr auto* specDec2 = params::find ("dec2");
+    constexpr auto* specSus2 = params::find ("sus2");
+    constexpr auto* specRel2 = params::find ("rel2");
 
     // Se uno di questi manca vuol dire che parameters.json/ParameterTable.h e' cambiato
     // sotto i piedi: meglio un errore di compilazione qui che una dereferenziazione di un
     // puntatore nullo a runtime. I sette target modulabili non compaiono qui: le loro spec
     // stanno dentro le funzioni di conversione sopra, con lo stesso static_assert.
     static_assert (specKeytrk != nullptr && specAtt != nullptr && specDec != nullptr
-                       && specSus != nullptr && specRel != nullptr && specEnvVel != nullptr,
+                       && specSus != nullptr && specRel != nullptr && specEnvVel != nullptr
+                       && specAtt2 != nullptr && specDec2 != nullptr && specSus2 != nullptr
+                       && specRel2 != nullptr,
                    "una spec di parametro usata da collectEngineParams non e' in ParameterTable.h");
 
     p.oscOn = rawFor (ParamSlot::oscOn) >= 0.5f;
@@ -177,6 +183,14 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.sustain = params::denormalise (*specSus, rawFor (ParamSlot::sus)) * 0.01f;
     p.releaseSeconds = params::denormalise (*specRel, rawFor (ParamSlot::rel)) * 0.001f;
     p.velocityAmount = params::denormalise (*specEnvVel, rawFor (ParamSlot::envVel)) * 0.01f;
+
+    // Il secondo inviluppo: stesse mappe dei quattro d'ampiezza (ms-squared per i tempi,
+    // percentuale per il sustain), quindi stesse conversioni. Non ha un `envVel` proprio — la
+    // velocity resta una sorgente del matrix, non un ingresso nascosto di questo inviluppo.
+    p.attack2Seconds = params::denormalise (*specAtt2, rawFor (ParamSlot::att2)) * 0.001f;
+    p.decay2Seconds = params::denormalise (*specDec2, rawFor (ParamSlot::dec2)) * 0.001f;
+    p.sustain2 = params::denormalise (*specSus2, rawFor (ParamSlot::sus2)) * 0.01f;
+    p.release2Seconds = params::denormalise (*specRel2, rawFor (ParamSlot::rel2)) * 0.001f;
 
     p.pan = panFromRaw (rawFor (ParamSlot::pan));
     p.bypass = rawFor (ParamSlot::bypass) >= 0.5f;

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "groups": { "osc": "Osc", "filter": "Filter", "master": "Master", "env": "Env", "lfo": "LFO", "fx1": "Chorus", "fx2": "Reverb", "arp": "Arp" },
+  "groups": { "osc": "Osc", "filter": "Filter", "master": "Master", "env": "Env", "lfo": "LFO", "fx1": "Chorus", "fx2": "Reverb", "arp": "Arp", "env2": "Env 2" },
   "params": [
     { "id": "oscOn",   "name": "Oscillator on", "group": "osc", "kind": "bool", "slot": true, "default": true },
     { "id": "wtIndex", "name": "Wavetable", "group": "osc", "kind": "choice", "slot": false, "default": 0,
@@ -62,6 +62,11 @@
     { "id": "arpRate", "name": "Rate", "group": "arp", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0, "max": 1 }, "default": 0.4, "labelKind": "arp-rate" },
     { "id": "arpGate", "name": "Gate", "group": "arp", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.6, "unit": "%", "decimals": 0 },
     { "id": "arpOct",  "name": "Octaves", "group": "arp", "kind": "float", "slot": false, "map": { "type": "linear", "min": 1, "max": 4 }, "default": 0.33, "decimals": 0 },
-    { "id": "arpSwing","name": "Swing", "group": "arp", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0, "unit": "%", "decimals": 0 }
+    { "id": "arpSwing","name": "Swing", "group": "arp", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0, "unit": "%", "decimals": 0 },
+
+    { "id": "att2",    "name": "Attack", "group": "env2", "kind": "float", "slot": true, "map": { "type": "ms-squared", "min": 1, "max": 8001 }, "default": 0.12, "labelKind": "time" },
+    { "id": "dec2",    "name": "Decay", "group": "env2", "kind": "float", "slot": true, "map": { "type": "ms-squared", "min": 1, "max": 8001 }, "default": 0.4, "labelKind": "time" },
+    { "id": "sus2",    "name": "Sustain", "group": "env2", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.7, "unit": "%", "decimals": 0 },
+    { "id": "rel2",    "name": "Release", "group": "env2", "kind": "float", "slot": true, "map": { "type": "ms-squared", "min": 1, "max": 8001 }, "default": 0.35, "labelKind": "time" }
   ]
 }

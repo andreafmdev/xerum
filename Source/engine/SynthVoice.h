@@ -177,7 +177,7 @@ private:
         `detune` cambiano davvero: exp2() non ha niente da fare in un loop per campione. */
     void updateUnison (int voices, float detuneCents) noexcept;
 
-    /** Ricalcola i livelli delle quattro sorgenti e riapplica i sette target modulabili.
+    /** Ricalcola i livelli delle cinque sorgenti e riapplica i sette target modulabili.
         Gira una volta per blocco (o per fetta fra due eventi MIDI), mai per campione. */
     void applyModulation() noexcept;
 
@@ -211,6 +211,21 @@ private:
     dsp::StateVariableFilter filterRight_;
 
     dsp::ADSREnvelope envelope_;
+
+    /**
+     * Il secondo inviluppo: parte, rilascia e si azzera insieme a quello d'ampiezza, ma la sua
+     * uscita non moltiplica mai il segnale — la legge solo applyModulation(), come livello della
+     * sorgente ModSource::env2.
+     *
+     * Non entra in isActive(): la vita della voce continua a dipendere dal solo `envelope_`.
+     * Fosse altrimenti, un release corto qui dentro troncherebbe una nota ancora in coda, e un
+     * sustain a zero la ucciderebbe a meta' — un modulatore che spegne cio' che modula.
+     *
+     * Avanza in render() con lo stesso numero di campioni dell'inviluppo d'ampiezza, in un ciclo
+     * a parte: getNextSample() e' l'unico modo che ADSREnvelope offre per far correre il tempo,
+     * e i due cicli di rendering restano quelli di prima, riga per riga.
+     */
+    dsp::ADSREnvelope envelope2_;
 
     bool oscOn_ { true };
     bool filterOn_ { true };
@@ -300,7 +315,7 @@ private:
 
     dsp::Lfo lfo_;
 
-    /** I livelli delle quattro sorgenti, nell'ordine di engine::ModSource. */
+    /** I livelli delle cinque sorgenti, nell'ordine di engine::ModSource. */
     std::array<float, (size_t) ModSource::count> sourceLevels_ {};
 
     /**

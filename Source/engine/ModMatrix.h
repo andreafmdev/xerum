@@ -9,8 +9,18 @@
 
 namespace engine
 {
-/** Le quattro sorgenti del mod matrix. Stessi nomi di ModSource in WebUI/src/juce/backend.ts. */
-enum class ModSource { lfo, env, vel, mw, count };
+/**
+ * Le cinque sorgenti del mod matrix. Stessi nomi di ModSource in WebUI/src/juce/backend.ts.
+ *
+ * `env` e' l'inviluppo d'**ampiezza** riusato come modulatore, `env2` un secondo inviluppo che
+ * non gata niente: esiste solo per essere modulato via. E' la differenza che rende esprimibile
+ * il filtro che si apre e si richiude mentre la nota tiene — con il solo `env` la forma del
+ * cutoff era costretta a seguire quella del volume.
+ *
+ * I valori numerici non finiscono da nessuna parte fuori dal processo: state::setMods salva
+ * `src` come stringa, quindi l'ordine qui dentro e' libero e non e' un formato.
+ */
+enum class ModSource { lfo, env, env2, vel, mw, count };
 
 /**
  * I sette parametri che il motore sa modulare, in ordine stabile: l'indice dentro questo array

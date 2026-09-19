@@ -93,6 +93,43 @@ describe("SynthWindow on the bridge", () => {
     expect(screen.getByText("Filter · Resonance")).toBeInTheDocument();
   });
 
+  it("the Envelope tab edits both envelopes: the segmented control rebinds the four knobs", async () => {
+    // Il buco che chiude: i quattro parametri di env2 esistono nell'APVTS, e nessun controllo
+    // li toccava. Un parametro esposto all'host e irraggiungibile e' il difetto che questa
+    // aggiunta non doveva ripetere.
+    const b = mount(undefined, { initialTab: "env" });
+    const dragAttack = () => {
+      const slider = screen.getByRole("slider", { name: "Attack" });
+      fireEvent.pointerDown(slider, { clientY: 100, clientX: 0, button: 0, pointerId: 1 });
+      fireEvent.pointerMove(slider, { clientY: 60, clientX: 0, pointerId: 1 });
+      fireEvent.pointerUp(slider, { clientY: 60, clientX: 0, pointerId: 1 });
+    };
+
+    dragAttack();
+    expect(b.log.filter((o) => o.id === "att").length).toBeGreaterThan(0);
+    expect(b.log.filter((o) => o.id === "att2")).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole("radio", { name: "ENV2" }));
+    dragAttack();
+    expect(b.log.filter((o) => o.id === "att2").length).toBeGreaterThan(0);
+
+    // I due knob che appartengono al solo inviluppo d'ampiezza restano visibili ma spenti.
+    expect(screen.getByRole("slider", { name: "Vel → amp" })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("the ENV2 chip drops onto a knob like the other four sources", async () => {
+    const b = mount(undefined, { initialTab: "mod" });
+    await act(async () => {});
+    expect(screen.getByTestId("mod-chip-env2")).toBeInTheDocument();
+    const knob = screen.getByRole("slider", { name: "Resonance" }).closest("[data-slot=knob]")!;
+    const dataTransfer = { types: ["text/x-mod"], getData: () => "env2" };
+    fireEvent.dragOver(knob, { dataTransfer });
+    fireEvent.drop(knob, { dataTransfer });
+    expect((await b.getState()).mods).toContainEqual({ src: "env2", target: "res", depth: 0.3 });
+    // La riga nel mod matrix porta l'etichetta della sorgente nuova, non un fallback vuoto.
+    expect(screen.getByRole("button", { name: "Remove ENV2 → Filter · Resonance" })).toBeInTheDocument();
+  });
+
   it("external state change updates the matrix", async () => {
     const b = mount(undefined, { initialTab: "mod" });
     await act(async () => {});

@@ -49,6 +49,7 @@ The front panel is `SynthWindow` (`WebUI/src/synth/ui/`): a fixed 900×600 chass
 - Three materials via `variant` (`deep` default, `soft`, `glow`) — `synth.css` overrides the `@xerum/ui` hardware tokens on the chassis. In the browser: `?variant=glow&tab=lfo`.
 - Every control is an `@xerum/ui` primitive (Knob with modulation rings and drop target, Segmented, Stepper, Meter, Tabs `bar`, Toggle, Panel, Button). Displays specific to the window (filter response, envelope, LFO scope, wavetable stack + spectrum) are app-level canvases/SVGs.
 - **Known divergence:** `WaveDisplay` (`WebUI/src/synth/ui/WaveDisplay.tsx`) draws a procedural curve from `WebUI/src/synth/curves.ts`, not the real `.xwt` table data — deliberate, not an oversight.
+- **Known gap:** the modulation rings on the knobs do not follow `env`, `env2`, `vel` or `mw` live. `MeterFrame` carries only the LFO level, so `useSourceLevels()` feeds the other four a constant — the ring shows the right *depth* but not the *movement*. Widening `MeterFrame` is bridge work and has not been done.
 - **Known gap:** the twelve factory presets (`Source/parameters/presets.json`) have been recalibrated against the current gain staging — each one now states `level`, `drive` and `volume` explicitly, the three that decide whether it clips — but they still have not been auditioned by ear, and the preset browser (`PresetOverlay`) has not been clicked through end to end in the Standalone.
 
 ## On-screen keyboard
@@ -72,8 +73,8 @@ The editor loads the UI with `?gutter=0`, which tells `SynthWindow` to fit the c
 
 - Instrument plugin: AU + VST3 + Standalone
 - MIDI note on/off allocates voices (16-voice pool, round-robin steal)
-- The engine is audible: a wavetable oscillator with band-limited mipmaps (`dsp::WavetableOscillator` / `dsp::MipTable`) feeds an exponential ADSR (`dsp::ADSREnvelope`) into a TPT state-variable filter (`dsp::StateVariableFilter`, 1 or 2 stages). 30 parameters are wired end to end: `oscOn`, `wtIndex`, `wtpos`, `oct`, `semi`, `fine`, `level`, `filtOn`, `ftype`, `slope`, `cutoff`, `res`, `drive`, `keytrk`, `att`, `dec`, `sus`, `rel`, `envVel`, `volume`, `pan`, `bypass`, plus the six LFO parameters `lshape`, `lrate`, `lsync`, `lphase`, `lfade`, `lretrig`, and `unison` / `detune`
-- The mod matrix is live: four sources (`lfo`, `env`, `vel`, `mw`) onto seven targets (`cutoff`, `res`, `wtpos`, `level`, `pan`, `fine`, `drive`), at control rate — see **Modulation** below
+- The engine is audible: a wavetable oscillator with band-limited mipmaps (`dsp::WavetableOscillator` / `dsp::MipTable`) feeds an exponential ADSR (`dsp::ADSREnvelope`) into a TPT state-variable filter (`dsp::StateVariableFilter`, 1 or 2 stages). 34 parameters are wired end to end: `oscOn`, `wtIndex`, `wtpos`, `oct`, `semi`, `fine`, `level`, `filtOn`, `ftype`, `slope`, `cutoff`, `res`, `drive`, `keytrk`, `att`, `dec`, `sus`, `rel`, `envVel`, `volume`, `pan`, `bypass`, plus the six LFO parameters `lshape`, `lrate`, `lsync`, `lphase`, `lfade`, `lretrig`, `unison` / `detune`, and the second envelope's `att2` / `dec2` / `sus2` / `rel2`
+- The mod matrix is live: five sources (`lfo`, `env`, `env2`, `vel`, `mw`) onto seven targets (`cutoff`, `res`, `wtpos`, `level`, `pan`, `fine`, `drive`), at control rate — see **Modulation** below
 - Still inert (accepted by the APVTS, no effect on sound yet): `envCurve`, `glide`, `voiceMode`, `warp`, `fx1On`/`ch*` (chorus), `fx2On`/`rv*` (reverb), every `arp*`
 
 ## Parameter mapping

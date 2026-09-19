@@ -112,6 +112,36 @@ struct PresetValueTests final : juce::UnitTest
             expectWithinAbsoluteError (params::presetValue (initPreset, *semiSpec), 0.5f, 1.0e-6f);
         }
 
+        beginTest ("nessun preset di fabbrica elenca env2: i quattro cadono sul loro default");
+        {
+            // I dodici preset sono stati scritti prima che il secondo inviluppo esistesse.
+            // Devono restare cosi': se uno di loro cominciasse a elencare att2/dec2/sus2/rel2
+            // cambierebbe suono rispetto a com'e' oggi, e questo test lo direbbe. La verifica e'
+            // doppia — che l'id non compaia, e che presetValue() restituisca esattamente il
+            // default normalizzato dello spec — perche' la prima da sola non prova che il
+            // fallback funzioni e la seconda da sola passerebbe anche con un preset che elenca
+            // per caso proprio il default.
+            for (const char* id : { "att2", "dec2", "sus2", "rel2" })
+            {
+                const auto* spec = params::find (id);
+                expect (spec != nullptr, juce::String (id) + ": spec non trovata");
+
+                for (int i = 0; i < params::kNumPresets; ++i)
+                {
+                    const auto& preset = params::kPresetTable[i];
+
+                    for (int v = 0; v < preset.numValues; ++v)
+                        expect (juce::String (preset.values[v].id) != juce::String (id),
+                                juce::String (preset.name) + " elenca " + id + ": non dovrebbe");
+
+                    expectWithinAbsoluteError (params::presetValue (preset, *spec),
+                                               params::normalisedDefault (*spec), 0.0f,
+                                               juce::String (preset.name) + " / " + id
+                                                   + ": non e' caduto sul default");
+                }
+            }
+        }
+
         beginTest ("normalisedDefault: Choice e Bool coerenti con AudioParameter*::getDefaultValue()");
         {
             // slope: Choice, 2 opzioni, default grezzo indice 1 -> normalizzato 1.0.

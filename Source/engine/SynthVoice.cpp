@@ -55,6 +55,7 @@ void SynthVoice::prepare (double sampleRate) noexcept
     filter_.prepare (sampleRate_);
     filterRight_.prepare (sampleRate_);
     envelope_.prepare (sampleRate_);
+    envelope2_.prepare (sampleRate_);
     lfo_.prepare (sampleRate_);
 
     smoothedCutoff_.reset (sampleRate_, kSmoothingSeconds);
@@ -77,6 +78,7 @@ void SynthVoice::reset() noexcept
     filter_.reset();
     filterRight_.reset();
     envelope_.reset();
+    envelope2_.reset();
 }
 
 void SynthVoice::start (int midiNote, float velocity) noexcept
@@ -91,6 +93,11 @@ void SynthVoice::start (int midiNote, float velocity) noexcept
     // non cambia di un campione il segnale renderizzato.
     const auto peak = 1.0f - velocityAmount_ * (1.0f - velocity);
     envelope_.noteOn (peak);
+
+    // Il secondo inviluppo parte insieme, e sempre a picco pieno: e' una sorgente unipolare
+    // 0..1, e la velocity e' gia' disponibile come sorgente a se'. Moltiplicarle qui vorrebbe
+    // dire non poterle piu' separare in una route.
+    envelope2_.noteOn (1.0f);
 
     // Con lfoRetrig la fase riparte dall'offset scelto: e' cio' che rende ripetibile un vibrato
     // che deve cominciare sempre allo stesso punto. Senza, la voce eredita la fase libera del
@@ -154,12 +161,18 @@ void SynthVoice::retrigger (float velocity) noexcept
     // dagli smoothed value come qualunque altro cambio di parametro.
     const auto peak = 1.0f - velocityAmount_ * (1.0f - velocity);
     envelope_.noteOn (peak);
+    envelope2_.noteOn (1.0f);
     active_ = true;
 }
 
 void SynthVoice::stop() noexcept
 {
     envelope_.noteOff();
+    envelope2_.noteOff();
+
+    // `envelope_` e non `envelope2_`, e nemmeno i due insieme: la voce vive finche' vive
+    // l'inviluppo d'**ampiezza**. Il secondo e' un modulatore, e un modulatore non decide
+    // quando la nota finisce — con un release corto qui dentro taglierebbe la coda.
     active_ = envelope_.isActive();
 }
 
@@ -207,6 +220,11 @@ void SynthVoice::setParams (const EngineParams& p) noexcept
     envelope_.setSustainLevel (p.sustain);
     envelope_.setReleaseSeconds (p.releaseSeconds);
     velocityAmount_ = p.velocityAmount;
+
+    envelope2_.setAttackSeconds (p.attack2Seconds);
+    envelope2_.setDecaySeconds (p.decay2Seconds);
+    envelope2_.setSustainLevel (p.sustain2);
+    envelope2_.setReleaseSeconds (p.release2Seconds);
 
     filter_.setType (p.filterType);
     filter_.setNumStages (p.filterStages);
@@ -275,11 +293,12 @@ float SynthVoice::modulated (int targetIndex) const noexcept
 
 void SynthVoice::applyModulation() noexcept
 {
-    // I livelli delle quattro sorgenti si calcolano una volta sola, prima di applicarli: env e
-    // vel sono per voce (due note tenute stanno a punti diversi del loro inviluppo), mw e'
-    // globale, lfo dipende da lfoRetrig.
+    // I livelli delle cinque sorgenti si calcolano una volta sola, prima di applicarli: env,
+    // env2 e vel sono per voce (due note tenute stanno a punti diversi del loro inviluppo), mw
+    // e' globale, lfo dipende da lfoRetrig.
     sourceLevels_[(size_t) ModSource::lfo] = lfoRetrig_ ? lfo_.level() : globalLfoLevel_;
     sourceLevels_[(size_t) ModSource::env] = envelope_.getLevel();
+    sourceLevels_[(size_t) ModSource::env2] = envelope2_.getLevel();
     sourceLevels_[(size_t) ModSource::vel] = velocity_;
     sourceLevels_[(size_t) ModSource::mw] = params_.modWheel;
 
@@ -554,6 +573,18 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
             outR[i] += right * amplitude;
         }
     }
+
+    // Il secondo inviluppo avanza dello stesso numero di campioni, ma fuori dai due cicli di
+    // rendering: la sua uscita non moltiplica niente, quindi non ha niente da fare li' dentro, e
+    // tenerla fuori lascia quei cicli identici riga per riga a prima (lo stesso argomento di
+    // modMask_). Il livello che le route leggono e' quello di *inizio* fetta, letto da
+    // applyModulation() poco sopra — esattamente come per l'inviluppo d'ampiezza, che
+    // getLevel() campiona prima di avanzare.
+    //
+    // Gira sempre, anche senza nessuna route su env2: altrimenti collegarne una a nota gia'
+    // partita leggerebbe un inviluppo fermo dove l'aveva lasciato l'ultima route.
+    for (int i = 0; i < numSamples; ++i)
+        envelope2_.getNextSample();
 
     if (! envelope_.isActive())
         active_ = false;

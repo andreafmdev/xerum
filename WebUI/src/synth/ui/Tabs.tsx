@@ -1,11 +1,11 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Segmented, Tabs, Toggle, toneStyle } from "@xerum/ui";
 import { X } from "lucide-react";
 import { useBoolParam, useChoiceParam, useFloatParam } from "../../juce/hooks";
 import { envPath, lfoPath } from "../curves";
 import { formatValue, paramLabel, signedInt } from "../mapping";
 import { MOD_SOURCES, SOURCE_LABEL, SOURCE_TONE, type LfoShape } from "../mod";
-import { PARAM_SPECS } from "../params.generated";
+import { PARAM_SPECS, type ParamId } from "../params.generated";
 import { useMeterFrame } from "./MetersContext";
 import { ModChip } from "./ModChip";
 import { ParamKnob } from "./ParamKnob";
@@ -43,37 +43,78 @@ const group = "flex items-end gap-2.5";
 const vsep = "w-px self-stretch bg-linear-to-b from-transparent via-edge-dark to-transparent";
 const screen = "shrink-0 overflow-hidden rounded-control bg-well shadow-well";
 
+/**
+ * I due inviluppi, con gli stessi quattro knob.
+ *
+ * La scelta: un selettore ENV / ENV2 che ricabla i knob gia' presenti, invece di otto knob
+ * affiancati. Il plate del tab e' alto 124 px e largo quanto lo chassis — i quattro knob, lo
+ * schermo dell'inviluppo e i due knob piccoli lo riempiono gia'; raddoppiarli avrebbe voluto
+ * dire rimpicciolirli tutti, e il grafico dell'inviluppo (che e' il modo in cui si legge un
+ * ADSR) sarebbe rimasto uno solo per due forme diverse. Cosi' invece lo schermo mostra sempre
+ * l'inviluppo che si sta modificando.
+ *
+ * `envVel` e `envCurve` restano visibili ma disabilitati su ENV2: appartengono all'inviluppo
+ * d'ampiezza e il secondo non ne ha di propri (la velocity e' gia' una sorgente del matrix).
+ * Disabilitati e non nascosti perche' sparire farebbe saltare la riga di knob a ogni scambio.
+ */
+const ENV_SELECTOR = [
+  { value: "env", label: "ENV" },
+  { value: "env2", label: "ENV2" },
+] as const;
+
+/** I quattro slot dell'inviluppo scelto, nell'ordine attacco/decay/sustain/release. */
+const ENV_IDS = {
+  env: ["att", "dec", "sus", "rel"],
+  env2: ["att2", "dec2", "sus2", "rel2"],
+} as const satisfies Record<"env" | "env2", readonly [ParamId, ParamId, ParamId, ParamId]>;
+
 export function EnvTab() {
-  const att = useFloatParam("att");
-  const dec = useFloatParam("dec");
-  const sus = useFloatParam("sus");
-  const rel = useFloatParam("rel");
+  const [which, setWhich] = useState<"env" | "env2">("env");
+  // Tutti e otto gli hook, sempre: l'ordine delle chiamate non puo' dipendere dalla scelta.
+  const values = {
+    att: useFloatParam("att").value,
+    dec: useFloatParam("dec").value,
+    sus: useFloatParam("sus").value,
+    rel: useFloatParam("rel").value,
+    att2: useFloatParam("att2").value,
+    dec2: useFloatParam("dec2").value,
+    sus2: useFloatParam("sus2").value,
+    rel2: useFloatParam("rel2").value,
+  };
+  const [aId, dId, sId, rId] = ENV_IDS[which];
+  const [a, dv, sv, r] = [values[aId], values[dId], values[sId], values[rId]];
+  const isSecond = which === "env2";
   const W = 200;
   const H = 66;
-  const d = useMemo(() => envPath(att.value, dec.value, sus.value, rel.value, W, H), [att.value, dec.value, sus.value, rel.value]);
+  const d = useMemo(() => envPath(a, dv, sv, r, W, H), [a, dv, sv, r]);
   return (
     <div className={content}>
       <div className={screen} style={{ width: W, height: H }}>
-        <svg width={W} height={H}>
+        <svg width={W} height={H} style={toneStyle(isSecond ? SOURCE_TONE.env2 : SOURCE_TONE.env)}>
           <path d={`${d} L${W - 6} ${H - 6} L6 ${H - 6}Z`} className="fill-(--tone)" opacity={0.12} />
           <path d={d} className="fill-none stroke-(--tone) [filter:var(--glow)]" strokeWidth={1.8} />
         </svg>
       </div>
       <div className={`${group} gap-3.5`}>
-        <ParamKnob id="att" />
-        <ParamKnob id="dec" />
-        <ParamKnob id="sus" />
-        <ParamKnob id="rel" />
+        <ParamKnob key={aId} id={aId} />
+        <ParamKnob key={dId} id={dId} />
+        <ParamKnob key={sId} id={sId} />
+        <ParamKnob key={rId} id={rId} />
       </div>
       <div className={vsep} />
       <div className={group}>
-        <ParamKnob id="envVel" size="sm" />
-        <ParamKnob id="envCurve" size="sm" />
+        <ParamKnob id="envVel" size="sm" disabled={isSecond} />
+        <ParamKnob id="envCurve" size="sm" disabled={isSecond} />
       </div>
       <div className={vsep} />
-      <p className="max-w-38 text-[11px] leading-snug text-text-dim">
-        Trascina il chip <b className="text-env">ENV</b> su un knob per assegnarlo come sorgente.
-      </p>
+      <div className="flex flex-col gap-1.5">
+        <Segmented label="Inviluppo da modificare" value={which} onChange={setWhich} options={[...ENV_SELECTOR]} />
+        {/* Il testo resta su due righe: sotto il selettore ci sono ~56 px prima che il plate
+            (h-31, overflow-hidden) cominci a tagliare. */}
+        <p className="max-w-38 text-[11px] leading-snug text-text-dim">
+          Trascina <b className="text-env">ENV</b> o <b className="text-fx">ENV2</b> su un knob.
+        </p>
+      </div>
     </div>
   );
 }
@@ -131,8 +172,9 @@ export function ModTab() {
     return (
       <div className={content}>
         <p className="text-[11px] leading-snug text-text-dim">
-          Nessuna assegnazione. Trascina <b className="text-lfo">LFO</b>, <b className="text-env">ENV</b>, <b className="text-master">VEL</b> o{" "}
-          <b className="text-filter">MW</b> dalla barra dei tab su un qualsiasi knob.
+          Nessuna assegnazione. Trascina <b className="text-lfo">LFO</b>, <b className="text-env">ENV</b>,{" "}
+          <b className="text-fx">ENV2</b>, <b className="text-master">VEL</b> o <b className="text-filter">MW</b> dalla
+          barra dei tab su un qualsiasi knob.
         </p>
       </div>
     );

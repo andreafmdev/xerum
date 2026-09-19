@@ -5,8 +5,14 @@
 import { PARAM_SPECS, type ParamId, type ParamSpec } from "../synth/params.generated";
 import { fromIndex, fromInt } from "../synth/mapping";
 
-/** Sorgente di modulazione disponibile nel mod matrix. */
-export type ModSource = "lfo" | "env" | "vel" | "mw";
+/**
+ * Sorgente di modulazione disponibile nel mod matrix.
+ *
+ * `env` e' l'inviluppo d'ampiezza riusato come modulatore; `env2` e' il secondo inviluppo, che
+ * non governa nessun volume. Stessi nomi di engine::ModSource in Source/engine/ModMatrix.h:
+ * sono le stringhe che viaggiano nel nodo MODS dello stato, quindi devono coincidere.
+ */
+export type ModSource = "lfo" | "env" | "env2" | "vel" | "mw";
 /** Assegnazione di una sorgente a un parametro target con una profondità -1..1. */
 export type ModAssignment = { src: ModSource; target: ParamId; depth: number };
 

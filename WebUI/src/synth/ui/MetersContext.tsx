@@ -24,5 +24,5 @@ export function useMeterFrame(): MeterFrame {
 /** Livelli istantanei delle sorgenti: l'host manda solo l'LFO, le altre restano valori di comodo. */
 export function useSourceLevels(): SourceLevels {
   const { lfo } = useMeterFrame();
-  return { lfo, env: 0.6, vel: 0.7, mw: 0.5 };
+  return { lfo, env: 0.6, env2: 0.5, vel: 0.7, mw: 0.5 };
 }

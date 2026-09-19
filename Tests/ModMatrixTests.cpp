@@ -57,6 +57,19 @@ struct ModMatrixTests final : juce::UnitTest
                           engine::modTargetIndexFor (params::ParamSlot::wtpos));
         }
 
+        beginTest ("env2 e' una sorgente distinta da env, non un prefisso");
+        {
+            engine::ModSnapshot snap;
+            engine::buildModSnapshot (makeMods ({ { "env", "cutoff", 0.5 },
+                                                  { "env2", "res", 0.25 } }), snap);
+
+            expectEquals (snap.count, 2);
+            expect (snap.routes[0].src == engine::ModSource::env);
+            expect (snap.routes[1].src == engine::ModSource::env2, "\"env2\" non e' stata riconosciuta");
+            expectEquals (snap.routes[1].targetIndex,
+                          engine::modTargetIndexFor (params::ParamSlot::res));
+        }
+
         beginTest ("una sorgente sconosciuta viene scartata");
         {
             engine::ModSnapshot snap;
