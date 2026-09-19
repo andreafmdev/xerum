@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <memory>
 #include <vector>
 
 namespace
@@ -701,9 +702,11 @@ struct MipCrossfadeTests final : juce::UnitTest
         beginTest ("nessun alias sopra -70 dB su tutta la tastiera");
         {
             // Qui la rampa ha 128 armoniche, non 1024: sopra quella banda a dominare la misura
-            // non e' piu' l'aliasing della piramide ma la distorsione dell'interpolazione
-            // lineare fra campioni della tavola, che a 512 armoniche suonate arriva da sola a
-            // -55 dB e coprirebbe quello che questo test deve sorvegliare.
+            // era la distorsione dell'interpolazione fra campioni della tavola invece
+            // dell'aliasing della piramide, che e' quello che questo test sorveglia. Con
+            // Lagrange-3 quel contributo e' sceso di 34 dB e la soglia sotto non lo tocca piu'
+            // nemmeno da lontano, ma la banda resta questa: il test misura la piramide, e
+            // cambiargli il segnale sotto cambierebbe cosa vuol dire il suo numero.
             const auto bytes = makeHarmonicBlob (2048, 128);
             const auto view = dsp::parseXwt (bytes.data(), bytes.size());
             expect (view.has_value());
@@ -735,10 +738,216 @@ struct MipCrossfadeTests final : juce::UnitTest
             // il crossfade non puo' peggiorarlo perche' non legge mai un livello piu' brillante
             // di quello sicuro, ma e' esattamente la cosa che una formula sbagliata romperebbe
             // per prima.
-            expect (worst < -70.0, "nota " + juce::String (worstNote) + ": energia non armonica a "
-                                       + juce::String (worst, 1) + " dB, deve stare sotto -70 dB");
+            //
+            // La soglia era -70 dB e il peggiore stava a -72.7 (nota 38), cioe' 2.7 dB di
+            // margine: quel numero non lo faceva la piramide ma l'interpolazione lineare
+            // dentro il frame. Passata a Lagrange-3 il peggiore e' -107.0 dB, sempre alla nota
+            // 38. La soglia scende con lui: tenerla a -70 vorrebbe dire lasciar passare in
+            // silenzio una regressione di 37 dB.
+            expect (worst < -100.0, "nota " + juce::String (worstNote) + ": energia non armonica a "
+                                        + juce::String (worst, 1) + " dB, deve stare sotto -100 dB");
         }
     }
 };
 
 static MipCrossfadeTests mipCrossfadeTests;
+
+namespace
+{
+/**
+ * Tavola con la piramide **spenta**: tutti i livelli contengono la stessa forma d'onda,
+ * la somma delle prime `harmonics` armoniche a 1/h, eventualmente ruotata di `rotation`
+ * campioni.
+ *
+ * Serve a misurare l'interpolatore e basta. Con una piramide vera il numero di armoniche
+ * che si sentono non lo decide il test ma `levelForFrequency`: a 43.2 Hz il livello
+ * suonato e' l'1.88, cioe' quasi tutto 256 armoniche, e una tavola da 512 misurerebbe la
+ * piramide invece dell'interpolazione. Spegnendola, "N armoniche a f0" vuol dire davvero
+ * N armoniche che arrivano all'interpolatore, che e' l'esperimento che serve: l'errore
+ * d'interpolazione dipende dalla derivata della tavola fra un campione e l'altro, cioe'
+ * esattamente da quante armoniche ci sono dentro.
+ *
+ * Il rovescio: qui l'alias misurato **non** e' quello dello strumento (che non suona mai
+ * 512 armoniche a 43.2 Hz), e' il contributo di un solo stadio. Lo strumento intero resta
+ * sorvegliato dal test sull'intera tastiera in MipCrossfadeTests.
+ */
+std::unique_ptr<dsp::MipTable> makeFlatMipTable (int frameSize, int harmonics, int rotation = 0)
+{
+    auto table = std::make_unique<dsp::MipTable> (1, frameSize);
+
+    for (int i = 0; i < frameSize; ++i)
+    {
+        const auto source = i + rotation;
+        double v = 0.0;
+
+        for (int h = 1; h <= harmonics; ++h)
+            v += std::sin (2.0 * juce::MathConstants<double>::pi * (double) h * (double) source / (double) frameSize) / (double) h;
+
+        for (int level = 0; level <= dsp::MipTable::kMaxLevel; ++level)
+            table->writePointer (0, level)[i] = (float) v;
+    }
+
+    return table;
+}
+} // namespace
+
+struct WavetableInterpolationTests final : juce::UnitTest
+{
+    WavetableInterpolationTests() : juce::UnitTest ("WavetableInterpolation", "dsp") {}
+
+    void runTest() override
+    {
+        beginTest ("il pavimento di aliasing dell'interpolazione crolla dimezzando le armoniche");
+        {
+            // 43.2 Hz su un frame da 2048 campioni e' il caso peggiore dello strumento: la
+            // nota piu' grave che si suona davvero, cioe' il passo di lettura piu' lungo
+            // (1.84 campioni di tavola per campione d'uscita) e quindi la frazione peggiore
+            // da indovinare. Meno armoniche in tavola significa curva piu' liscia fra due
+            // campioni: e' la stessa cosa che salire di un'ottava.
+            //
+            // La tavola e' sintetica e con la piramide spenta apposta (vedi makeFlatMipTable):
+            // i .xwt su disco possono essere rigenerati, e qui si sorveglia un solo stadio.
+            //
+            // Prima, con l'interpolazione lineare a 2 punti, questa stessa misura dava
+            // -58.3 / -65.3 / -74.3 / -83.1 dB: ~8 dB di guadagno per dimezzamento e basta.
+            // La lineare sbaglia come la derivata seconda della tavola, Lagrange-3 come la
+            // quarta: il pavimento non scende di un gradino, cambia pendenza — 18 dB piu' in
+            // basso gia' nel caso peggiore, 46 nel migliore.
+            constexpr double sampleRate = 48000.0;
+            constexpr float noteHz = 43.2f;
+            constexpr int fftOrder = 16;
+            constexpr int numSamples = 1 << fftOrder;
+
+            struct Case
+            {
+                int harmonics;
+                double linearDb;
+                double maxDb;
+            };
+
+            // Colonna 2: la misura con la lineare, cioe' quello che questo test deve battere.
+            // Colonna 3: la soglia, ~4 dB sopra il misurato con Lagrange-3 (-72.3 / -87.6 /
+            // -108.8 / -129.0 dB) — abbastanza da non essere fragile, abbastanza stretta da
+            // non lasciar rientrare la lineare da nessuna parte.
+            const Case cases[] = {
+                { 512, -58.3, -68.0 },
+                { 256, -65.3, -84.0 },
+                { 128, -74.3, -105.0 },
+                { 64, -83.1, -125.0 },
+            };
+
+            for (const auto& c : cases)
+            {
+                const auto table = makeFlatMipTable (2048, c.harmonics);
+                const auto spectrum = renderSpectrum (*table, noteHz, sampleRate, fftOrder);
+                const auto db = aliasToHarmonicDb (spectrum, numSamples, sampleRate, (double) noteHz);
+
+                logMessage (juce::String (c.harmonics) + " armoniche a 43.2 Hz: " + juce::String (db, 1)
+                            + " dB (lineare: " + juce::String (c.linearDb, 1) + " dB, guadagno "
+                            + juce::String (c.linearDb - db, 1) + " dB)");
+
+                expect (db < c.maxDb, juce::String (c.harmonics) + " armoniche: energia non armonica a "
+                                          + juce::String (db, 1) + " dB, deve stare sotto "
+                                          + juce::String (c.maxDb, 1) + " dB");
+            }
+        }
+
+        beginTest ("a fase intera l'uscita e' il campione, non una media dei vicini");
+        {
+            // Proprieta' di Lagrange: ogni polinomio di base vale 1 sul proprio nodo e 0 su
+            // tutti gli altri, quindi a frazione 0 l'uscita e' esattamente x[0]. E' anche la
+            // sentinella sugli indici dei quattro tap: sbagliarne l'offset di uno sposta il
+            // nodo e questo confronto salta subito, mentre la misura di aliasing continuerebbe
+            // a sembrare plausibile.
+            //
+            // 2048 Hz di sample rate e 0.25 Hz di nota: l'incremento di fase e' 2^-13, esatto
+            // in binario, e la posizione nel frame avanza di un quarto di campione per volta.
+            // Un campione su quattro cade su un indice intero.
+            constexpr int frameSize = 2048;
+            const auto table = makeFlatMipTable (frameSize, 400);
+            const auto* frame = table->samples (0, 0);
+
+            dsp::WavetableOscillator osc;
+            osc.prepare (2048.0);
+            osc.setTable (table.get());
+            osc.setFramePosition (0.0f);
+            osc.setFrequencyHz (0.25f);
+
+            float worst = 0.0f;
+            int worstIndex = 0;
+
+            for (int i = 0; i < 4 * 96; ++i)
+            {
+                const auto sample = osc.getSample();
+
+                if (i % 4 == 0)
+                {
+                    const auto error = std::abs (sample - frame[i / 4]);
+
+                    if (error > worst)
+                    {
+                        worst = error;
+                        worstIndex = i / 4;
+                    }
+                }
+            }
+
+            expect (worst < 1.0e-6f, "a fase intera l'errore massimo e' " + juce::String (worst)
+                                         + " al campione " + juce::String (worstIndex));
+        }
+
+        beginTest ("il frame e' ciclico su entrambi i lati: ruotarlo sposta il suono, non lo rompe");
+        {
+            // La finestra a 4 punti ha bisogno di x[-1] e di x[2]: due wrap, uno per lato.
+            // Qui la formula non viene riscritta nel test, si verifica la proprieta' che il
+            // wrap deve garantire: una tavola ruotata di un campione, letta un campione piu'
+            // indietro, e' lo stesso identico segnale. Se un solo lato del wrap e' sbagliato
+            // le due letture divergono proprio nei passi in cui la finestra scavalca il
+            // confine — ed e' li' che partono, apposta.
+            //
+            // 400 armoniche: campioni adiacenti molto diversi fra loro, cosi' un tap preso
+            // dal posto sbagliato non si confonde con il rumore di misura. Le due tavole
+            // hanno campioni identici a meno della rotazione (piramide spenta), quindi le due
+            // catene di moltiplicazioni sono le stesse: la differenza attesa e' zero esatto.
+            constexpr int frameSize = 2048;
+            const auto plain = makeFlatMipTable (frameSize, 400);
+            const auto rotated = makeFlatMipTable (frameSize, 400, 1);
+
+            const auto start = [] (dsp::WavetableOscillator& osc, const dsp::MipTable* table, float phase)
+            {
+                osc.prepare (2048.0);
+                osc.setTable (table);
+                osc.setFramePosition (0.0f);
+                osc.setFrequencyHz (0.25f);
+                osc.resetToPhase (phase);
+            };
+
+            // La tavola ruotata contiene x[i + 1]: per sentire la stessa cosa deve partire un
+            // campione piu' indietro dell'altra. Entrambe partono a ridosso della fine del
+            // frame e ci passano sopra entro i primi passi.
+            dsp::WavetableOscillator ahead;
+            dsp::WavetableOscillator behind;
+            start (ahead, rotated.get(), (float) (frameSize - 2) / (float) frameSize);
+            start (behind, plain.get(), (float) (frameSize - 1) / (float) frameSize);
+
+            float worst = 0.0f;
+            int worstStep = 0;
+
+            for (int i = 0; i < 64; ++i)
+            {
+                const auto error = std::abs (ahead.getSample() - behind.getSample());
+
+                if (error > worst)
+                {
+                    worst = error;
+                    worstStep = i;
+                }
+            }
+
+            expect (worst < 1.0e-6f, "attraversando il confine del frame le due letture divergono di "
+                                         + juce::String (worst) + " al passo " + juce::String (worstStep));
+        }
+    }
+};
+
+static WavetableInterpolationTests wavetableInterpolationTests;

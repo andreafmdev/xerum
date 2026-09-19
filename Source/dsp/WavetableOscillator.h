@@ -30,14 +30,21 @@ namespace dsp
 float levelForFrequency (float frequencyHz, double sampleRate, int frameSize) noexcept;
 
 /**
- * Oscillatore wavetable con tripla interpolazione: lineare fra campioni adiacenti dentro
- * il frame, lineare fra i due frame adiacenti alla posizione, lineare fra i due livelli
- * adiacenti della piramide. La seconda produce il morph: senza, muovere Position dà
- * scatti. La terza rende continua la brillantezza lungo la tastiera: senza, il timbro
+ * Oscillatore wavetable con tripla interpolazione: **Lagrange di grado 3** fra i campioni
+ * dentro il frame, lineare fra i due frame adiacenti alla posizione, lineare fra i due
+ * livelli adiacenti della piramide. La seconda produce il morph: senza, muovere Position
+ * dà scatti. La terza rende continua la brillantezza lungo la tastiera: senza, il timbro
  * resta congelato per un'ottava e poi crolla di colpo (vedi levelForFrequency).
  *
- * Costo: 4 letture di tavola per campione (2 frame × 2 livelli), nessuna allocazione e
- * nessuna chiamata a libm — log2 vive in setFrequencyHz/setTable.
+ * La prima è quella che decide il pavimento di aliasing dello strumento, e per questo non
+ * è lineare: fra due campioni della tavola la lineare sbaglia come la derivata seconda,
+ * Lagrange-3 come la quarta (vedi `sampleAt` nel .cpp per la formula e la scelta del
+ * grado). Le altre due interpolano fra segnali che cambiano a tasso di controllo, dove il
+ * grado non conta.
+ *
+ * Costo: 16 letture di tavola per campione (2 frame × 2 livelli × 4 tap), nessuna
+ * allocazione e nessuna chiamata a libm — log2 vive in setFrequencyHz/setTable. Il wrap
+ * dentro il frame è una maschera, quindi nessun ramo condizionale per campione.
  */
 class WavetableOscillator
 {

@@ -6,12 +6,55 @@ namespace dsp
 {
 namespace
 {
-/** Interpolazione lineare dentro un frame, con wrap sull'ultimo campione. */
-float sampleAt (const float* frame, int size, int index, float fraction) noexcept
+/**
+ * Interpolazione di **Lagrange di grado 3** sui quattro campioni x[-1], x[0], x[1], x[2]
+ * attorno alla posizione richiesta. Sostituisce la lineare a due punti, che era lo stadio
+ * che dominava il pavimento di aliasing dello strumento: la lineare sbaglia come la
+ * derivata seconda della tavola, questa come la quarta, e con una tavola liscia e'
+ * tutt'altra pendenza — misurato: 14 dB piu' in basso nel caso peggiore (43.2 Hz, 512
+ * armoniche in tavola) e altri ~11 dB per ogni dimezzamento delle armoniche, cioe' per ogni
+ * ottava che si sale sulla tastiera.
+ *
+ * Sono gli stessi quattro punti che legge la Catmull-Rom di Vital. Lagrange misura meglio
+ * perche' passa **per** i quattro campioni invece di imporre la continuita' della derivata:
+ * qui la tavola e' gia' band-limited, la derivata non ha salti da lisciare e vincolarla
+ * costa solo precisione. Grado 5 (6 punti) non si fa: cosi' com'e', l'interpolazione sta
+ * gia' ~34 dB sotto il pavimento della piramide mipmap — l'alias peggiore sulla tastiera e'
+ * -107 dB e a farlo e' la piramide, non lei — quindi scendere ancora non si sentirebbe e
+ * costerebbe una volta e mezzo le letture.
+ *
+ * La formula e' quella di `InterpolatorLagrange3` di Signalsmith-Audio/dsp (`delay.h`, MIT),
+ * scritta a mano invece che adottata: li' e' il caso particolare di un template a grado
+ * arbitrario con l'albero dei prodotti valutato a compile time (tecnica di Franck), e a
+ * grado fisso 3 quel macchinario si riduce alle quattro righe qui sotto. Vendorare l'header
+ * per ottenerle avrebbe portato dentro un file da tenere allineato a monte.
+ *
+ * Sviluppata in forma di Horner: nessuna divisione, nessuna chiamata a libm, tre
+ * moltiplicazioni per la valutazione. A `fraction` esattamente 0 i tre gradi si annullano e
+ * resta c0 = x[0]: l'uscita a fase intera **e'** il campione, non una media dei vicini.
+ *
+ * `mask` vale `size - 1` e avvolge entrambi i lati senza un ramo: il frame e' ciclico e la
+ * finestra a 4 punti esce da tutt'e due i bordi, non piu' solo dall'ultimo campione. Vale
+ * perche' `size` e' una potenza di due — `parseXwt` rifiuta i blob che non lo sono, ed e'
+ * l'unica porta d'ingresso di una tavola. Se un giorno non lo fosse piu', il masking
+ * resterebbe comunque dentro il buffer (`i & (size - 1) <= size - 1`): si perderebbe la
+ * ciclicita', non la sicurezza della memoria.
+ */
+float sampleAt (const float* frame, int size, int mask, int index, float fraction) noexcept
 {
-    const float a = frame[index];
-    const float b = frame[index + 1 < size ? index + 1 : 0];
-    return a + (b - a) * fraction;
+    // `index + size - 1` invece di `index - 1`: stesso risultato dopo la maschera, ma
+    // l'argomento non diventa mai negativo e non c'e' da ragionare sul complemento a due.
+    const float xm1 = frame[(index + size - 1) & mask];
+    const float x0 = frame[index];
+    const float x1 = frame[(index + 1) & mask];
+    const float x2 = frame[(index + 2) & mask];
+
+    const float c0 = x0;
+    const float c1 = x1 - (1.0f / 3.0f) * xm1 - 0.5f * x0 - (1.0f / 6.0f) * x2;
+    const float c2 = 0.5f * (xm1 + x1) - x0;
+    const float c3 = (1.0f / 6.0f) * (x2 - xm1) + 0.5f * (x0 - x1);
+
+    return ((c3 * fraction + c2) * fraction + c1) * fraction + c0;
 }
 } // namespace
 
@@ -120,20 +163,21 @@ float WavetableOscillator::getSample() noexcept
         return 0.0f;
 
     // Tutti i livelli sono lunghi frameSize: cambia il contenuto (armoniche), non la
-    // lunghezza del buffer, quindi l'interpolazione lineare lavora sempre su una
-    // tavola largamente sovracampionata.
+    // lunghezza del buffer, quindi l'interpolazione lavora sempre su una tavola
+    // largamente sovracampionata.
     const int size = table_->getFrameSize();
+    const int mask = size - 1;
     const double position = phase_ * (double) size;
     const int index = juce::jlimit (0, size - 1, (int) position);
     const auto fraction = (float) (position - (double) index);
 
     // Morph fra i due frame, fatto una volta per livello; poi crossfade fra i due livelli.
-    // L'ordine non conta (è un'interpolazione bilineare), conta che siano 4 letture e due
-    // sole moltiplicazioni in più rispetto a prima.
-    const auto atLevel = [this, size, index, fraction] (int level)
+    // L'ordine non conta (è un'interpolazione bilineare), conta che siano 4 interpolazioni
+    // da 4 tap l'una: 16 letture di tavola per campione, il doppio della lineare.
+    const auto atLevel = [this, size, mask, index, fraction] (int level)
     {
-        const float lo = sampleAt (table_->samples (frameLo_, level), size, index, fraction);
-        const float hi = sampleAt (table_->samples (frameHi_, level), size, index, fraction);
+        const float lo = sampleAt (table_->samples (frameLo_, level), size, mask, index, fraction);
+        const float hi = sampleAt (table_->samples (frameHi_, level), size, mask, index, fraction);
         return lo + (hi - lo) * frameMix_;
     };
 
