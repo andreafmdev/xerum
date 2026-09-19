@@ -108,6 +108,61 @@ struct ADSRTests final : juce::UnitTest
             expectWithinAbsoluteError (peak, 0.5f, 0.02f);
         }
 
+        beginTest ("sustain a zero: l'inviluppo si spegne da solo, senza note-off");
+        {
+            // Il difetto che questo test blocca: con sustain 0 il decay scendeva a zero e
+            // parcheggiava in Stage::sustain, che non transita mai a idle. La voce restava
+            // occupata a rendere silenzio finche' VoiceManager non gliela rubava con kill()
+            // — un clic a ogni nota di un patch percussivo.
+            dsp::ADSREnvelope env;
+            env.prepare (sampleRate);
+            env.setAttackSeconds (0.001f);
+            env.setDecaySeconds (0.05f);
+            env.setSustainLevel (0.0f);
+            env.setReleaseSeconds (0.1f);
+            env.noteOn (1.0f);
+
+            const auto tail = runFor (env, (int) sampleRate); // un secondo, nota ancora premuta
+            expect (tail <= 1.0e-4f, "livello dopo il decay " + juce::String (tail));
+            expect (! env.isActive(), "con sustain 0 la voce deve liberarsi senza note-off");
+        }
+
+        beginTest ("sustain piccolo ma legittimo continua a sostenere");
+        {
+            // L'altra faccia: 0.01 e' -40 dB, ben sopra la soglia di silenzio, e deve restare
+            // in piedi finche' non arriva il note-off.
+            dsp::ADSREnvelope env;
+            env.prepare (sampleRate);
+            env.setAttackSeconds (0.001f);
+            env.setDecaySeconds (0.05f);
+            env.setSustainLevel (0.01f);
+            env.setReleaseSeconds (0.01f);
+            env.noteOn (1.0f);
+
+            const auto held = runFor (env, (int) sampleRate);
+            expectWithinAbsoluteError (held, 0.01f, 0.001f);
+            expect (env.isActive(), "sustain 0.01 deve restare attivo");
+
+            env.noteOff();
+            runFor (env, 4800); // 100 ms, dieci volte il release
+            expect (! env.isActive(), "dopo il note-off deve comunque liberarsi");
+        }
+
+        beginTest ("sustain sotto la soglia per via della velocity: si spegne");
+        {
+            // peak 0.005 * sustain 0.01 = -86 dB: inudibile, la voce va liberata lo stesso.
+            dsp::ADSREnvelope env;
+            env.prepare (sampleRate);
+            env.setAttackSeconds (0.001f);
+            env.setDecaySeconds (0.01f);
+            env.setSustainLevel (0.01f);
+            env.setReleaseSeconds (0.1f);
+            env.noteOn (0.005f);
+
+            runFor (env, (int) sampleRate);
+            expect (! env.isActive(), "sustain effettivo sotto -80 dB deve spegnere la voce");
+        }
+
         beginTest ("reset clears all state");
         {
             dsp::ADSREnvelope env;
@@ -152,6 +207,14 @@ float filterGainAt (dsp::StateVariableFilter& filter, float frequencyHz, double 
     // RMS in uscita diviso l'RMS di un seno di ampiezza 1 (cioe 1/sqrt(2)).
     return (float) (std::sqrt (sumSquares / measure) * std::sqrt (2.0));
 }
+
+float dbRatio (float gain, float reference) noexcept
+{
+    return 20.0f * std::log10 (gain / reference);
+}
+
+/** L'intera corsa del parametro `res`, dal Butterworth al massimo. */
+constexpr float kResonanceSweep[] = { 0.707f, 1.0f, 2.0f, 4.0f, 8.0f, 12.0f, 16.0f, 24.0f };
 } // namespace
 
 struct StateVariableFilterTests final : juce::UnitTest
@@ -207,13 +270,14 @@ struct StateVariableFilterTests final : juce::UnitTest
 
         beginTest ("la risonanza non moltiplica il picco stadio per stadio");
         {
-            // Il difetto che questo test blocca: con la risonanza su entrambi gli stadi e
-            // nessuna compensazione, a Q 12 il passa-basso a 24 dB dava un picco di ~Q^2
-            // (oltre +40 dB) e qualunque preset con `res` alto mandava l'uscita in clipping.
-            // Ora la risonanza sta solo sull'ultimo stadio e l'ingresso e' attenuato di
-            // sqrt(Qbutter/Q), quindi il picco cresce come sqrt(Q * Qbutter): ~2.9, non ~144.
+            // Il difetto che questo test blocca: con la risonanza su entrambi gli stadi, a Q 12
+            // il passa-basso a 24 dB dava un picco di ~Q^2 (oltre +40 dB) e qualunque preset con
+            // `res` alto mandava l'uscita in clipping. Ora la risonanza sta solo sull'ultimo
+            // stadio, quindi il picco vale ~Q (limato di quel poco che fa la compensazione a
+            // 1/32, ~1 dB): ~11, non ~144. Il secondo stadio, che a Q 12 resta Butterworth, il
+            // picco non lo moltiplica: lo attenua dei suoi 3 dB al cutoff.
             constexpr float q = 12.0f;
-            const auto expectedPeak = std::sqrt (q * dsp::StateVariableFilter::kButterworthQ);
+            constexpr float expectedPeak = q;
 
             dsp::StateVariableFilter twelve, twentyFour;
             for (auto* f : { &twelve, &twentyFour })
@@ -235,10 +299,12 @@ struct StateVariableFilterTests final : juce::UnitTest
                     "il secondo stadio non deve moltiplicare il picco: 12 dB " + juce::String (peak12)
                         + ", 24 dB " + juce::String (peak24));
 
-            // L'altra faccia della compensazione: la banda passante perde livello quando la
-            // risonanza sale, come in un filtro analogico risonante.
+            // E la banda passante non deve pagare il conto della risonanza: alzare `res` fa
+            // squillare il filtro, non abbassare il volume dello strumento. Prima, con la
+            // compensazione a sqrt, qui si misurava 0.26 — cioe' -11.7 dB.
             const auto passband = filterGainAt (twelve, 100.0f, sampleRate);
-            expect (passband < 0.5f, "a Q 12 la banda passante deve calare, misurata " + juce::String (passband));
+            expect (passband > 0.85f && passband < 1.15f,
+                    "a Q 12 la banda passante deve restare intorno a 1, misurata " + juce::String (passband));
         }
 
         beginTest ("a Q di Butterworth la compensazione non tocca niente");
@@ -254,6 +320,118 @@ struct StateVariableFilterTests final : juce::UnitTest
 
             expect (filterGainAt (filter, 100.0f, sampleRate) > 0.95f,
                     "in banda passante deve restare a guadagno unitario");
+        }
+
+        beginTest ("la banda passante non si abbassa quando sale la risonanza");
+        {
+            // Il difetto che questo test blocca: la compensazione d'ingresso valeva
+            // sqrt(Qbutter/Q) e attenuava *tutto* il segnale, non solo il picco. A Q 24 lo
+            // strumento perdeva ~10 dB e diventava magro. La risposta a un quarto del cutoff
+            // (banda passante piena) deve restare la stessa su tutta la corsa di `res`.
+            for (int stages : { 1, 2 })
+            {
+                for (float cutoff : { 200.0f, 1000.0f, 6000.0f })
+                {
+                    float reference = 0.0f;
+
+                    for (float q : kResonanceSweep)
+                    {
+                        dsp::StateVariableFilter filter;
+                        filter.prepare (sampleRate);
+                        filter.setType (dsp::StateVariableFilter::Type::lowPass);
+                        filter.setNumStages (stages);
+                        filter.setResonance (q);
+                        filter.setCutoffHz (cutoff);
+
+                        const auto gain = filterGainAt (filter, cutoff * 0.25f, sampleRate);
+
+                        if (q == kResonanceSweep[0])
+                            reference = gain;
+
+                        const auto delta = dbRatio (gain, reference);
+                        expect (std::abs (delta) <= 1.5f,
+                                "stadi " + juce::String (stages) + ", cutoff " + juce::String (cutoff)
+                                    + ", Q " + juce::String (q) + ": banda passante " + juce::String (delta)
+                                    + " dB rispetto a Q 0.707");
+                    }
+                }
+            }
+        }
+
+        beginTest ("il picco risonante cresce con la risonanza, in modo monotono");
+        {
+            // L'altro lato della stessa moneta: se la compensazione fosse troppo forte il
+            // picco resterebbe schiacciato e alzare `res` non si sentirebbe.
+            for (int stages : { 1, 2 })
+            {
+                float previous = 0.0f;
+                float reference = 0.0f;
+
+                for (float q : kResonanceSweep)
+                {
+                    dsp::StateVariableFilter filter;
+                    filter.prepare (sampleRate);
+                    filter.setType (dsp::StateVariableFilter::Type::lowPass);
+                    filter.setNumStages (stages);
+                    filter.setResonance (q);
+                    filter.setCutoffHz (1000.0f);
+
+                    const auto peak = filterGainAt (filter, 1000.0f, sampleRate);
+
+                    if (q == kResonanceSweep[0])
+                        reference = peak;
+                    else
+                        expect (peak > previous * 1.05f,
+                                "stadi " + juce::String (stages) + ": a Q " + juce::String (q)
+                                    + " il picco (" + juce::String (peak) + ") non e' salito rispetto al Q precedente ("
+                                    + juce::String (previous) + ")");
+
+                    previous = peak;
+
+                    if (q == 24.0f)
+                        expect (dbRatio (peak, reference) >= 12.0f,
+                                "stadi " + juce::String (stages) + ": a Q 24 il picco e' solo "
+                                    + juce::String (dbRatio (peak, reference)) + " dB sopra il Butterworth");
+                }
+            }
+        }
+
+        beginTest ("risonanza massima e cutoff estremi: niente instabilita'");
+        {
+            for (double rate : { 44100.0, 96000.0 })
+            {
+                for (float cutoff : { 10.0f, (float) (rate * 0.49) })
+                {
+                    for (int stages : { 1, 2 })
+                    {
+                        dsp::StateVariableFilter filter;
+                        filter.prepare (rate);
+                        filter.setType (dsp::StateVariableFilter::Type::lowPass);
+                        filter.setNumStages (stages);
+                        filter.setResonance (24.0f);
+                        filter.setCutoffHz (cutoff);
+                        filter.reset();
+
+                        // Seno esattamente sul cutoff: il caso peggiore, eccita il picco in pieno.
+                        const auto increment = 2.0 * juce::MathConstants<double>::pi * (double) cutoff / rate;
+                        double phase = 0.0;
+                        float peak = 0.0f;
+
+                        for (int i = 0; i < (int) (rate * 2.0); ++i, phase += increment)
+                        {
+                            const auto out = filter.processSample ((float) std::sin (phase));
+                            expect (std::isfinite (out),
+                                    "uscita non finita a " + juce::String (rate) + " Hz, cutoff "
+                                        + juce::String (cutoff) + ", stadi " + juce::String (stages));
+                            peak = juce::jmax (peak, std::abs (out));
+                        }
+
+                        expect (peak < 100.0f,
+                                "picco " + juce::String (peak) + " a " + juce::String (rate) + " Hz, cutoff "
+                                    + juce::String (cutoff) + ", stadi " + juce::String (stages));
+                    }
+                }
+            }
         }
 
         beginTest ("risonanza alta su tutto il range: nessun NaN, nessuna esplosione");

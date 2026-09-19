@@ -10,6 +10,11 @@ namespace dsp
  * I tempi sono nominali e vengono rispettati: l'attacco arriva a 0.99 in `att`,
  * il decay copre il 99 % della distanza in `dec`, il release scende sotto
  * -80 dB in `rel` e lì l'inviluppo si dichiara spento.
+ *
+ * Lo stesso vale per il sustain: se il livello effettivo (`peak * sus`) finisce
+ * sotto -80 dB — il caso tipico è `sus = 0`, cioè un patch percussivo — la nota
+ * è finita e l'inviluppo si spegne da solo, senza aspettare un note-off che
+ * altrimenti terrebbe la voce occupata a rendere silenzio.
  */
 class ADSREnvelope
 {
@@ -33,6 +38,9 @@ private:
     enum class Stage { idle, attack, decay, sustain, release };
 
     void updateCoefficients() noexcept;
+
+    /** Entra in sustain, oppure si spegne se il livello di sustain e' sotto la soglia di silenzio. */
+    void enterSustain() noexcept;
 
     double sampleRate_ { 44100.0 };
     Stage stage_ { Stage::idle };

@@ -8,6 +8,22 @@ namespace dsp
 namespace
 {
 constexpr float kPi = 3.14159265358979323846f;
+
+/**
+ * Esponente della compensazione d'ingresso, scelto sulle misure (seno, RMS a regime,
+ * 44.1/48/96 kHz, cutoff da 100 Hz a 12 kHz, 12 e 24 dB).
+ *
+ * La banda passante di un passa-basso non dipende da Q, quindi *qualunque* attenuazione
+ * d'ingresso la fa scendere: il costo in banda passante e' esattamente 20·p·log10(Q/Qbutter),
+ * cioe' 30.6·p dB all'estremo della corsa (Q 24). Con un budget di ±1.5 dB il massimo
+ * praticabile sarebbe 1/16, che pero' a cutoff alti misura gia' -1.59 dB (il warping di tan()
+ * aggiunge la sua parte); 1/32 sta a -0.64 dB nel caso peggiore e lascia margine.
+ *
+ * Il picco resta quindi ~Q^(31/32): a Q 24 vale 21.5 invece di 24, un dito di guardia sul
+ * clipper d'uscita senza svuotare il suono. Il vecchio sqrt(Qbutter/Q) (p = 1/2) costava
+ * -14.7 dB di banda passante a Q 24: alzare la risonanza rendeva lo strumento piu' piano.
+ */
+constexpr float kResonanceCompensation = 1.0f / 32.0f;
 } // namespace
 
 void StateVariableFilter::prepare (double sampleRate) noexcept
@@ -68,11 +84,13 @@ void StateVariableFilter::updateCoefficients() noexcept
     resonant_.twoR = 1.0f / resonance_;
     resonant_.denominator = denominatorFor (resonant_.twoR);
 
-    // Compensazione: il picco di uno stadio risonante vale ~Q. Attenuando l'ingresso di
-    // sqrt(Qbutter/Q) il picco diventa ~sqrt(Q·Qbutter) — a Q 12, +9 dB invece di +22 dB —
-    // e la banda passante scende dello stesso fattore. std::sqrt gira solo qui, una volta
-    // per blocco, mai per campione.
-    inputGain_ = std::sqrt (kButterworthQ / resonance_);
+    // Compensazione: il picco di uno stadio risonante vale ~Q, e l'attenuazione d'ingresso e'
+    // l'unica leva che abbiamo per tenerlo a bada. Ma agisce su tutto il segnale, banda passante
+    // compresa, quindi va dosata: l'esponente e' 1/32 (vedi kResonanceCompensation), abbastanza
+    // per smussare il picco e abbastanza poco perche' il corpo del suono non si assottigli
+    // quando si alza `res`. std::pow gira solo qui, una volta per cambio di parametro, mai per
+    // campione: nel loop audio non entra nessuna chiamata a libm.
+    inputGain_ = std::pow (kButterworthQ / resonance_, kResonanceCompensation);
 }
 
 float StateVariableFilter::processStage (Stage& stage, const Coefficients& c, float input) const noexcept

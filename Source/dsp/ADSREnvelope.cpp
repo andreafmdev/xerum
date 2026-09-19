@@ -66,6 +66,26 @@ void ADSREnvelope::updateCoefficients() noexcept
     releaseCoeff_ = coefficientFor (releaseSeconds_, kReleaseTau, sampleRate_);
 }
 
+void ADSREnvelope::enterSustain() noexcept
+{
+    level_ = peak_ * sustain_;
+
+    // Un sustain sotto la soglia di udibilita' non e' un livello da tenere: e' la fine della
+    // nota. Senza questo, Stage::sustain non transita mai a idle (solo il release lo fa) e con
+    // `sustain = 0` la voce resta occupata a rendere silenzio finche' VoiceManager non gliela
+    // ruba con kill() — cioe' un clic a ogni nota di un patch percussivo. Il confronto e' sul
+    // livello *effettivo* (peak * sustain), quindi un sustain piccolo ma legittimo (0.01, -40 dB)
+    // continua a sostenere fino al note-off.
+    if (level_ < kSilence)
+    {
+        level_ = 0.0f;
+        stage_ = Stage::idle;
+        return;
+    }
+
+    stage_ = Stage::sustain;
+}
+
 void ADSREnvelope::noteOn (float peak) noexcept
 {
     peak_ = std::clamp (peak, 0.0f, 1.0f);
@@ -94,8 +114,7 @@ float ADSREnvelope::getNextSample() noexcept
                 decayDistance_ = std::abs (peak_ - target);
                 if (decayDistance_ <= 0.0f)
                 {
-                    level_ = target;
-                    stage_ = Stage::sustain;
+                    enterSustain();
                 }
                 else
                 {
@@ -109,15 +128,15 @@ float ADSREnvelope::getNextSample() noexcept
             const auto target = peak_ * sustain_;
             level_ += decayCoeff_ * (target - level_);
             if (std::abs (level_ - target) <= 0.01f * decayDistance_)
-            {
-                level_ = target;
-                stage_ = Stage::sustain;
-            }
+                enterSustain();
+
             break;
         }
 
         case Stage::sustain:
-            level_ = peak_ * sustain_;
+            // Rivalutato a ogni campione: cosi' anche portare a zero la manopola `sus` mentre
+            // la nota suona libera la voce, invece di lasciarla appesa a un livello nullo.
+            enterSustain();
             break;
 
         case Stage::release:

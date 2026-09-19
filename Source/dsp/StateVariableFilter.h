@@ -9,14 +9,13 @@ namespace dsp
  * `g = tan(π · fc / sr)` è l'unico `tan` del percorso e si ricalcola solo in
  * setCutoffHz(), che il chiamante invoca una volta per blocco.
  *
- * Gestione della risonanza (due scelte deliberate, entrambe per non far esplodere
- * il livello d'uscita — vedi setResonance):
+ * Gestione della risonanza (due scelte deliberate — vedi anche updateCoefficients):
  *  - in cascata a 24 dB la risonanza sta **solo sull'ultimo stadio**, il primo resta
  *    Butterworth. Mettendola su entrambi il picco andrebbe a Q², cioè +52 dB a Q 20;
- *  - l'ingresso viene attenuato di `sqrt(Qbutter / Q)`, così il picco cresce come
- *    `sqrt(Q · Qbutter)` invece che come `Q` e la banda passante perde livello
- *    all'aumentare della risonanza — lo stesso comportamento di un filtro analogico
- *    risonante, che "ruba" i bassi.
+ *  - l'ingresso viene attenuato di `(Qbutter / Q)^(1/32)`: una limatura sul picco
+ *    (~1 dB al massimo della corsa) che lascia la banda passante dov'era. Alzare `res`
+ *    deve far squillare il filtro, non abbassare il volume dello strumento: una
+ *    compensazione forte (prima era l'esponente 1/2) costava -14.7 dB a Q 24.
  */
 class StateVariableFilter
 {
