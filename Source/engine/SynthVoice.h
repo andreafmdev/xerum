@@ -126,6 +126,37 @@ constexpr float unisonSpread (int index, int voices) noexcept
  */
 inline constexpr float kUnisonSpreadWidth = 0.6f;
 
+/**
+ * Quanto dura la dissolvenza con cui una voce rubata lascia il posto, dal livello a cui si
+ * trovava fino a -80 dB.
+ *
+ * Il riferimento e' l'`uber_release` di Surge XT, che sta attorno agli 11 ms; la ricerca
+ * (docs/research/2026-09-19-confronto-synth-open-source.md, punto 10) indica 5-10 ms. Otto e'
+ * il compromesso fra le due pressioni che tirano in direzioni opposte: piu' lunga e' la
+ * dissolvenza, piu' dolce e' la transizione ma piu' a lungo la voce rubata continua a suonare
+ * *sopra* la nota nuova — a 8 ms sono 384 campioni a 48 kHz, meno di un ciclo di un LA basso, e
+ * non c'e' tempo perche' la coda si riconosca come una nota a se'.
+ *
+ * L'altro vincolo e' il margine del pool (VoiceManager::stealFadeMargin): quante voci possano
+ * trovarsi in dissolvenza insieme dipende da quanti furti entrano in questa finestra, quindi
+ * allungarla vuol dire allargare il pool. Otto millisecondi e tre slot di margine sono la
+ * stessa decisione presa da due lati.
+ *
+ * La forma e' esponenziale, cioe' lineare in decibel, e non lineare in ampiezza: e' la stessa
+ * curva del release di dsp::ADSREnvelope, ed e' quella che non lascia uno spigolo nella
+ * derivata quando la dissolvenza comincia su una voce che stava gia' calando.
+ */
+inline constexpr float kStealFadeSeconds = 0.008f;
+
+/**
+ * Il livello sotto il quale la dissolvenza si considera finita e la voce viene davvero azzerata:
+ * -80 dB, la stessa soglia di silenzio che usa dsp::ADSREnvelope per dichiarare spento un
+ * release. Quello che resta da azzerare li' vale al massimo un decimillesimo dell'ampiezza di
+ * partenza — sotto il pavimento a 16 bit, e quattro ordini di grandezza sotto la pendenza
+ * naturale di qualunque onda.
+ */
+inline constexpr float kStealFadeFloor = 1.0e-4f;
+
 /** Single synth voice: legge una EngineParams per blocco e sintetizza. */
 class SynthVoice
 {
@@ -133,7 +164,13 @@ public:
     void prepare (double sampleRate) noexcept;
     void reset() noexcept;
 
-    void start (int midiNote, float velocity) noexcept;
+    /**
+     * `startOrder` e' un numero che cresce a ogni nota per l'intero pool: serve a VoiceManager
+     * per sapere quale voce sta suonando da piu' tempo quando deve sceglierne una da rubare.
+     * Lo assegna il pool e non la voce, perche' e' un ordinamento *fra* voci: se ognuna se lo
+     * incrementasse da sola i numeri non sarebbero confrontabili.
+     */
+    void start (int midiNote, float velocity, unsigned long long startOrder) noexcept;
 
     /** Ribattuta della nota gia' assegnata a questa voce: fa ripartire il solo inviluppo.
         Fase dell'oscillatore e stato del filtro restano dove sono — vedi il commento
@@ -142,8 +179,38 @@ public:
     void stop() noexcept;
     void kill() noexcept;
 
+    /**
+     * La voce e' stata rubata: smette di contare per la polifonia e scende a zero in
+     * kStealFadeSeconds invece di essere azzerata.
+     *
+     * E' l'altra meta' del furto, quella che riguarda la *transizione*: la nota nuova non
+     * riusa questo slot: ne prende uno davvero libero (vedi VoiceManager::stealFadeMargin), e
+     * qui resta solo una coda che si spegne. E' il pattern di Gin (`setFastKill`, BSD-3) e di
+     * Surge XT (`uber_release`).
+     *
+     * Chiamarla due volte sulla stessa voce non riavvia la dissolvenza: il livello da cui si
+     * scende e' quello raggiunto, non quello di partenza.
+     */
+    void beginStealFade() noexcept;
+
     bool isActive() const noexcept;
     int getMidiNote() const noexcept;
+
+    /** Vero fra beginStealFade() e la fine della dissolvenza: la voce suona ancora ma non
+        occupa piu' un posto nella polifonia e non risponde piu' a note-off ne' a ribattute. */
+    bool isFading() const noexcept { return fading_; }
+
+    /** Vero da stop() fino alla nota successiva: il tasto e' stato lasciato e l'inviluppo sta
+        rilasciando. Non lo si chiede a dsp::ADSREnvelope perche' non espone lo stadio, e
+        aggiungerglielo vorrebbe dire toccare Source/dsp per una domanda che nasce qui. */
+    bool isReleasing() const noexcept { return released_; }
+
+    /** Il livello dell'inviluppo d'ampiezza, dissolvenza del furto compresa: e' il numero su
+        cui VoiceManager decide quale voce sia la piu' silenziosa. */
+    float getAmplitudeLevel() const noexcept { return envelope_.getLevel() * fadeGain_; }
+
+    /** L'ordine in cui questa voce e' stata avviata, confrontabile con quello delle altre. */
+    unsigned long long getStartOrder() const noexcept { return startOrder_; }
 
     /** Mix into stereo buffers (additive). Real-time safe. */
     void render (float* outL, float* outR, int numSamples) noexcept;
@@ -211,6 +278,47 @@ private:
     int midiNote_ { -1 };
     float velocity_ { 0.0f };
     float frequencyHz_ { 440.0f };
+
+    /** Il tasto e' stato lasciato: lo sa questa classe perche' ADSREnvelope non espone lo
+        stadio in cui si trova. Falso a ogni start()/retrigger(), vero a stop(). */
+    bool released_ { false };
+
+    // --- furto ---
+
+    /**
+     * I due numeri della dissolvenza del furto, e la ragione per cui **non** sono un bool e un
+     * contatore: moltiplicano il segnale per campione, quindi il percorso normale deve costare
+     * niente ed essere bit-trasparente.
+     *
+     * A riposo `fadeGain_` vale esattamente 1.0f e `fadeCoeff_` esattamente 1.0f, quindi la
+     * ricorrenza `fadeGain_ *= fadeCoeff_` e' l'identita' bit per bit (1.0f * 1.0f e' 1.0f in
+     * IEEE, senza arrotondamento) e `x * fadeGain_` restituisce x intatto. Non serve nessun
+     * ramo nel loop per campione, e il segnale di una voce che non e' stata rubata esce con gli
+     * stessi bit di prima che questo meccanismo esistesse.
+     */
+    float fadeGain_ { 1.0f };
+    float fadeCoeff_ { 1.0f };
+    bool fading_ { false };
+
+    /** Il coefficiente per campione che porta la dissolvenza da 1 a kStealFadeFloor in
+        kStealFadeSeconds. Calcolato in prepare(): l'exp() che serve non deve girare al momento
+        del furto, che avviene sul thread audio. */
+    float stealFadeCoeff_ { 1.0f };
+
+    /**
+     * Quando questa voce e' stata avviata, nella numerazione del pool. Assegnato da start(),
+     * confrontato da VoiceManager::chooseVictim().
+     *
+     * Volutamente **non** azzerato da reset(): e' un dato che ha significato solo mentre la
+     * voce e' attiva, e start() lo riscrive sempre prima che qualcuno lo legga. Azzerarlo
+     * sarebbe una riga che sembra pulizia e invece e' solo un'altra strada da cui il valore
+     * puo' divergere.
+     *
+     * A 64 bit non trabocca: anche a un milione di note al secondo servirebbero seicentomila
+     * anni. Con un intero piu' piccolo il confronto "piu' vecchia" si invertirebbe
+     * silenziosamente al giro di boa, ed e' un bug che si manifesterebbe dopo ore di uso.
+     */
+    unsigned long long startOrder_ { 0 };
 
     /** Le otto copie possibili; ne girano `unisonVoices_`. L'array e' sempre grande otto:
         allocarlo a runtime sarebbe vietato, e ottanta byte per voce non si notano. */

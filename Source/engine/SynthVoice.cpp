@@ -63,6 +63,12 @@ void SynthVoice::prepare (double sampleRate) noexcept
     smoothedLevel_.reset (sampleRate_, kSmoothingSeconds);
     smoothedPan_.reset (sampleRate_, kSmoothingSeconds);
 
+    // Da 1 a kStealFadeFloor in kStealFadeSeconds: e' la stessa forma (e la stessa soglia di
+    // silenzio a -80 dB) del release di dsp::ADSREnvelope. L'exp() sta qui e non in
+    // beginStealFade() perche' quella viene chiamata dal thread audio, a note-on.
+    stealFadeCoeff_ = (float) std::exp (std::log ((double) kStealFadeFloor)
+                                        / ((double) kStealFadeSeconds * sampleRate_));
+
     reset();
 }
 
@@ -71,6 +77,13 @@ void SynthVoice::reset() noexcept
     active_ = false;
     midiNote_ = -1;
     velocity_ = 0.0f;
+    released_ = false;
+
+    // L'identita' moltiplicativa, non uno zero: e' questo che rende `x * fadeGain_` trasparente
+    // sul percorso normale. startOrder_ invece non si tocca — vedi la sua dichiarazione.
+    fading_ = false;
+    fadeGain_ = 1.0f;
+    fadeCoeff_ = 1.0f;
 
     for (auto& oscillator : oscillators_)
         oscillator.reset();
@@ -81,10 +94,29 @@ void SynthVoice::reset() noexcept
     envelope2_.reset();
 }
 
-void SynthVoice::start (int midiNote, float velocity) noexcept
+void SynthVoice::beginStealFade() noexcept
+{
+    if (fading_)
+        return; // gia' in dissolvenza: riarmarla la farebbe ripartire dal livello corrente
+
+    fading_ = true;
+    fadeCoeff_ = stealFadeCoeff_;
+}
+
+void SynthVoice::start (int midiNote, float velocity, unsigned long long startOrder) noexcept
 {
     midiNote_ = midiNote;
     velocity_ = velocity;
+    startOrder_ = startOrder;
+    released_ = false;
+
+    // Uno slot appena liberato da una dissolvenza e' gia' a posto (reset() l'ha rimessa a uno),
+    // ma uno slot la cui *dissolvenza non era ancora finita quando l'inviluppo si e' spento*
+    // no: li' fadeGain_ e' fermo a meta' strada. Senza queste due righe la nota nuova partirebbe
+    // attenuata, e continuerebbe a scendere.
+    fading_ = false;
+    fadeGain_ = 1.0f;
+    fadeCoeff_ = 1.0f;
 
     // envVel a 0 % = inviluppo sempre a piena ampiezza; a 100 % = proporzionale alla velocity.
     // L'inviluppo parte prima della modulazione perche' `env` e' una delle quattro sorgenti:
@@ -162,6 +194,7 @@ void SynthVoice::retrigger (float velocity) noexcept
     const auto peak = 1.0f - velocityAmount_ * (1.0f - velocity);
     envelope_.noteOn (peak);
     envelope2_.noteOn (1.0f);
+    released_ = false;
     active_ = true;
 }
 
@@ -169,6 +202,7 @@ void SynthVoice::stop() noexcept
 {
     envelope_.noteOff();
     envelope2_.noteOff();
+    released_ = true;
 
     // `envelope_` e non `envelope2_`, e nemmeno i due insieme: la voce vive finche' vive
     // l'inviluppo d'**ampiezza**. Il secondo e' un modulatore, e un modulatore non decide
@@ -545,7 +579,11 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
             if (filterOn_)
                 sample = filter_.processSample (sample);
 
-            sample *= envelope_.getNextSample();
+            // La dissolvenza del furto moltiplica l'inviluppo. A riposo fadeGain_ vale
+            // esattamente 1.0f e fadeCoeff_ pure, quindi le due righe sono l'identita' bit per
+            // bit e questo ciclo resta quello di prima — lo stesso argomento di modMask_.
+            sample *= envelope_.getNextSample() * fadeGain_;
+            fadeGain_ *= fadeCoeff_;
             sample *= levelAt (smoothedLevel_.getNextValue());
 
             outL[i] += sample * gainL;
@@ -583,7 +621,9 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
             // Inviluppo e livello sono per voce, non per copia: si leggono una volta sola e si
             // applicano ai due canali. getNextSample()/getNextValue() avanzano uno stato, non
             // sono funzioni pure — chiamarle due volte farebbe correre l'inviluppo al doppio.
-            const auto amplitude = envelope_.getNextSample() * levelAt (smoothedLevel_.getNextValue());
+            const auto amplitude = envelope_.getNextSample() * fadeGain_
+                                 * levelAt (smoothedLevel_.getNextValue());
+            fadeGain_ *= fadeCoeff_;
 
             outL[i] += left * amplitude;
             outR[i] += right * amplitude;
@@ -602,7 +642,23 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
     for (int i = 0; i < numSamples; ++i)
         envelope2_.getNextSample();
 
+    // La dissolvenza del furto e' arrivata a -80 dB: qui azzerare non e' un gradino ma un
+    // arrotondamento, e lo slot torna disponibile. Il controllo sta a fine fetta e non per
+    // campione perche' le fette valgono al piu' kControlBlockSamples (32): si sfora di meno di
+    // un millisecondo, su un segnale che a quel punto sta gia' sotto il pavimento a 16 bit.
+    if (fading_ && fadeGain_ <= kStealFadeFloor)
+    {
+        reset();
+        return;
+    }
+
+    // L'inviluppo puo' spegnersi *prima* che la dissolvenza sia finita — una voce rubata mentre
+    // era gia' in release corto. La voce e' comunque silenziosa: si libera lo slot, e `fading_`
+    // torna falso perche' non c'e' piu' niente da dissolvere.
     if (! envelope_.isActive())
+    {
         active_ = false;
+        fading_ = false;
+    }
 }
 } // namespace engine
