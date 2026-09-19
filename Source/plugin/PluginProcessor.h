@@ -3,6 +3,7 @@
 #include "dsp/WavetableStore.h"
 #include "engine/EngineParams.h"
 #include "engine/MeterFrame.h"
+#include "engine/ModMatrix.h"
 #include "engine/SynthEngine.h"
 #include "parameters/ParamCollect.h"
 #include "parameters/ParameterLayout.h"
@@ -17,6 +18,8 @@
 
 class SerumStyleSynthAudioProcessor final : public juce::AudioProcessor,
                                              private juce::AudioProcessorValueTreeState::Listener,
+                                             private juce::ValueTree::Listener,
+                                             private juce::AsyncUpdater,
                                              private juce::Timer
 {
 public:
@@ -67,10 +70,36 @@ private:
         risolti nel costruttore. */
     engine::EngineParams collectParams() const noexcept;
 
+    /** Riaggancia il listener del ValueTree a `root`, staccandolo dall'albero precedente.
+        Serve perché `apvts_.replaceState()` (setStateInformation) non modifica l'albero
+        esistente: lo *sostituisce*. Un listener rimasto su quello vecchio smetterebbe
+        semplicemente di ricevere eventi, e lo snapshot resterebbe fermo sulle assegnazioni del
+        preset precedente senza che niente segnali l'errore. Stesso pattern di
+        bridge::StateChannel::listenTo(). */
+    void listenToState (juce::ValueTree root);
+
+    /** Traduce il nodo MODS in un engine::ModSnapshot e lo pubblica al motore. Message thread:
+        qui si confrontano stringhe e si costruisce lo snapshot sullo stack. Al thread audio
+        arriva solo un puntatore a uno slot preallocato (vedi engine::SynthEngine::setMods). */
+    void rebuildModSnapshot();
+
     void parameterChanged (const juce::String& id, float newValue) override;
     void timerCallback() override;
 
+    void valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier&) override;
+    void valueTreeChildAdded (juce::ValueTree& parent, juce::ValueTree&) override;
+    void valueTreeChildRemoved (juce::ValueTree& parent, juce::ValueTree&, int) override;
+    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override {}
+    void valueTreeParentChanged (juce::ValueTree&) override {}
+    void handleAsyncUpdate() override;
+
     juce::AudioProcessorValueTreeState apvts_;
+
+    // L'albero a cui il listener è effettivamente agganciato. Tenerlo a parte da apvts_.state
+    // è ciò che permette di staccarsi da quello *vecchio* dopo un replaceState: a quel punto
+    // apvts_.state punta già altrove e non saprebbe più da dove rimuoversi.
+    juce::ValueTree listenedState_;
+
     juce::MidiKeyboardState keyboardState_;
     std::unique_ptr<engine::SynthEngine> engine_;
     engine::MeterFrame meters_;

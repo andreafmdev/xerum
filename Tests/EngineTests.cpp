@@ -6,6 +6,7 @@
 #include "engine/SynthEngine.h"
 #include "parameters/ParamCollect.h"
 #include "parameters/ParameterTable.h"
+#include "parameters/StateTree.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
@@ -1266,3 +1267,77 @@ struct ModulationEngineTests final : juce::UnitTest
 
 static ModulationEngineTests modulationEngineTests;
 
+
+/**
+ * Il percorso che PluginProcessor::rebuildModSnapshot() fa sul message thread, meno
+ * l'AudioProcessor: XerumTests non linka juce_audio_processors, quindi il processore non è
+ * istanziabile qui, ma il pezzo che conta — dal JSON che la WebUI manda a setMods fino allo
+ * snapshot che il motore riceve — sì.
+ *
+ * Tiene insieme tre cose scritte in file diversi: gli id di state::ids, la forma del nodo che
+ * state::setMods produce e quella che engine::buildModSnapshot legge. ModMatrixTests costruisce
+ * il nodo MODS a mano, quindi una divergenza fra i due modi di scriverlo gli sfuggirebbe.
+ */
+struct ModStateWiringTests final : juce::UnitTest
+{
+    ModStateWiringTests() : juce::UnitTest ("cablaggio stato -> mod matrix", "engine") {}
+
+    void runTest() override
+    {
+        beginTest ("il JSON che la UI manda a setMods arriva intero nello snapshot");
+        {
+            juce::ValueTree root { "PARAMS" };
+            state::ensureChildren (root);
+
+            state::setMods (root,
+                            juce::JSON::parse (R"([{"src":"lfo","target":"cutoff","depth":0.5},)"
+                                               R"( {"src":"vel","target":"level","depth":-0.25}])"),
+                            nullptr);
+
+            engine::ModSnapshot snapshot;
+            engine::buildModSnapshot (root.getChildWithName (state::ids::MODS), snapshot);
+
+            expectEquals (snapshot.count, 2);
+
+            expect (snapshot.routes[0].src == engine::ModSource::lfo);
+            expectEquals (snapshot.routes[0].targetIndex,
+                          engine::modTargetIndexFor (params::ParamSlot::cutoff));
+            expectWithinAbsoluteError (snapshot.routes[0].depth, 0.5f, 1.0e-6f);
+
+            expect (snapshot.routes[1].src == engine::ModSource::vel);
+            expectEquals (snapshot.routes[1].targetIndex,
+                          engine::modTargetIndexFor (params::ParamSlot::level));
+            expectWithinAbsoluteError (snapshot.routes[1].depth, -0.25f, 1.0e-6f);
+        }
+
+        beginTest ("svuotare la lista dalla UI spegne davvero la modulazione");
+        {
+            juce::ValueTree root { "PARAMS" };
+            state::ensureChildren (root);
+
+            state::setMods (root, juce::JSON::parse (R"([{"src":"mw","target":"pan","depth":1}])"), nullptr);
+            state::setMods (root, juce::JSON::parse ("[]"), nullptr);
+
+            engine::ModSnapshot snapshot;
+            engine::buildModSnapshot (root.getChildWithName (state::ids::MODS), snapshot);
+
+            expectEquals (snapshot.count, 0);
+        }
+
+        beginTest ("uno stato senza nodo MODS non lascia in piedi lo snapshot precedente");
+        {
+            // Quello che arriva da un progetto salvato prima che MODS esistesse: getChildWithName
+            // ritorna un albero non valido, e rebuildModSnapshot lo passa comunque a
+            // buildModSnapshot. Deve uscirne uno snapshot vuoto, non il precedente rimasto lì.
+            juce::ValueTree root { "PARAMS" };
+
+            engine::ModSnapshot snapshot;
+            snapshot.count = 3;
+            engine::buildModSnapshot (root.getChildWithName (state::ids::MODS), snapshot);
+
+            expectEquals (snapshot.count, 0);
+        }
+    }
+};
+
+static ModStateWiringTests modStateWiringTests;

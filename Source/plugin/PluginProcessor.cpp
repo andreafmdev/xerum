@@ -39,9 +39,26 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
     paramSlots_[(size_t) params::ParamSlot::pan] = apvts_.getRawParameterValue ("pan");
     paramSlots_[(size_t) params::ParamSlot::bypass] = apvts_.getRawParameterValue ("bypass");
 
+    // I sei dell'LFO: i parametri esistevano già in parameters.json, mancava solo chi li
+    // risolvesse. Senza queste righe collectParams() troverebbe puntatori nulli e l'LFO
+    // girerebbe con la forma, il rate e la fade di default, ignorando i knob del tab LFO.
+    paramSlots_[(size_t) params::ParamSlot::lshape] = apvts_.getRawParameterValue ("lshape");
+    paramSlots_[(size_t) params::ParamSlot::lrate] = apvts_.getRawParameterValue ("lrate");
+    paramSlots_[(size_t) params::ParamSlot::lsync] = apvts_.getRawParameterValue ("lsync");
+    paramSlots_[(size_t) params::ParamSlot::lphase] = apvts_.getRawParameterValue ("lphase");
+    paramSlots_[(size_t) params::ParamSlot::lfade] = apvts_.getRawParameterValue ("lfade");
+    paramSlots_[(size_t) params::ParamSlot::lretrig] = apvts_.getRawParameterValue ("lretrig");
+
     // wtIndex e volume non passano da EngineParams/collectEngineParams: restano a parte.
     paramWtIndex_ = apvts_.getRawParameterValue ("wtIndex");
     paramVolume_ = apvts_.getRawParameterValue ("volume");
+
+    listenToState (apvts_.state);
+
+    // Subito, non solo al primo cambiamento: un progetto riaperto con delle assegnazioni già
+    // salvate deve suonare modulato dal primo blocco, senza aspettare che l'utente tocchi
+    // qualcosa. (setStateInformation, se arriva, rifà comunque il giro sul nuovo albero.)
+    rebuildModSnapshot();
 
     apvts_.addParameterListener ("wtIndex", this);
     startTimerHz (kWavetablePollHz);
@@ -50,7 +67,56 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
 SerumStyleSynthAudioProcessor::~SerumStyleSynthAudioProcessor()
 {
     stopTimer();
+    cancelPendingUpdate();
+    listenedState_.removeListener (this);
     apvts_.removeParameterListener ("wtIndex", this);
+}
+
+void SerumStyleSynthAudioProcessor::listenToState (juce::ValueTree root)
+{
+    listenedState_.removeListener (this);
+    listenedState_ = std::move (root);
+    listenedState_.addListener (this);
+}
+
+void SerumStyleSynthAudioProcessor::rebuildModSnapshot()
+{
+    engine::ModSnapshot snapshot;
+    engine::buildModSnapshot (apvts_.state.getChildWithName (state::ids::MODS), snapshot);
+    engine_->setMods (snapshot);
+}
+
+// Il listener sta sulla radice dell'APVTS, quindi qui passa *ogni* proprietà dell'albero: ogni
+// movimento di ogni knob, che vive nei figli PARAM. Senza questo filtro ricostruiremmo lo
+// snapshot a ogni giro di automazione, per niente.
+void SerumStyleSynthAudioProcessor::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier&)
+{
+    if (tree.hasType (state::ids::MOD) || tree.hasType (state::ids::MODS))
+        triggerAsyncUpdate();
+}
+
+void SerumStyleSynthAudioProcessor::valueTreeChildAdded (juce::ValueTree& parent, juce::ValueTree&)
+{
+    if (parent.hasType (state::ids::MODS))
+        triggerAsyncUpdate();
+}
+
+void SerumStyleSynthAudioProcessor::valueTreeChildRemoved (juce::ValueTree& parent, juce::ValueTree&, int)
+{
+    if (parent.hasType (state::ids::MODS))
+        triggerAsyncUpdate();
+}
+
+// Coalizzato invece di ricostruito dentro la callback: state::setMods riscrive l'intera lista
+// come removeAllChildren + N append, cioè 2N notifiche per un singolo drag di depth. Pubblicarne
+// una per notifica significherebbe pubblicare anche gli stati intermedi, fra cui quello a lista
+// vuota subito dopo removeAllChildren: se un blocco audio cade in quella finestra la modulazione
+// sparisce per 128 campioni, che su level o pan è un click. Un solo rebuild per giro di message
+// loop pubblica soltanto lo stato finale. È la stessa ragione per cui bridge::StateChannel
+// coalizza il suo emitState.
+void SerumStyleSynthAudioProcessor::handleAsyncUpdate()
+{
+    rebuildModSnapshot();
 }
 
 int SerumStyleSynthAudioProcessor::wavetableIndexFromParam() const noexcept
@@ -168,7 +234,18 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     buffer.clear();
 
-    const auto params = collectParams();
+    // Non `const`: collectParams() ritorna per valore e il BPM si aggiunge qui, non là dentro —
+    // params::collectEngineParams legge solo l'APVTS, e il tempo non è un parametro.
+    auto params = collectParams();
+
+    // Il tempo serve al solo LFO, e solo quando `lsync` è attivo. Senza playhead (Standalone,
+    // qualche render offline) o senza BPM esposto si resta a 120, lo stesso fallback che
+    // dsp::syncedRateHz applica per conto suo: nessun ramo speciale da mantenere.
+    if (auto* playHead = getPlayHead())
+        if (const auto position = playHead->getPosition())
+            if (const auto bpm = position->getBpm())
+                params.bpm = (float) *bpm;
+
     engine_->setParams (params);
 
     if (paramVolume_ != nullptr)
@@ -195,6 +272,11 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         peak = juce::jmax (peak, buffer.getMagnitude (ch, 0, buffer.getNumSamples()));
     meters_.outPeak.store (juce::jmax (meters_.outPeak.load (std::memory_order_relaxed), peak), std::memory_order_relaxed);
     meters_.inPeak.store  (juce::jmax (meters_.inPeak.load  (std::memory_order_relaxed), peak), std::memory_order_relaxed);
+
+    // -1..1: è il puntino che il tab LFO della UI disegna. A differenza dei picchi non si
+    // accumula con jmax ma si sovrascrive: un LFO bipolare non ha un "picco di blocco" che
+    // significhi qualcosa, quello che serve è il valore di adesso.
+    meters_.lfo.store (engine_->getLfoLevel(), std::memory_order_relaxed);
 }
 
 juce::AudioProcessorEditor* SerumStyleSynthAudioProcessor::createEditor()
@@ -218,7 +300,20 @@ void SerumStyleSynthAudioProcessor::setStateInformation (const void* data, int s
 
             apvts_.replaceState (juce::ValueTree::fromXml (*xml));
 
+            // replaceState() sostituisce l'oggetto albero, non lo modifica: da qui in poi
+            // l'ordine conta. Prima i figli non parametrici (uno stato salvato prima che MODS
+            // esistesse non li ha), poi il riaggancio del listener — restare su quello vecchio
+            // significherebbe non vedere mai più cambiare una mod — e infine lo snapshot.
             state::ensureChildren (apvts_.state);
+            listenToState (apvts_.state);
+
+            // Un rebuild ancora in coda riguarderebbe l'albero appena buttato via; e questo qui
+            // è sincrono, non coalizzato, perché il thread audio sta già rendendo con le
+            // assegnazioni del preset precedente: aspettare il prossimo giro di message loop
+            // vorrebbe dire suonare il preset nuovo con le mod di quello vecchio.
+            cancelPendingUpdate();
+            rebuildModSnapshot();
+
             stateReplaced_.sendChangeMessage();
         }
 }
