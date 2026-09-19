@@ -155,6 +155,19 @@ public:
      */
     int getArpStep() const noexcept { return arpStep_.load (std::memory_order_relaxed); }
 
+    /**
+     * Quali note stanno suonando, un bit per nota MIDI: 0..63 in `Lo`, 64..127 in `Hi`.
+     *
+     * Istantaneo come `mw` e `arpStep`, e per la stessa ragione: una nota tenuta e' uno **stato**,
+     * non un transitorio. Azzerarlo alla lettura spegnerebbe la tastiera della UI non appena il
+     * thread audio smette di girare, mentre il tasto e' ancora premuto.
+     *
+     * I bit si alzano qui, cioe' **a valle dell'arpeggiatore**: ad arp acceso il mask descrive il
+     * pattern che suona, non i tasti tenuti. E' la scelta voluta.
+     */
+    juce::uint64 getActiveNotesLo() const noexcept { return activeNotesLo_.load (std::memory_order_relaxed); }
+    juce::uint64 getActiveNotesHi() const noexcept { return activeNotesHi_.load (std::memory_order_relaxed); }
+
 private:
     void handleMidiEvent (const juce::MidiMessage& message) noexcept;
 
@@ -289,6 +302,8 @@ private:
     std::atomic<float> env2Peak_ { 0.0f };
     std::atomic<float> velPeak_ { 0.0f };
     std::atomic<float> modWheelLevel_ { 0.0f };
+    std::atomic<juce::uint64> activeNotesLo_ { 0 };   // note 0..63
+    std::atomic<juce::uint64> activeNotesHi_ { 0 };   // note 64..127
 
     /** I massimi accumulati sulle sotto-fette del blocco in corso. Azzerati da process(). */
     float blockEnvPeak_ { 0.0f };

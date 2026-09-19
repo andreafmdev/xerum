@@ -301,6 +301,10 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     // tab Arp. Istantaneo come i due sopra — è una posizione dentro il pattern, non un picco.
     meters_.arpStep.store (engine_->getArpStep(), std::memory_order_relaxed);
 
+    // Quali note stanno suonando: e' cio' che accende i tasti nella striscia della UI.
+    meters_.notesLo.store (engine_->getActiveNotesLo(), std::memory_order_relaxed);
+    meters_.notesHi.store (engine_->getActiveNotesHi(), std::memory_order_relaxed);
+
     // Unipolari e più veloci di un frame del meter: si accumula il massimo, come per i picchi
     // audio, e il lettore lo azzera. Il motore ha già preso il massimo sulle sotto-fette di
     // questo blocco; qui si tiene il massimo fra i blocchi che cadono nello stesso frame.

@@ -869,6 +869,47 @@ struct EngineRobustnessTests final : juce::UnitTest
                 renderPeak (synth, 4, *this); // scarica la coda prima della prossima variante
             }
         }
+
+        beginTest ("il mask delle note segue cio' che il motore sta suonando");
+        {
+            engine::SynthEngine synth;
+            prepareEngine (synth, store);
+            synth.setParams (defaultParams());
+
+            const auto bitOf = [] (const engine::SynthEngine& s, int note)
+            {
+                const auto mask = note < 64 ? s.getActiveNotesLo() : s.getActiveNotesHi();
+                return (mask & (juce::uint64 (1) << (note % 64))) != 0;
+            };
+
+            juce::AudioBuffer<float> buffer (2, 128);
+
+            juce::MidiBuffer on;
+            on.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            on.addEvent (juce::MidiMessage::noteOn (1, 100, 1.0f), 0);
+            buffer.clear();
+            synth.process (buffer, on);
+
+            expect (bitOf (synth, 60), "il DO centrale deve risultare acceso");
+            expect (bitOf (synth, 100), "una nota sopra il 64 finisce nella meta' alta");
+            expect (! bitOf (synth, 61), "una nota mai suonata resta spenta");
+
+            juce::MidiBuffer off;
+            off.addEvent (juce::MidiMessage::noteOff (1, 60), 0);
+            buffer.clear();
+            synth.process (buffer, off);
+
+            expect (! bitOf (synth, 60), "il note-off deve spegnere il bit");
+            expect (bitOf (synth, 100), "e non deve toccare le altre note");
+
+            juce::MidiBuffer panic;
+            panic.addEvent (juce::MidiMessage::allNotesOff (1), 0);
+            buffer.clear();
+            synth.process (buffer, panic);
+
+            expectEquals ((int) synth.getActiveNotesLo(), 0, "all notes off pulisce la meta' bassa");
+            expectEquals ((int) synth.getActiveNotesHi(), 0, "all notes off pulisce la meta' alta");
+        }
     }
 };
 

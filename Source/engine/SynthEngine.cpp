@@ -123,6 +123,8 @@ void SynthEngine::reset() noexcept
     voices_.reset();
     arp_.reset();
     arpStep_.store (0, std::memory_order_relaxed);
+    activeNotesLo_.store (0, std::memory_order_relaxed);
+    activeNotesHi_.store (0, std::memory_order_relaxed);
     chorusMix_.reset();
     reverbMix_.reset();
     stopFx();
@@ -206,21 +208,38 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
         return;
     }
 
+    // Un bit per nota MIDI in activeNotesLo_/activeNotesHi_, per SynthEngine::getActiveNotesLo/Hi.
+    // A valle dell'arpeggiatore come tutto il resto di questa funzione: vedi il commento dei
+    // getter in SynthEngine.h.
+    const auto setNoteBit = [this] (int note, bool on) noexcept
+    {
+        auto& slot = note < 64 ? activeNotesLo_ : activeNotesHi_;
+        const auto bit = juce::uint64 (1) << (note % 64);
+        const auto current = slot.load (std::memory_order_relaxed);
+        slot.store (on ? (current | bit) : (current & ~bit), std::memory_order_relaxed);
+    };
+
     if (message.isNoteOn())
     {
         voices_.noteOn (message.getNoteNumber(), message.getFloatVelocity());
+        setNoteBit (message.getNoteNumber(), true);
     }
     else if (message.isNoteOff())
     {
         voices_.noteOff (message.getNoteNumber());
+        setNoteBit (message.getNoteNumber(), false);
     }
     else if (message.isAllNotesOff())
     {
         voices_.allNotesOff();
+        activeNotesLo_.store (0, std::memory_order_relaxed);
+        activeNotesHi_.store (0, std::memory_order_relaxed);
     }
     else if (message.isAllSoundOff())
     {
         voices_.allSoundOff();
+        activeNotesLo_.store (0, std::memory_order_relaxed);
+        activeNotesHi_.store (0, std::memory_order_relaxed);
     }
 }
 
