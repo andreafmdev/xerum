@@ -224,7 +224,9 @@ export function FxTab() {
       ))}
       {slot(fx2On.checked, fx2On.set, "Reverb", (
         <>
+          <ParamKnob id="rvPredelay" size="sm" />
           <ParamKnob id="rvSize" size="sm" />
+          <ParamKnob id="rvDecay" size="sm" />
           <ParamKnob id="rvDamp" size="sm" />
           <ParamKnob id="rvMix" size="sm" />
         </>

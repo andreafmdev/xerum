@@ -44,6 +44,7 @@ target_sources(SerumStyleSynth
         Source/engine/ModMatrix.cpp
         Source/dsp/Lfo.cpp
         Source/dsp/Chorus.cpp
+        Source/dsp/PlateReverb.cpp
         Source/dsp/WavetableOscillator.cpp
         Source/dsp/StateVariableFilter.cpp
         Source/dsp/ADSREnvelope.cpp
@@ -96,11 +97,13 @@ target_sources(XerumTests
         Tests/ModMatrixTests.cpp
         Tests/LfoTests.cpp
         Tests/ChorusTests.cpp
+        Tests/ReverbTests.cpp
         Source/dsp/WavetableBlob.cpp
         Source/dsp/MipTable.cpp
         Source/dsp/WavetableStore.cpp
         Source/dsp/Lfo.cpp
         Source/dsp/Chorus.cpp
+        Source/dsp/PlateReverb.cpp
         Source/engine/ModMatrix.cpp
         Source/dsp/WavetableOscillator.cpp
         Source/dsp/ADSREnvelope.cpp

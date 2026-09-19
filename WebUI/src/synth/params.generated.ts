@@ -1,7 +1,7 @@
 // GENERATED da Source/parameters/parameters.json — non modificare a mano.
 // Rigenera con: pnpm gen:params
 
-export type ParamId = "oscOn" | "wtIndex" | "unison" | "oct" | "semi" | "wtpos" | "warp" | "detune" | "fine" | "level" | "filtOn" | "ftype" | "slope" | "cutoff" | "res" | "drive" | "keytrk" | "voiceMode" | "pan" | "glide" | "volume" | "bypass" | "att" | "dec" | "sus" | "rel" | "envVel" | "envCurve" | "lshape" | "lsync" | "lretrig" | "lrate" | "lphase" | "lfade" | "fx1On" | "chRate" | "chDepth" | "chMix" | "fx2On" | "rvSize" | "rvDamp" | "rvMix" | "arpOn" | "arpMode" | "arpRate" | "arpGate" | "arpOct" | "arpSwing" | "att2" | "dec2" | "sus2" | "rel2" | "chFeedback";
+export type ParamId = "oscOn" | "wtIndex" | "unison" | "oct" | "semi" | "wtpos" | "warp" | "detune" | "fine" | "level" | "filtOn" | "ftype" | "slope" | "cutoff" | "res" | "drive" | "keytrk" | "voiceMode" | "pan" | "glide" | "volume" | "bypass" | "att" | "dec" | "sus" | "rel" | "envVel" | "envCurve" | "lshape" | "lsync" | "lretrig" | "lrate" | "lphase" | "lfade" | "fx1On" | "chRate" | "chDepth" | "chMix" | "fx2On" | "rvSize" | "rvDamp" | "rvMix" | "arpOn" | "arpMode" | "arpRate" | "arpGate" | "arpOct" | "arpSwing" | "att2" | "dec2" | "sus2" | "rel2" | "chFeedback" | "rvPredelay" | "rvDecay";
 export type ParamKind = "float" | "int" | "bool" | "choice";
 export type MapType = "linear" | "log" | "db" | "ms-squared";
 export type LabelKind = "hz" | "time" | "pan" | "signed" | "arp-rate";
@@ -14,7 +14,7 @@ export interface ParamSpec {
   options?: { value: string; label: string }[];
 }
 export const GROUPS: Record<string, string> = {"osc":"Osc","filter":"Filter","master":"Master","env":"Env","lfo":"LFO","fx1":"Chorus","fx2":"Reverb","arp":"Arp","env2":"Env 2"};
-export const PARAM_IDS = ["oscOn","wtIndex","unison","oct","semi","wtpos","warp","detune","fine","level","filtOn","ftype","slope","cutoff","res","drive","keytrk","voiceMode","pan","glide","volume","bypass","att","dec","sus","rel","envVel","envCurve","lshape","lsync","lretrig","lrate","lphase","lfade","fx1On","chRate","chDepth","chMix","fx2On","rvSize","rvDamp","rvMix","arpOn","arpMode","arpRate","arpGate","arpOct","arpSwing","att2","dec2","sus2","rel2","chFeedback"] as const satisfies readonly ParamId[];
+export const PARAM_IDS = ["oscOn","wtIndex","unison","oct","semi","wtpos","warp","detune","fine","level","filtOn","ftype","slope","cutoff","res","drive","keytrk","voiceMode","pan","glide","volume","bypass","att","dec","sus","rel","envVel","envCurve","lshape","lsync","lretrig","lrate","lphase","lfade","fx1On","chRate","chDepth","chMix","fx2On","rvSize","rvDamp","rvMix","arpOn","arpMode","arpRate","arpGate","arpOct","arpSwing","att2","dec2","sus2","rel2","chFeedback","rvPredelay","rvDecay"] as const satisfies readonly ParamId[];
 export const PARAM_SPECS: Record<ParamId, ParamSpec> = {
   "oscOn": {"id":"oscOn","name":"Oscillator on","group":"osc","kind":"bool","slot":true,"default":true},
   "wtIndex": {"id":"wtIndex","name":"Wavetable","group":"osc","kind":"choice","slot":false,"default":0,"options":[{"value":"basic","label":"Basic Shapes"},{"value":"saws","label":"Analog Saws"},{"value":"grit","label":"Digital Grit"},{"value":"vocal","label":"Vocal Formant"},{"value":"bells","label":"Glass Bells"},{"value":"pwm","label":"PWM Sweep"}]},
@@ -54,10 +54,10 @@ export const PARAM_SPECS: Record<ParamId, ParamSpec> = {
   "chRate": {"id":"chRate","name":"Rate","group":"fx1","kind":"float","slot":true,"map":{"type":"linear","min":0.1,"max":5.1},"default":0.3,"unit":"Hz","decimals":2},
   "chDepth": {"id":"chDepth","name":"Depth","group":"fx1","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.4,"unit":"%","decimals":0},
   "chMix": {"id":"chMix","name":"Mix","group":"fx1","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.3,"unit":"%","decimals":0},
-  "fx2On": {"id":"fx2On","name":"Reverb on","group":"fx2","kind":"bool","slot":false,"default":true},
-  "rvSize": {"id":"rvSize","name":"Size","group":"fx2","kind":"float","slot":false,"map":{"type":"linear","min":0,"max":100},"default":0.6,"unit":"%","decimals":0},
-  "rvDamp": {"id":"rvDamp","name":"Damp","group":"fx2","kind":"float","slot":false,"map":{"type":"linear","min":0,"max":100},"default":0.4,"unit":"%","decimals":0},
-  "rvMix": {"id":"rvMix","name":"Mix","group":"fx2","kind":"float","slot":false,"map":{"type":"linear","min":0,"max":100},"default":0.25,"unit":"%","decimals":0},
+  "fx2On": {"id":"fx2On","name":"Reverb on","group":"fx2","kind":"bool","slot":true,"default":true},
+  "rvSize": {"id":"rvSize","name":"Size","group":"fx2","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.6,"unit":"%","decimals":0},
+  "rvDamp": {"id":"rvDamp","name":"Damp","group":"fx2","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.4,"unit":"%","decimals":0},
+  "rvMix": {"id":"rvMix","name":"Mix","group":"fx2","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.25,"unit":"%","decimals":0},
   "arpOn": {"id":"arpOn","name":"Arp on","group":"arp","kind":"bool","slot":false,"default":false},
   "arpMode": {"id":"arpMode","name":"Arp mode","group":"arp","kind":"choice","slot":false,"default":0,"options":[{"value":"Up","label":"Up"},{"value":"Down","label":"Down"},{"value":"UpDn","label":"UpDn"},{"value":"Rand","label":"Rand"}]},
   "arpRate": {"id":"arpRate","name":"Rate","group":"arp","kind":"float","slot":false,"map":{"type":"linear","min":0,"max":1},"default":0.4,"labelKind":"arp-rate"},
@@ -69,4 +69,6 @@ export const PARAM_SPECS: Record<ParamId, ParamSpec> = {
   "sus2": {"id":"sus2","name":"Sustain","group":"env2","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.7,"unit":"%","decimals":0},
   "rel2": {"id":"rel2","name":"Release","group":"env2","kind":"float","slot":true,"map":{"type":"ms-squared","min":1,"max":8001},"default":0.35,"labelKind":"time"},
   "chFeedback": {"id":"chFeedback","name":"Feedback","group":"fx1","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0,"unit":"%","decimals":0},
+  "rvPredelay": {"id":"rvPredelay","name":"Predelay","group":"fx2","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.2,"unit":"ms","decimals":0},
+  "rvDecay": {"id":"rvDecay","name":"Decay","group":"fx2","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.5,"unit":"%","decimals":0},
 };

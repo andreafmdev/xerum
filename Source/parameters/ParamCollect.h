@@ -216,6 +216,30 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.chorusMix01 = params::denormalise (*specChMix, rawFor (ParamSlot::chMix)) * 0.01f;
     p.chorusFeedback01 = params::denormalise (*specChFeedback, rawFor (ParamSlot::chFeedback)) * 0.01f;
 
+    // Il riverbero. `rvPredelay` e `rvDecay` sono nuovi e stanno anche loro in **coda** al
+    // file, per la stessa ragione di chFeedback; i quattro che c'erano gia' passano da
+    // "slot": false a true, il che sposta gli indici di params::ParamSlot ma **non** quelli
+    // esposti all'host, che sono l'ordine di kTable, cioe' del file.
+    //
+    // Qui non c'e' nessuna corsa musicale: si dividono delle percentuali per cento. Le corse
+    // vere — 0.25..0.75 di sizeRatio, 0.10..0.80 di coefficiente di decadimento, 20 kHz..500 Hz
+    // di damping — stanno in dsp::PlateReverb, accanto alla ragione per cui sono quelle.
+    constexpr auto* specRvSize = params::find ("rvSize");
+    constexpr auto* specRvDamp = params::find ("rvDamp");
+    constexpr auto* specRvMix = params::find ("rvMix");
+    constexpr auto* specRvPredelay = params::find ("rvPredelay");
+    constexpr auto* specRvDecay = params::find ("rvDecay");
+    static_assert (specRvSize != nullptr && specRvDamp != nullptr && specRvMix != nullptr
+                       && specRvPredelay != nullptr && specRvDecay != nullptr,
+                   "i parametri del riverbero non sono in ParameterTable.h");
+
+    p.reverbOn = rawFor (ParamSlot::fx2On) >= 0.5f;
+    p.reverbSize01 = params::denormalise (*specRvSize, rawFor (ParamSlot::rvSize)) * 0.01f;
+    p.reverbDamp01 = params::denormalise (*specRvDamp, rawFor (ParamSlot::rvDamp)) * 0.01f;
+    p.reverbMix01 = params::denormalise (*specRvMix, rawFor (ParamSlot::rvMix)) * 0.01f;
+    p.reverbDecay01 = params::denormalise (*specRvDecay, rawFor (ParamSlot::rvDecay)) * 0.01f;
+    p.reverbPredelaySeconds = params::denormalise (*specRvPredelay, rawFor (ParamSlot::rvPredelay)) * 0.001f;
+
     // Le basi normalizzate dei target modulabili: nessuna conversione, e' il valore grezzo
     // dell'APVTS. La denormalizzazione avviene dopo la somma delle modulazioni, dentro
     // SynthVoice, con le stesse funzioni usate qui sopra.

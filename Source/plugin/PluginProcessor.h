@@ -39,11 +39,26 @@ public:
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    /** Lo stadio FX tiene viva la coda dopo l'ultima nota: il chorus ha ~150 ms udibili a
-        feedback alto e il ringout smette di far girare l'effetto dopo 0.5 s di silenzio in
-        ingresso. Dichiarare 0.0 significava dire all'host che puo' tagliare subito, e in
-        render offline alcuni lo fanno davvero. Il valore cresce quando entra il riverbero. */
-    double getTailLengthSeconds() const override { return 0.5; }
+    /**
+     * Lo stadio FX tiene viva la coda dopo l'ultima nota, e adesso a fissarla e' il riverbero.
+     *
+     * Il numero non e' una stima prudente: e' il caso peggiore che i parametri **permettono**,
+     * cioe' `dsp::PlateReverb::tailSecondsAtExtremes()`. Il tank perde `decay^4` per ogni giro
+     * della figura a otto, il giro dura 1.451 s alla size massima (0.75 di sizeRatio: 1.088 s),
+     * e con `decay` a fondo corsa (0.80) servono 7.74 giri per scendere di 60 dB — 8.42 s.
+     * Moltiplicati per il margine di 1.25 con cui la formula copre la coda **misurata** (gli
+     * allpass ritardano piu' della loro linea: vedi dsp::PlateReverb::tailSeconds) fa 10.53, piu'
+     * i 100 ms di predelay massimo e i ~165 ms di coda del chorus a feedback pieno, che sta in
+     * serie prima: 10.79 s, arrotondati a undici.
+     *
+     * Dichiararne meno e' il difetto che si vede solo in render offline, dove alcuni host
+     * tagliano davvero a quello che diciamo: la coda di un riverbero troncata a mezzo secondo.
+     * Dichiararne di piu' costa solo qualche secondo di render in piu' a ogni bounce, ed e'
+     * l'errore dalla parte giusta. "il valore dichiarato all'host copre la coda peggiore" in
+     * Tests/ReverbTests.cpp lega questa riga alla formula, cosi' cambiare kMaxDecay o
+     * kMaxSizeRatio senza tornare qui rompe la suite invece che l'export dell'utente.
+     */
+    double getTailLengthSeconds() const override { return 11.0; }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }

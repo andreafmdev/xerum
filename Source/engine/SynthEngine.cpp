@@ -78,6 +78,12 @@ void SynthEngine::prepare (const EngineSpec& spec) noexcept
 
     chorus_.prepare (spec_.sampleRate, fxBlock, fxChannels);
 
+    // Il riverbero alloca qui e solo qui — ~440 KB di linee dimensionate sulla size massima e
+    // sul predelay massimo, cosi' muovere `rvSize` o `rvPredelay` non chiede memoria a nessuno.
+    // E' il secondo dei tre caveat sul codice adottato, e il commento di dsp::PlateReverb dice
+    // dove stava nell'originale.
+    reverb_.prepare (spec_.sampleRate);
+
     juce::dsp::ProcessSpec dspSpec {};
     dspSpec.sampleRate = spec_.sampleRate;
     dspSpec.maximumBlockSize = (juce::uint32) fxBlock;
@@ -86,37 +92,47 @@ void SynthEngine::prepare (const EngineSpec& spec) noexcept
     chorusMix_.setMixingRule (juce::dsp::DryWetMixingRule::sin3dB);
     chorusMix_.prepare (dspSpec);
 
+    reverbMix_.setMixingRule (juce::dsp::DryWetMixingRule::sin3dB);
+    reverbMix_.prepare (dspSpec);
+
     fxDry_.setSize (fxChannels, fxBlock, false, false, true);
 
-    fxWetGain_.reset (spec_.sampleRate, kFxCrossfadeSeconds);
-    fxWetGain_.setCurrentAndTargetValue (0.0f);
+    chorusGain_.reset (spec_.sampleRate, kFxCrossfadeSeconds);
+    chorusGain_.setCurrentAndTargetValue (0.0f);
+    reverbGain_.reset (spec_.sampleRate, kFxCrossfadeSeconds);
+    reverbGain_.setCurrentAndTargetValue (0.0f);
 
     fxRingoutSamples_ = (int) (kFxRingoutSeconds * spec_.sampleRate);
 
     // Il riempimento dura quanto il ritardo piu' lungo che il chorus sappia produrre: oltre
     // quel punto ogni tap sta leggendo segnale vero, non gli zeri della linea appena azzerata.
-    fxPrimeLength_ = (int) std::ceil (dsp::Chorus::kBaseDelayMs * 0.001
-                                      * (1.0 + dsp::Chorus::kMaxDepthFraction) * spec_.sampleRate);
+    chorusPrimeLength_ = (int) std::ceil (dsp::Chorus::kBaseDelayMs * 0.001
+                                          * (1.0 + dsp::Chorus::kMaxDepthFraction) * spec_.sampleRate);
 
     fxSilentSamples_ = 0;
-    fxPrimeSamples_ = 0;
-    fxRunning_ = false;
+    chorusPrimeSamples_ = 0;
+    chorusRunning_ = false;
+    reverbRunning_ = false;
 }
 
 void SynthEngine::reset() noexcept
 {
     voices_.reset();
     chorusMix_.reset();
+    reverbMix_.reset();
     stopFx();
 }
 
 void SynthEngine::stopFx() noexcept
 {
     chorus_.reset();
-    fxWetGain_.setCurrentAndTargetValue (0.0f);
+    reverb_.reset();
+    chorusGain_.setCurrentAndTargetValue (0.0f);
+    reverbGain_.setCurrentAndTargetValue (0.0f);
     fxSilentSamples_ = 0;
-    fxPrimeSamples_ = 0;
-    fxRunning_ = false;
+    chorusPrimeSamples_ = 0;
+    chorusRunning_ = false;
+    reverbRunning_ = false;
 }
 
 void SynthEngine::setMasterGainLinear (float gain) noexcept
@@ -262,17 +278,59 @@ void SynthEngine::processFx (juce::AudioBuffer<float>& buffer, int numSamples, i
     }
 }
 
+void SynthEngine::crossfadeWithDry (float* const* channels, int numChannels, int numSamples,
+                                   juce::SmoothedValue<float>& gain) noexcept
+{
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        // Una copia dello smoother per canale: i due canali devono vedere **la stessa** rampa,
+        // non una che avanza due volte piu' in fretta sul secondo.
+        auto ramp = gain;
+        const auto* dry = fxDry_.getReadPointer (ch);
+        auto* wet = channels[ch];
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const auto g = ramp.getNextValue();
+            wet[i] = dry[i] + g * (wet[i] - dry[i]);
+        }
+    }
+
+    gain.skip (numSamples);
+}
+
+int SynthEngine::ringoutSamples() const noexcept
+{
+    // Senza riverbero acceso comanda il chorus, ed e' la costante di prima. Con il riverbero,
+    // spegnere lo stadio dopo mezzo secondo di silenzio taglierebbe la coda **a meta'**: e'
+    // esattamente cio' che l'utente sente come "il riverbero si spegne da solo". La soglia
+    // diventa allora la coda che i parametri correnti producono, calcolata e non misurata (vedi
+    // dsp::PlateReverb::tailSeconds), quindi ai valori bassi il costo resta quello di prima e
+    // solo a size e decay a fondo corsa lo stadio gira per quasi undici secondi di silenzio.
+    if (! reverbRunning_)
+        return fxRingoutSamples_;
+
+    return juce::jmax (fxRingoutSamples_, (int) (reverb_.tailSeconds() * spec_.sampleRate));
+}
+
 void SynthEngine::processFxChunk (juce::AudioBuffer<float>& buffer, int startSample, int numSamples,
                                   int numChannels) noexcept
 {
-    const auto wantOn = params_.chorusOn;
+    const auto wantChorus = params_.chorusOn;
+    const auto wantReverb = params_.reverbOn;
 
-    if (! wantOn && ! fxWetGain_.isSmoothing() && fxWetGain_.getCurrentValue() <= 0.0f)
+    // "Fermo a zero": spento, e la dissolvenza finita da un pezzo. E' la condizione che rende
+    // bit-trasparente il ramo di un effetto, ed e' per questo che viene letta **prima** di
+    // qualunque cosa tocchi il buffer e non ricalcolata dopo.
+    const auto chorusIdle = ! chorusGain_.isSmoothing() && chorusGain_.getCurrentValue() <= 0.0f;
+    const auto reverbIdle = ! reverbGain_.isSmoothing() && reverbGain_.getCurrentValue() <= 0.0f;
+
+    if (! wantChorus && ! wantReverb && chorusIdle && reverbIdle)
     {
-        // Spento, e la dissolvenza e' finita da un pezzo. Si esce **senza toccare il buffer**:
-        // e' questa riga, non un confronto a valle, a garantire che con fx1On falso l'uscita
-        // sia bit per bit quella di prima dello stadio FX.
-        if (fxRunning_)
+        // Si esce **senza toccare il buffer**: e' questa riga, non un confronto a valle, a
+        // garantire che con i due interruttori spenti l'uscita sia bit per bit quella di prima
+        // dello stadio FX.
+        if (chorusRunning_ || reverbRunning_)
             stopFx();
 
         return;
@@ -292,7 +350,7 @@ void SynthEngine::processFxChunk (juce::AudioBuffer<float>& buffer, int startSam
         channels[1] = buffer.getWritePointer (1, startSample);
 
     // Ringout: il contatore guarda l'**ingresso** dello stadio, non l'uscita, perche' e' quello
-    // che dice se c'e' ancora qualcosa da lavorare. Finche' la dissolvenza e' in corso non si
+    // che dice se c'e' ancora qualcosa da lavorare. Finche' una dissolvenza e' in corso non si
     // spegne niente, altrimenti una dissolvenza avviata su una coda che nel frattempo tace
     // resterebbe appesa a meta'.
     auto inputPeak = 0.0f;
@@ -307,92 +365,145 @@ void SynthEngine::processFxChunk (juce::AudioBuffer<float>& buffer, int startSam
 
     fxSilentSamples_ = inputPeak <= kFxSilenceFloor ? fxSilentSamples_ + numSamples : 0;
 
-    if (! fxWetGain_.isSmoothing() && fxSilentSamples_ >= fxRingoutSamples_)
+    if (! chorusGain_.isSmoothing() && ! reverbGain_.isSmoothing()
+        && fxSilentSamples_ >= ringoutSamples())
     {
-        if (fxRunning_)
-        {
-            chorus_.reset();
-            fxRunning_ = false;
-        }
+        // Gli effetti si spengono mentre l'ingresso tace, quindi i guadagni possono andare a
+        // zero di scatto: non c'e' niente da dissolvere. stopFx() fa anche quello — senza, al
+        // rientro del suono il guadagno ripartirebbe da 1 su linee appena azzerate, cioe' da un
+        // buco.
+        if (chorusRunning_ || reverbRunning_)
+            stopFx();
 
-        // L'effetto si spegne mentre l'ingresso tace, quindi il guadagno puo' andare a zero di
-        // scatto: non c'e' niente da dissolvere. Senza questa riga, al rientro del suono il
-        // guadagno ripartirebbe da 1 su una linea appena azzerata — cioe' da un buco.
-        fxWetGain_.setCurrentAndTargetValue (0.0f);
         return;
     }
 
-    if (! fxRunning_)
-    {
-        // Si riparte da una linea pulita: quella vecchia contiene audio di quando l'effetto era
-        // acceso l'ultima volta, e riaccenderlo lo rispuntererebbe fuori come un'eco di un'altra
-        // epoca. Azzerare e' std::fill su qualche migliaio di float, nessuna allocazione.
-        chorus_.reset();
-        fxRunning_ = true;
-
-        // ...ma una linea pulita non e' ancora un effetto pronto, e qui sta la parte che non si
-        // vede arrivando: se la dissolvenza partisse adesso, ogni tap leggerebbe zeri finche' il
-        // suo ritardo non e' trascorso, e poi comincerebbe di colpo a leggere un segnale **gia'
-        // a regime**. Il salto e' grande quanto il campione che si trovava all'ingresso
-        // nell'istante dell'accensione, moltiplicato per il peso del tap e per il guadagno di
-        // dissolvenza raggiunto nel frattempo: cioe' dipende da dove, nell'onda, capita di
-        // premere l'interruttore.
-        //
-        // Misurato facendo cadere l'accensione in sessanta punti diversi di una nota tenuta a
-        // fondo scala con mix al 100 %: il salto peggiore fra campioni adiacenti passa da 0.090
-        // — la pendenza naturale dell'onda, cioe' niente — a **0.249**. E' esattamente il clic
-        // che la dissolvenza doveva togliere, spostato dieci millisecondi piu' in la'.
-        //
-        // Quindi prima si riempie la linea e solo dopo si dissolve. Durante il riempimento
-        // l'effetto gira ma il guadagno resta inchiodato a zero, e la dissolvenza incrociata
-        // qui sotto riscrive il secco **esatto**: l'ascoltatore sente il ritardo
-        // dell'accensione (16.5 ms di riempimento piu' 12 di dissolvenza), non un buco.
-        fxPrimeSamples_ = fxPrimeLength_;
-    }
-
-    // Il bersaglio della dissolvenza tiene conto del riempimento: finche' la linea non e' piena,
-    // acceso e spento si assomigliano — l'uscita e' il secco.
-    fxWetGain_.setTargetValue (wantOn && fxPrimeSamples_ <= 0 ? 1.0f : 0.0f);
-
-    // La copia del secco serve solo alla dissolvenza: in regime, con l'effetto stabilmente
-    // acceso, questo memcpy non avviene.
-    const auto crossfading = fxWetGain_.isSmoothing() || fxWetGain_.getCurrentValue() < 1.0f;
-
-    if (crossfading)
-        for (int ch = 0; ch < fxChannels; ++ch)
-            fxDry_.copyFrom (ch, 0, channels[ch], numSamples);
-
     juce::dsp::AudioBlock<float> block (channels, (size_t) fxChannels, (size_t) numSamples);
 
-    chorusMix_.setWetMixProportion (juce::jlimit (0.0f, 1.0f, params_.chorusMix01));
-    chorusMix_.pushDrySamples (block);
+    // --- chorus ---------------------------------------------------------------------------
 
-    chorus_.setParameters (params_.chorusRateHz, params_.chorusDepth01, params_.chorusFeedback01);
-    chorus_.process (channels[0], channels[1], numSamples);
-
-    chorusMix_.mixWetSamples (block);
-
-    if (crossfading)
+    if (wantChorus || ! chorusIdle)
     {
-        for (int ch = 0; ch < fxChannels; ++ch)
+        if (! chorusRunning_)
         {
-            // Una copia dello smoother per canale: i due canali devono vedere **la stessa**
-            // rampa, non una che avanza due volte piu' in fretta sul secondo.
-            auto gain = fxWetGain_;
-            const auto* dry = fxDry_.getReadPointer (ch);
-            auto* wet = channels[ch];
+            // Si riparte da una linea pulita: quella vecchia contiene audio di quando l'effetto
+            // era acceso l'ultima volta, e riaccenderlo lo rispuntererebbe fuori come un'eco di
+            // un'altra epoca. Azzerare e' std::fill su qualche migliaio di float, nessuna
+            // allocazione.
+            chorus_.reset();
+            chorusRunning_ = true;
+
+            // ...ma una linea pulita non e' ancora un effetto pronto, e qui sta la parte che non
+            // si vede arrivando: se la dissolvenza partisse adesso, ogni tap leggerebbe zeri
+            // finche' il suo ritardo non e' trascorso, e poi comincerebbe di colpo a leggere un
+            // segnale **gia' a regime**. Il salto e' grande quanto il campione che si trovava
+            // all'ingresso nell'istante dell'accensione, moltiplicato per il peso del tap e per
+            // il guadagno di dissolvenza raggiunto nel frattempo: cioe' dipende da dove,
+            // nell'onda, capita di premere l'interruttore.
+            //
+            // Misurato facendo cadere l'accensione in sessanta punti diversi di una nota tenuta
+            // a fondo scala con mix al 100 %: il salto peggiore fra campioni adiacenti passa da
+            // 0.090 — la pendenza naturale dell'onda, cioe' niente — a **0.249**. E' esattamente
+            // il clic che la dissolvenza doveva togliere, spostato dieci millisecondi piu' in la'.
+            //
+            // Quindi prima si riempie la linea e solo dopo si dissolve. Durante il riempimento
+            // l'effetto gira ma il guadagno resta inchiodato a zero, e la dissolvenza incrociata
+            // qui sotto riscrive il secco **esatto**: l'ascoltatore sente il ritardo
+            // dell'accensione (16.5 ms di riempimento piu' 12 di dissolvenza), non un buco.
+            chorusPrimeSamples_ = chorusPrimeLength_;
+        }
+
+        // Il bersaglio della dissolvenza tiene conto del riempimento: finche' la linea non e'
+        // piena, acceso e spento si assomigliano — l'uscita e' il secco.
+        chorusGain_.setTargetValue (wantChorus && chorusPrimeSamples_ <= 0 ? 1.0f : 0.0f);
+
+        // La copia del secco serve solo alla dissolvenza: in regime, con l'effetto stabilmente
+        // acceso, questo memcpy non avviene.
+        const auto crossfading = chorusGain_.isSmoothing() || chorusGain_.getCurrentValue() < 1.0f;
+
+        if (crossfading)
+            for (int ch = 0; ch < fxChannels; ++ch)
+                fxDry_.copyFrom (ch, 0, channels[ch], numSamples);
+
+        chorusMix_.setWetMixProportion (juce::jlimit (0.0f, 1.0f, params_.chorusMix01));
+        chorusMix_.pushDrySamples (block);
+
+        chorus_.setParameters (params_.chorusRateHz, params_.chorusDepth01, params_.chorusFeedback01);
+        chorus_.process (channels[0], channels[1], numSamples);
+
+        chorusMix_.mixWetSamples (block);
+
+        if (crossfading)
+            crossfadeWithDry (channels, fxChannels, numSamples, chorusGain_);
+
+        chorusPrimeSamples_ = juce::jmax (0, chorusPrimeSamples_ - numSamples);
+    }
+    else if (chorusRunning_)
+    {
+        chorus_.reset();
+        chorusRunning_ = false;
+    }
+
+    // --- riverbero ------------------------------------------------------------------------
+
+    if (wantReverb || ! reverbIdle)
+    {
+        if (! reverbRunning_)
+        {
+            reverb_.reset();
+            reverbRunning_ = true;
+        }
+
+        reverbGain_.setTargetValue (wantReverb ? 1.0f : 0.0f);
+
+        const auto crossfading = reverbGain_.isSmoothing() || reverbGain_.getCurrentValue() < 1.0f;
+
+        // Il secco del riverbero e' l'**uscita del chorus**, non l'ingresso dello stadio: i due
+        // effetti sono in serie e ciascuno dissolve verso cio' che ha davanti.
+        if (crossfading)
+            for (int ch = 0; ch < fxChannels; ++ch)
+                fxDry_.copyFrom (ch, 0, channels[ch], numSamples);
+
+        reverbMix_.setWetMixProportion (juce::jlimit (0.0f, 1.0f, params_.reverbMix01));
+        reverbMix_.pushDrySamples (block);
+
+        if (crossfading)
+        {
+            // La rampa **sull'ingresso**, dopo che il secco e' stato messo da parte e prima che
+            // il riverbero lo legga. E' il rimedio al gradino d'accensione, e per il riverbero
+            // e' l'unico possibile: aspettare che le linee siano piene vorrebbe dire aspettare
+            // la coda intera. Cosi' dentro il tank non entra nessun gradino — l'ingresso sale da
+            // zero — e il bagnato cresce da zero per costruzione, qualunque sia il punto
+            // dell'onda in cui e' caduto l'interruttore.
+            //
+            // In spegnimento la stessa rampa chiude anche il rubinetto d'ingresso mentre la
+            // dissolvenza d'uscita porta via la coda: dodici millisecondi in cui il riverbero
+            // smette di sentire e di farsi sentire insieme.
+            auto ramp = reverbGain_;
 
             for (int i = 0; i < numSamples; ++i)
             {
-                const auto g = gain.getNextValue();
-                wet[i] = dry[i] + g * (wet[i] - dry[i]);
+                const auto g = ramp.getNextValue();
+
+                for (int ch = 0; ch < fxChannels; ++ch)
+                    channels[ch][i] *= g;
             }
         }
 
-        fxWetGain_.skip (numSamples);
-    }
+        reverb_.setParameters (params_.reverbSize01, params_.reverbDecay01, params_.reverbDamp01,
+                               params_.reverbPredelaySeconds);
+        reverb_.process (channels[0], channels[1], numSamples);
 
-    fxPrimeSamples_ = juce::jmax (0, fxPrimeSamples_ - numSamples);
+        reverbMix_.mixWetSamples (block);
+
+        if (crossfading)
+            crossfadeWithDry (channels, fxChannels, numSamples, reverbGain_);
+    }
+    else if (reverbRunning_)
+    {
+        reverb_.reset();
+        reverbRunning_ = false;
+    }
 }
 
 void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) noexcept

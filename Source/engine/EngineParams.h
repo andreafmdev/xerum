@@ -73,6 +73,25 @@ struct EngineParams
     float chorusMix01 { 0.0f };      // 0..1, proporzione di bagnato con regola sin3dB
     float chorusFeedback01 { 0.0f }; // 0..1, scalato da dsp::Chorus::kMaxFeedback
 
+    /**
+     * Il riverbero, in serie **dopo** il chorus dentro lo stesso stadio FX.
+     *
+     * `reverbOn` e' falso qui e vero in parameters.json per la stessa ragione di `chorusOn`:
+     * questa struct e' il punto di partenza dei test scritti a mano, e lasciandolo falso ogni
+     * test scritto prima del riverbero continua a misurare la catena di prima, campione per
+     * campione. Il default che l'utente vede arriva da params::collectEngineParams.
+     *
+     * I tre valori normalizzati non sono percentuali travestite: le corse vere (sizeRatio,
+     * coefficiente di decadimento, frequenza di damping) vivono in dsp::PlateReverb, che e'
+     * anche il solo posto dove si puo' motivarle. Qui arriva la posizione del knob, 0..1.
+     */
+    bool reverbOn { false };
+    float reverbSize01 { 0.6f };           // 0..1 -> dsp::PlateReverb::kMinSizeRatio..kMaxSizeRatio
+    float reverbDecay01 { 0.5f };          // 0..1 -> kMinDecay..kMaxDecay
+    float reverbDamp01 { 0.4f };           // 0..1 -> kDampingMaxHz..kDampingMinHz, logaritmica
+    float reverbPredelaySeconds { 0.02f }; // 0..dsp::PlateReverb::kMaxPredelaySeconds
+    float reverbMix01 { 0.0f };            // 0..1, proporzione di bagnato con regola sin3dB
+
     // --- modulazione ---
 
     /**

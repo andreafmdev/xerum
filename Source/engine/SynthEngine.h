@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsp/Chorus.h"
+#include "dsp/PlateReverb.h"
 #include "engine/EngineParams.h"
 #include "engine/VoiceManager.h"
 
@@ -165,26 +166,44 @@ private:
      * della catena: continua a essere la rete di sicurezza per tutto cio' che lo precede, FX
      * compresi. Uno stadio FX **e'** uno stadio di guadagno dopo il filtro, quindi tocca lo
      * stesso margine di cui parla docs/architecture.md — vedi ModulationStressTests, dove la
-     * stessa passata gira adesso anche con il chorus acceso.
+     * stessa passata gira adesso anche con il chorus acceso, e con tutti e due gli effetti.
      *
-     * **Bypass con dissolvenza, non a taglio netto.** `fx1On` muove il bersaglio di
-     * fxWetGain_, che ci arriva in kFxCrossfadeSeconds; finche' la dissolvenza e' in corso
-     * l'uscita e' `secco + g * (lavorato - secco)`. Tutti e quattro i synth studiati tagliano
-     * netto, e tutti e quattro fanno clic. Quando il guadagno e' arrivato **esattamente** a
-     * zero questa funzione esce senza toccare un solo campione: da li' discende il criterio di
-     * accettazione piu' importante del lavoro — con `fx1On` falso l'uscita e' bit per bit
-     * quella di prima che lo stadio FX esistesse. E' la stessa proprieta' strutturale del mod
-     * matrix vuoto, ottenuta nello stesso modo: non un ramo che calcola l'identita', un ramo
-     * che non calcola niente.
+     * **Due effetti in serie, ciascuno con la sua dissolvenza.** Chorus e poi riverbero, ognuno
+     * con il proprio juce::dsp::DryWetMixer e il proprio guadagno di bypass: `fx1On` muove
+     * chorusGain_, `fx2On` muove reverbGain_, tutti e due arrivano a destinazione in
+     * kFxCrossfadeSeconds. Finche' una dissolvenza e' in corso l'uscita di quell'effetto e'
+     * `secco + g * (lavorato - secco)` — dove "secco" e' l'ingresso **di quell'effetto**, cioe'
+     * per il riverbero l'uscita del chorus. Tutti e quattro i synth studiati tagliano netto, e
+     * tutti e quattro fanno clic.
+     *
+     * Quando un guadagno e' arrivato **esattamente** a zero il ramo di quell'effetto non gira:
+     * da li' discende il criterio di accettazione piu' importante del lavoro — con `fx2On`
+     * falso l'uscita e' bit per bit quella di prima che il riverbero esistesse, e con tutti e
+     * due falsi quella di prima che lo stadio FX esistesse. E' la stessa proprieta' strutturale
+     * del mod matrix vuoto, ottenuta nello stesso modo: non un ramo che calcola l'identita', un
+     * ramo che non calcola niente.
+     *
+     * **Le due accensioni non si somigliano, e il motivo e' istruttivo.** Il chorus va
+     * *riempito* prima di dissolvere (vedi sotto): i suoi tap leggono zeri finche' il ritardo
+     * non e' trascorso e poi cominciano di colpo a leggere segnale a regime. Il riverbero ha lo
+     * stesso difetto in forma peggiore — il gradino arriva dopo il predelay e ci mette centinaia
+     * di millisecondi a diffondersi — ma il rimedio non puo' essere lo stesso, perche' aspettare
+     * che la coda sia "piena" vorrebbe dire aspettare secondi. Quindi il riverbero riceve un
+     * **ingresso rampato** dalla stessa dissolvenza che rampa la sua uscita: dentro le linee non
+     * entra nessun gradino, il bagnato cresce da zero per costruzione e non c'e' niente da
+     * riempire. E' la differenza fra un effetto la cui uscita *deve* venire dal passato e uno la
+     * cui uscita puo' cominciare da adesso.
      *
      * **Ringout.** Si contano i campioni consecutivi in cui l'**ingresso** dello stadio e'
-     * silenzioso; oltre kFxRingoutSeconds l'effetto si spegne e la sua linea di ritardo si
-     * azzera. E' il pattern di Surge. Mezzo secondo copre con larghezza la coda peggiore che il
-     * chorus sappia produrre (feedback a fondo corsa su un ritardo di 11 ms: -145 dB dopo mezzo
-     * secondo) e servira' identico al riverbero, che di coda ne ha molta di piu'.
+     * silenzioso; oltre la soglia gli effetti si spengono e le loro linee si azzerano. E' il
+     * pattern di Surge. La soglia non e' piu' una costante: mezzo secondo bastava al chorus
+     * (feedback a fondo corsa su un ritardo di 11 ms: -145 dB dopo mezzo secondo) ma
+     * troncherebbe qualunque coda di riverbero, quindi con il riverbero acceso diventa la coda
+     * che i suoi parametri correnti producono — 2.5 s ai valori di fabbrica, fino a 10.7 s a size
+     * e decay a fondo corsa. Vedi ringoutSamples().
      *
-     * Non alloca: la linea di ritardo, il buffer del secco e quello del DryWetMixer sono
-     * dimensionati in prepare().
+     * Non alloca: le linee di ritardo, le linee del riverbero, il buffer del secco e quelli dei
+     * due DryWetMixer sono dimensionati in prepare().
      */
     void processFx (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) noexcept;
 
@@ -192,7 +211,19 @@ private:
     void processFxChunk (juce::AudioBuffer<float>& buffer, int startSample, int numSamples,
                          int numChannels) noexcept;
 
-    /** Spegne l'effetto e azzera la sua memoria. Non alloca. */
+    /**
+     * Dissolve `channels` fra la copia in fxDry_ e cio' che ci sta sopra adesso, consumando
+     * `gain`. Una copia dello smoother per canale — i due canali devono vedere **la stessa**
+     * rampa, non una che avanza due volte piu' in fretta sul secondo — e uno skip solo alla
+     * fine.
+     */
+    void crossfadeWithDry (float* const* channels, int numChannels, int numSamples,
+                           juce::SmoothedValue<float>& gain) noexcept;
+
+    /** I campioni di silenzio in ingresso dopo i quali lo stadio si spegne. Vedi processFx(). */
+    int ringoutSamples() const noexcept;
+
+    /** Spegne i due effetti e azzera la loro memoria. Non alloca. */
     void stopFx() noexcept;
 
     VoiceManager voices_;
@@ -245,7 +276,10 @@ public:
      */
     static constexpr double kFxCrossfadeSeconds = 0.012;
 
-    /** Silenzio in ingresso oltre il quale l'effetto smette di girare. Vedi processFx(). */
+    /**
+     * Silenzio in ingresso oltre il quale lo stadio smette di girare, quando c'e' solo il
+     * chorus. Con il riverbero acceso comanda la sua coda: vedi ringoutSamples().
+     */
     static constexpr double kFxRingoutSeconds = 0.5;
 
     /** Sotto questo modulo un campione conta come silenzio per il ringout. -140 dBFS: sotto la
@@ -254,6 +288,7 @@ public:
 
 private:
     dsp::Chorus chorus_;
+    dsp::PlateReverb reverb_;
 
     /**
      * Il dry/wet dello stadio, con regola `sin3dB` — l'equal-power, la stessa di Vital.
@@ -265,21 +300,31 @@ private:
      */
     juce::dsp::DryWetMixer<float> chorusMix_;
 
+    /** Il gemello del precedente per il riverbero: `rvMix` e `chMix` sono due proporzioni
+        distinte su due effetti in serie, quindi due mixer e non uno. */
+    juce::dsp::DryWetMixer<float> reverbMix_;
+
     /** Copia del secco del blocco, per la dissolvenza di bypass. Il DryWetMixer ha una copia
-        sua ma la consuma dentro mixWetSamples(): servono entrambe. Dimensionato in prepare(). */
+        sua ma la consuma dentro mixWetSamples(): servono entrambe. Una sola basta per tutti e
+        due gli effetti perche' le due dissolvenze sono **in sequenza**: quella del riverbero
+        ricopia sopra, e cio' che ricopia e' l'uscita del chorus, che e' il suo secco.
+        Dimensionato in prepare(). */
     juce::AudioBuffer<float> fxDry_;
 
-    /** 0 = stadio FX completamente fuori, 1 = completamente dentro. Vedi processFx(). */
-    juce::SmoothedValue<float> fxWetGain_;
+    /** 0 = effetto completamente fuori, 1 = completamente dentro. Vedi processFx(). */
+    juce::SmoothedValue<float> chorusGain_;
+    juce::SmoothedValue<float> reverbGain_;
 
     int fxSilentSamples_ { 0 };
     int fxRingoutSamples_ { 0 };
 
-    /** Campioni che mancano al riempimento della linea prima che la dissolvenza possa partire,
-        e la sua lunghezza a regime (il ritardo massimo del chorus). Vedi processFx(). */
-    int fxPrimeSamples_ { 0 };
-    int fxPrimeLength_ { 0 };
+    /** Campioni che mancano al riempimento della linea prima che la dissolvenza del chorus
+        possa partire, e la sua lunghezza a regime (il ritardo massimo del chorus). Il riverbero
+        non ne ha uno: rampa l'ingresso invece di riempire. Vedi processFx(). */
+    int chorusPrimeSamples_ { 0 };
+    int chorusPrimeLength_ { 0 };
 
-    bool fxRunning_ { false };
+    bool chorusRunning_ { false };
+    bool reverbRunning_ { false };
 };
 } // namespace engine

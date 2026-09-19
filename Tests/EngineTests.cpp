@@ -1,4 +1,5 @@
 #include "dsp/MipTable.h"
+#include "dsp/PlateReverb.h"
 #include "dsp/WavetableBlob.h"
 #include "dsp/WavetableStore.h"
 #include "dsp/WavetableOscillator.h"
@@ -3132,6 +3133,14 @@ struct ModulationStressTests final : juce::UnitTest
         float chorusMix01 { 1.0f };
         float chorusFeedback01 { 1.0f };
 
+        /** Il riverbero, con gli stessi criteri: acceso significa a fondo corsa ovunque. */
+        bool reverb { false };
+        float reverbSize01 { 1.0f };
+        float reverbDecay01 { 1.0f };
+        float reverbDamp01 { 0.0f };
+        float reverbPredelaySeconds { 0.0f };
+        float reverbMix01 { 1.0f };
+
         /**
          * Fattore applicato al gain master, cioe' all'**unico** stadio che sta fra lo stadio FX
          * e il soft clipper.
@@ -3194,6 +3203,13 @@ struct ModulationStressTests final : juce::UnitTest
         p.chorusDepth01 = cfg.chorusDepth01;
         p.chorusMix01 = cfg.chorusMix01;
         p.chorusFeedback01 = cfg.chorusFeedback01;
+
+        p.reverbOn = cfg.reverb;
+        p.reverbSize01 = cfg.reverbSize01;
+        p.reverbDecay01 = cfg.reverbDecay01;
+        p.reverbDamp01 = cfg.reverbDamp01;
+        p.reverbPredelaySeconds = cfg.reverbPredelaySeconds;
+        p.reverbMix01 = cfg.reverbMix01;
         p.modBase.fill (0.5f);
 
         juce::MidiBuffer midi;
@@ -3318,10 +3334,14 @@ struct ModulationStressTests final : juce::UnitTest
         // release e' 80 ms: si scarta il decadimento (che sta ancora suonando) prima di
         // misurare il silenzio vero. Il numero di blocchi segue il sample rate.
         //
-        // Con lo stadio FX acceso si aspetta un secondo in piu': il chorus ha una coda sua — il
-        // feedback a fondo corsa piu' il mezzo secondo di ringout — e confonderla con una voce
-        // appesa vorrebbe dire trasformare un comportamento voluto in un fallimento.
-        const int releaseBlocks = (int) std::ceil ((cfg.chorus ? 1.08 : 0.08) * cfg.sampleRate / 128.0) + 10;
+        // Con lo stadio FX acceso si aspetta di piu': gli effetti hanno una coda loro, e
+        // confonderla con una voce appesa vorrebbe dire trasformare un comportamento voluto in un
+        // fallimento. Un secondo basta al chorus (feedback a fondo corsa piu' mezzo secondo di
+        // ringout); il riverbero a size e decay a fondo corsa ne chiede dodici, che e' la coda
+        // dichiarata all'host piu' un margine — e che questo numero sia cosi' grande e' proprio
+        // cio' che getTailLengthSeconds() e' andato a dire.
+        const auto tailSeconds = cfg.reverb ? 12.08 : (cfg.chorus ? 1.08 : 0.08);
+        const int releaseBlocks = (int) std::ceil (tailSeconds * cfg.sampleRate / 128.0) + 10;
         renderPeak (synth, releaseBlocks, *this);
         const auto tail = renderPeak (synth, 20, *this);
         expect (tail < 1.0e-4f, what + ": voce appesa dopo il release, picco " + juce::String (tail));
@@ -3411,6 +3431,13 @@ struct ModulationStressTests final : juce::UnitTest
             p.chorusDepth01 = rng.nextFloat();
             p.chorusMix01 = rng.nextFloat();
             p.chorusFeedback01 = rng.nextFloat();
+
+            p.reverbOn = rng.nextInt (3) != 0;
+            p.reverbSize01 = rng.nextFloat();
+            p.reverbDecay01 = rng.nextFloat();
+            p.reverbDamp01 = rng.nextFloat();
+            p.reverbPredelaySeconds = rng.nextFloat() * dsp::PlateReverb::kMaxPredelaySeconds;
+            p.reverbMix01 = rng.nextFloat();
 
             synth.setParams (p);
             synth.setMasterGainLinear (rng.nextFloat());
@@ -3597,10 +3624,25 @@ struct ModulationStressTests final : juce::UnitTest
             Config fullBoth = dry;
             fullBoth.chorus = true;          // anche il feedback
 
+            // I due effetti insieme, tutti e due a fondo corsa: e' il caso peggiore che lo stadio
+            // FX sappia presentare al clipper, e il punto di partenza della ritaratura congiunta.
+            Config everything = fullBoth;
+            everything.reverb = true;
+
+            Config reverbFactory = dry;
+            reverbFactory.reverb = true;
+            reverbFactory.reverbSize01 = 0.6f;
+            reverbFactory.reverbDecay01 = 0.5f;
+            reverbFactory.reverbDamp01 = 0.4f;
+            reverbFactory.reverbPredelaySeconds = 0.02f;
+            reverbFactory.reverbMix01 = 0.25f;
+
             const auto dryIn = (double) sweep (store, dry, 240, "senza FX, gain ridotto") / scale;
             const auto factoryIn = (double) sweep (store, factory, 240, "chorus ai default") / scale;
             const auto mixIn = (double) sweep (store, fullMix, 240, "chorus a mix 100 %, feedback 0") / scale;
             const auto bothIn = (double) sweep (store, fullBoth, 240, "chorus a mix e feedback 100 %") / scale;
+            const auto reverbIn = (double) sweep (store, reverbFactory, 240, "riverbero ai default") / scale;
+            const auto everythingIn = (double) sweep (store, everything, 240, "chorus e riverbero a fondo corsa") / scale;
 
             const auto report = [this, dryIn] (const char* what, double peak)
             {
@@ -3615,6 +3657,8 @@ struct ModulationStressTests final : juce::UnitTest
             report ("chorus ai valori di fabbrica", factoryIn);
             report ("chorus a mix 100 %, feedback 0", mixIn);
             report ("chorus a mix 100 %, feedback 100 %", bothIn);
+            report ("riverbero ai valori di fabbrica", reverbIn);
+            report ("chorus e riverbero, tutto a fondo corsa", everythingIn);
 
             // **Il contratto che conta.** Ai valori di fabbrica il chorus e' acceso su tutti e
             // dodici i preset, quindi non gli e' concesso di spostare il margine: il mix e'
@@ -3631,6 +3675,20 @@ struct ModulationStressTests final : juce::UnitTest
             const auto worstDb = juce::Decibels::gainToDecibels (bothIn / dryIn);
             expect (worstDb < 4.0, "il chorus al caso peggiore aggiunge " + juce::String (worstDb, 2)
                                        + " dB al picco presentato al clipper");
+
+            // Il riverbero ai valori di fabbrica e' acceso di default come il chorus, quindi
+            // vale per lui lo stesso contratto stretto.
+            const auto reverbDb = juce::Decibels::gainToDecibels (reverbIn / dryIn);
+            expect (reverbDb < 1.0, "il riverbero ai valori di fabbrica aggiunge "
+                                        + juce::String (reverbDb, 2)
+                                        + " dB al picco presentato al clipper");
+
+            // E il caso peggiore assoluto: matrix pieno, sedici note, i due effetti a fondo corsa.
+            // Si riporta e non si taglia; la soglia e' una rete contro una regressione grossa.
+            const auto everythingDb = juce::Decibels::gainToDecibels (everythingIn / dryIn);
+            expect (everythingDb < 4.0, "i due effetti al caso peggiore aggiungono "
+                                            + juce::String (everythingDb, 2)
+                                            + " dB al picco presentato al clipper");
         }
 
         beginTest ("fuzz a semi fissi: matrix casuale, parametri casuali, eventi casuali");
