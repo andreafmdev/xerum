@@ -7,7 +7,7 @@ export type Preset = { name: string; cat: string; values: Partial<Record<ParamId
 export const PRESETS: Preset[] = [
   { name: "Init", cat: "User", values: {} },
   { name: "Sub Pulse", cat: "Bass", values: {"wtIndex":1,"wtpos":0.1,"oct":0.3333,"ftype":0,"slope":1,"cutoff":0.392,"res":0.25,"drive":0.12,"keytrk":0.6,"att":0,"dec":0.25,"sus":0.75,"rel":0.078,"level":0.9,"volume":0.8} },
-  { name: "Reese Wide", cat: "Bass", values: {"wtIndex":0.2,"wtpos":0.45,"oct":0.3333,"ftype":0,"slope":1,"cutoff":0.434,"res":0.35,"drive":0.25,"keytrk":0.5,"att":0,"dec":0.316,"sus":0.8,"rel":0.099,"level":0.8,"volume":0.8} },
+  { name: "Reese Wide", cat: "Bass", values: {"wtIndex":0.2,"wtpos":0.45,"oct":0.3333,"ftype":0,"slope":1,"cutoff":0.434,"res":0.35,"drive":0.25,"keytrk":0.5,"att":0,"dec":0.316,"sus":0.8,"rel":0.099,"level":0.6,"volume":0.8} },
   { name: "Acid Line", cat: "Bass", values: {"wtIndex":0.2,"wtpos":0,"oct":0.3333,"ftype":0,"slope":0,"cutoff":0.333,"res":0.78,"drive":0.2,"keytrk":0.9,"att":0,"dec":0.193,"sus":0.1,"rel":0.049,"level":0.9,"volume":0.8} },
   { name: "Neon Lead", cat: "Lead", values: {"wtIndex":0.4,"wtpos":0.6,"ftype":0,"slope":1,"cutoff":0.693,"res":0.3,"drive":0.15,"keytrk":0.5,"att":0.022,"dec":0.25,"sus":0.85,"rel":0.122,"level":0.8,"volume":0.8} },
   { name: "Solid Saw", cat: "Lead", values: {"wtIndex":0.2,"wtpos":0,"ftype":0,"slope":1,"cutoff":0.784,"res":0.15,"drive":0,"keytrk":0.5,"att":0.022,"dec":0.25,"sus":0.9,"rel":0.099,"level":0.85,"volume":0.8} },

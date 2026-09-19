@@ -11,15 +11,34 @@ namespace engine
 {
 namespace
 {
-/** Sopra questa soglia l'uscita smette di essere lineare e comincia a piegare. */
-constexpr float kSoftClipThreshold = 0.8f;
+/**
+ * Sopra questa soglia l'uscita smette di essere lineare e comincia a piegare.
+ *
+ * Era 0.8 ed e' salita insieme a kVoiceHeadroomGain, per la ragione opposta a quella che
+ * verrebbe in mente: non perche' adesso arrivi meno segnale, ma perche' ne arriva di piu'.
+ * Con la voce a -3 dB un accordo ordinario (quattro note, level 1.0, volume di default)
+ * presenta 0.898 al clipper. A 0.8 la rete di sicurezza si sarebbe accesa su una suonata
+ * normale, cioe' sarebbe diventata uno stadio di distorsione a tempo pieno; a 0.9 ci sarebbe
+ * passata dentro per mezzo millesimo, che non e' un margine. A 0.95 resta spenta con mezzo
+ * decibel di margine, e resta spenta su tutti e dodici i preset di fabbrica (il piu' caldo,
+ * "Acid Line", arriva a 0.84 su quattro note: oltre un decibel di margine).
+ *
+ * Il prezzo e' che il ginocchio si accorcia da 0.2 a 0.05 di corsa, quindi quando il clipper
+ * interviene davvero (sedici voci: 2.11 in ingresso; matrix pieno: 3.5) piega molto piu'
+ * bruscamente di prima. In cambio lascia intatta una fetta piu' larga di forma d'onda: sotto
+ * 0.95 l'uscita e' bit per bit quella non clippata, mentre a 0.8 veniva toccato anche tutto
+ * cio' che stava fra 0.8 e 0.95. Su escursioni di picco — che e' quello che il clipper vede —
+ * toccare meno campioni conta piu' che piegarli gentilmente.
+ */
+constexpr float kSoftClipThreshold = 0.95f;
 
 /**
- * Rete di sicurezza sull'uscita: identica all'ingresso fino a 0.8, poi piega dolcemente e
- * non supera mai 1.0. Serve perche' il guadagno per voce e' una costante (vedi
- * SynthVoice::kVoiceHeadroomGain): un accordo abbastanza fitto, o un volume master alto,
- * possono comunque superare il fondo scala, e senza questo l'host riceverebbe campioni
- * troncati a zero decibel — il clipping digitale netto, quello che si sente come strappo.
+ * Rete di sicurezza sull'uscita: identica all'ingresso fino alla soglia, poi piega dolcemente
+ * e non supera mai 1.0. Serve perche' il guadagno per voce e' una costante (vedi
+ * SynthVoice::kVoiceHeadroomGain): un accordo abbastanza fitto, un volume master alto o una
+ * route del matrix su `res` possono comunque superare il fondo scala, e senza questo l'host
+ * riceverebbe campioni troncati a zero decibel — il clipping digitale netto, quello che si
+ * sente come strappo.
  *
  * Lineare sotto soglia: niente distorsione aggiunta al segnale normale, a differenza di un
  * soft clipper polinomiale attivo su tutta la corsa. La derivata vale 1 alla soglia, quindi

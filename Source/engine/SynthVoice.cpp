@@ -13,16 +13,28 @@ constexpr double kSmoothingSeconds = 0.02;
 
 // Headroom fisso per voce. E' una costante, non un divisore sul numero di voci attive: un
 // divisore farebbe "respirare" il volume ogni volta che una nota parte o finisce, un difetto
-// peggiore del clipping che risolve. -8 dB: con il pan centrale (0.707), il volume di default
-// (0.8) e la compensazione di risonanza in StateVariableFilter, una nota singola a level 1.0
-// esce a -13.8 dBFS e un accordo di quattro note a -6.0 dBFS (misurati da EngineTests,
-// "gain staging: una nota e un accordo normale stanno sotto il soft clipper"). Il valore precedente
-// (-20 dB) era stato scelto quando il filtro poteva da solo aggiungere +30 dB di picco e la
-// saturazione ne aggiungeva altri 3.5 anche a drive zero: tolte quelle due sorgenti di
-// guadagno incontrollato, -20 dB lasciava lo strumento inutilizzabilmente piano (-26 dBFS
-// su una nota singola). Cio' che resta oltre il fondo scala lo prende il soft clipper di
-// SynthEngine::process, quindi salire qui non puo' produrre clipping digitale netto.
-constexpr float kVoiceHeadroomGain = 0.4f; // 10^(-8/20)
+// peggiore del clipping che risolve.
+//
+// -3 dB, e non e' un numero scelto a tavolino: e' il piu' alto che tiene un accordo *ordinario*
+// fuori dal soft clipper. Con il pan centrale (0.707) e il volume di default (0.8), quattro note
+// a level 1.0 arrivano al clipper a 0.898 contro una soglia di 0.95 (kSoftClipThreshold in
+// SynthEngine.cpp): mezzo decibel di margine, e mezzo decibel piu' su la rete di sicurezza
+// diventerebbe uno stadio sempre acceso. In cambio una nota singola a level 1.0 e volume 1.0
+// esce a -15.4 dBFS RMS e -8.7 dBFS di picco, cinque decibel piu' forte di prima e nella
+// finestra in cui stanno Serum e Vital.
+//
+// Il valore precedente (0.4, -8 dB) lasciava quella stessa nota a -20.4 dBFS RMS: uno strumento
+// che bisognava alzare di sei decibel nel mixer prima di poterlo giudicare. E prima ancora era
+// -20 dB, scelto quando il filtro poteva da solo aggiungere +30 dB di picco e la saturazione ne
+// aggiungeva altri 3.5 anche a drive zero.
+//
+// Piu' in alto non si va, e la ragione non e' prudenza ma aritmetica: il fattore di cresta e'
+// fisso (6.7 dB fra RMS e picco su una nota, altri 9.7 dB di picco sommando quattro note), quindi
+// un accordo di quattro note sta sempre 16.4 dB sopra l'RMS di una nota sola. Portare la nota
+// singola a -14 dBFS RMS metterebbe l'accordo a +2.4 dBFS, cioe' dentro il clipper: i due
+// bersagli non stanno insieme, e qui vince l'accordo pulito. Misure in EngineTests,
+// "gain staging: una nota e un accordo normale stanno sotto il soft clipper".
+constexpr float kVoiceHeadroomGain = 0.71f; // 10^(-3/20)
 
 float midiNoteToHz (int note, float offsetSemitones) noexcept
 {

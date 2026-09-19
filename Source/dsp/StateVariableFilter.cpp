@@ -15,15 +15,21 @@ constexpr float kPi = 3.14159265358979323846f;
  *
  * La banda passante di un passa-basso non dipende da Q, quindi *qualunque* attenuazione
  * d'ingresso la fa scendere: il costo in banda passante e' esattamente 20·p·log10(Q/Qbutter),
- * cioe' 30.6·p dB all'estremo della corsa (Q 24). Con un budget di ±1.5 dB il massimo
- * praticabile sarebbe 1/16, che pero' a cutoff alti misura gia' -1.59 dB (il warping di tan()
- * aggiunge la sua parte); 1/32 sta a -0.64 dB nel caso peggiore e lascia margine.
+ * cioe' 30.6·p dB all'estremo della corsa (Q 24). Il budget e' 4 dB, e 1/8 e' il piu' grande
+ * esponente che ci sta dentro: misura -3.51 dB nel caso peggiore (contro -4.78 a 1/6, che lo
+ * sfonda, e -0.64 a 1/32, che era il valore di prima).
  *
- * Il picco resta quindi ~Q^(31/32): a Q 24 vale 21.5 invece di 24, un dito di guardia sul
- * clipper d'uscita senza svuotare il suono. Il vecchio sqrt(Qbutter/Q) (p = 1/2) costava
- * -14.7 dB di banda passante a Q 24: alzare la risonanza rendeva lo strumento piu' piano.
+ * Perche' spingere fin li' invece di restare a 1/32: la stessa attenuazione toglie gli stessi
+ * decibel al picco risonante, e il picco risonante e' la sorgente di livello piu' violenta
+ * dello strumento. Passare da 1/32 a 1/8 costa 2.9 dB di picco a Q 24 (da +29.7 a +26.8 sopra
+ * il Butterworth) e 2.2 dB a Q 12, che e' il tetto della corsa di `res`: sono i decibel che
+ * pagano, in parte, l'alzata di kVoiceHeadroomGain. A Q 4 il conto in banda passante e' -1.57 dB.
+ *
+ * Il picco resta quindi ~Q^(7/8): a Q 24 vale 15.4 invece di 24. Il vecchio sqrt(Qbutter/Q)
+ * (p = 1/2) costava -14.7 dB di banda passante a Q 24: alzare la risonanza rendeva lo strumento
+ * piu' piano, che e' il difetto opposto e molto peggiore.
  */
-constexpr float kResonanceCompensation = 1.0f / 32.0f;
+constexpr float kResonanceCompensation = 1.0f / 8.0f;
 } // namespace
 
 void StateVariableFilter::prepare (double sampleRate) noexcept
@@ -86,10 +92,10 @@ void StateVariableFilter::updateCoefficients() noexcept
 
     // Compensazione: il picco di uno stadio risonante vale ~Q, e l'attenuazione d'ingresso e'
     // l'unica leva che abbiamo per tenerlo a bada. Ma agisce su tutto il segnale, banda passante
-    // compresa, quindi va dosata: l'esponente e' 1/32 (vedi kResonanceCompensation), abbastanza
-    // per smussare il picco e abbastanza poco perche' il corpo del suono non si assottigli
-    // quando si alza `res`. std::pow gira solo qui, una volta per cambio di parametro, mai per
-    // campione: nel loop audio non entra nessuna chiamata a libm.
+    // compresa, quindi va dosata: l'esponente e' 1/8 (vedi kResonanceCompensation), il massimo
+    // che sta dentro il budget di 4 dB in banda passante a Q 24. std::pow gira solo qui, una
+    // volta per cambio di parametro, mai per campione: nel loop audio non entra nessuna
+    // chiamata a libm.
     inputGain_ = std::pow (kButterworthQ / resonance_, kResonanceCompensation);
 }
 

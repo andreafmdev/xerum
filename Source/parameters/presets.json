@@ -14,7 +14,7 @@
       "wtIndex": 0.2, "wtpos": 0.45, "oct": 0.3333,
       "ftype": 0.0, "slope": 1.0, "cutoff": 0.434, "res": 0.35, "drive": 0.25, "keytrk": 0.5,
       "att": 0.0, "dec": 0.316, "sus": 0.8, "rel": 0.099,
-      "level": 0.8, "volume": 0.8 } },
+      "level": 0.6, "volume": 0.8 } },
 
     { "name": "Acid Line", "cat": "Bass", "values": {
       "wtIndex": 0.2, "wtpos": 0.0, "oct": 0.3333,

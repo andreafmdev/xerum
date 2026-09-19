@@ -294,11 +294,18 @@ struct StateVariableFilterTests final : juce::UnitTest
             // Il difetto che questo test blocca: con la risonanza su entrambi gli stadi, a Q 12
             // il passa-basso a 24 dB dava un picco di ~Q^2 (oltre +40 dB) e qualunque preset con
             // `res` alto mandava l'uscita in clipping. Ora la risonanza sta solo sull'ultimo
-            // stadio, quindi il picco vale ~Q (limato di quel poco che fa la compensazione a
-            // 1/32, ~1 dB): ~11, non ~144. Il secondo stadio, che a Q 12 resta Butterworth, il
-            // picco non lo moltiplica: lo attenua dei suoi 3 dB al cutoff.
+            // stadio, quindi il picco vale ~Q limato dalla compensazione d'ingresso: ~8.4, non
+            // ~144. Il secondo stadio, che a Q 12 resta Butterworth, il picco non lo moltiplica:
+            // lo attenua dei suoi 3 dB al cutoff.
+            //
+            // 8.4 e non ~11 come prima: la compensazione e' passata da 1/32 a 1/8 e toglie al
+            // picco 2.2 dB in piu'. Il valore atteso non e' scritto a mano ma calcolato dalla
+            // stessa formula del filtro — Q * (Qbutter/Q)^p — cosi' il test misura che il picco
+            // segue la compensazione, non che sia un numero che qualcuno ha trascritto.
             constexpr float q = 12.0f;
-            constexpr float expectedPeak = q;
+            constexpr float compensationExponent = 1.0f / 8.0f; // = kResonanceCompensation
+            const float expectedPeak =
+                q * std::pow (dsp::StateVariableFilter::kButterworthQ / q, compensationExponent);
 
             dsp::StateVariableFilter twelve, twentyFour;
             for (auto* f : { &twelve, &twentyFour })
@@ -320,12 +327,21 @@ struct StateVariableFilterTests final : juce::UnitTest
                     "il secondo stadio non deve moltiplicare il picco: 12 dB " + juce::String (peak12)
                         + ", 24 dB " + juce::String (peak24));
 
-            // E la banda passante non deve pagare il conto della risonanza: alzare `res` fa
-            // squillare il filtro, non abbassare il volume dello strumento. Prima, con la
-            // compensazione a sqrt, qui si misurava 0.26 — cioe' -11.7 dB.
+            // La banda passante paga una parte del conto della risonanza, ed e' una scelta:
+            // l'attenuazione d'ingresso agisce su tutto il segnale, quindi la perdita vale
+            // esattamente (Qbutter/Q)^p — 0.702 a Q 12, cioe' -3.1 dB. Con la compensazione a
+            // 1/32 si misurava 0.92 (-0.7 dB), e con la vecchia sqrt 0.26 (-11.7 dB), che era il
+            // difetto vero: alzare `res` abbassava il volume dello strumento.
+            //
+            // Il confronto e' contro il valore *previsto dalla formula*, non contro una banda
+            // larga: cosi' il test continua a impedire che la banda passante scenda piu' di
+            // quanto la compensazione giustifichi, che e' la proprieta' per cui esiste.
             const auto passband = filterGainAt (twelve, 100.0f, sampleRate);
-            expect (passband > 0.85f && passband < 1.15f,
-                    "a Q 12 la banda passante deve restare intorno a 1, misurata " + juce::String (passband));
+            const auto expectedPassband =
+                std::pow (dsp::StateVariableFilter::kButterworthQ / q, compensationExponent);
+            expectWithinAbsoluteError (passband, expectedPassband, expectedPassband * 0.05f,
+                    "a Q 12 la banda passante deve valere " + juce::String (expectedPassband)
+                        + ", misurata " + juce::String (passband));
         }
 
         beginTest ("a Q di Butterworth la compensazione non tocca niente");
@@ -343,12 +359,25 @@ struct StateVariableFilterTests final : juce::UnitTest
                     "in banda passante deve restare a guadagno unitario");
         }
 
-        beginTest ("la banda passante non si abbassa quando sale la risonanza");
+        beginTest ("la banda passante scende solo di quanto la compensazione giustifica");
         {
             // Il difetto che questo test blocca: la compensazione d'ingresso valeva
             // sqrt(Qbutter/Q) e attenuava *tutto* il segnale, non solo il picco. A Q 24 lo
-            // strumento perdeva ~10 dB e diventava magro. La risposta a un quarto del cutoff
-            // (banda passante piena) deve restare la stessa su tutta la corsa di `res`.
+            // strumento perdeva 14.7 dB e diventava magro.
+            //
+            // La soglia non e' piu' una banda piatta a +-1.5 dB. Con la compensazione a 1/8 una
+            // perdita in banda passante c'e' e ci deve essere — e' il prezzo pagato apposta per
+            // limare il picco risonante — ma deve valere *esattamente* quella prevista dalla
+            // formula, 20*p*log10(Qbutter/Q), e non un decibel di piu'. Confrontare con la
+            // previsione invece che con una banda larga rende il test piu' severo di prima, non
+            // meno: a Q 24 la vecchia versione avrebbe accettato qualsiasi cosa fra -1.5 e +1.5,
+            // questa accetta solo -3.8 +-0.75 (misurato -3.5; lo scarto e' il warping di tan()).
+            //
+            // Resta anche il tetto assoluto: 4 dB a fondo corsa. E' il budget su cui e' stato
+            // scelto l'esponente 1/8 — a 1/6 si misurerebbero 4.8 dB e lo sfonderebbe.
+            constexpr float compensationExponent = 1.0f / 8.0f; // = kResonanceCompensation
+            constexpr float kPassbandBudgetDb = 4.0f;
+
             for (int stages : { 1, 2 })
             {
                 for (float cutoff : { 200.0f, 1000.0f, 6000.0f })
@@ -370,10 +399,18 @@ struct StateVariableFilterTests final : juce::UnitTest
                             reference = gain;
 
                         const auto delta = dbRatio (gain, reference);
-                        expect (std::abs (delta) <= 1.5f,
-                                "stadi " + juce::String (stages) + ", cutoff " + juce::String (cutoff)
-                                    + ", Q " + juce::String (q) + ": banda passante " + juce::String (delta)
-                                    + " dB rispetto a Q 0.707");
+                        const auto predicted =
+                            20.0f * compensationExponent
+                                * std::log10 (dsp::StateVariableFilter::kButterworthQ / q);
+
+                        const auto what = "stadi " + juce::String (stages) + ", cutoff "
+                                              + juce::String (cutoff) + ", Q " + juce::String (q)
+                                              + ": banda passante " + juce::String (delta)
+                                              + " dB rispetto a Q 0.707";
+
+                        expectWithinAbsoluteError (delta, predicted, 0.75f,
+                                what + ", prevista " + juce::String (predicted));
+                        expect (std::abs (delta) <= kPassbandBudgetDb, what + " (budget 4 dB)");
                     }
                 }
             }

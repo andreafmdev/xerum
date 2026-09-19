@@ -12,10 +12,11 @@ namespace dsp
  * Gestione della risonanza (due scelte deliberate — vedi anche updateCoefficients):
  *  - in cascata a 24 dB la risonanza sta **solo sull'ultimo stadio**, il primo resta
  *    Butterworth. Mettendola su entrambi il picco andrebbe a Q², cioè +52 dB a Q 20;
- *  - l'ingresso viene attenuato di `(Qbutter / Q)^(1/32)`: una limatura sul picco
- *    (~1 dB al massimo della corsa) che lascia la banda passante dov'era. Alzare `res`
- *    deve far squillare il filtro, non abbassare il volume dello strumento: una
- *    compensazione forte (prima era l'esponente 1/2) costava -14.7 dB a Q 24.
+ *  - l'ingresso viene attenuato di `(Qbutter / Q)^(1/8)`: limita il picco di 2.9 dB a
+ *    Q 24 e costa 3.5 dB di banda passante allo stesso Q. E' il massimo che sta dentro il
+ *    budget di 4 dB: alzare `res` deve far squillare il filtro, non abbassare il volume
+ *    dello strumento, e una compensazione forte (prima era l'esponente 1/2) costava
+ *    -14.7 dB a Q 24 — cioe' rendeva magro lo strumento invece di domarne il picco.
  */
 class StateVariableFilter
 {

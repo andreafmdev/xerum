@@ -582,13 +582,13 @@ struct EngineRobustnessTests final : juce::UnitTest
                 synth.process (buffer, midi);
             }
 
-            // Sedici note tenute a fondo scala sono il caso estremo: con headroom -8 dB/voce
-            // la loro somma supera il fondo scala, ed e' esattamente il lavoro del soft
-            // clipper in SynthEngine::process tenerla dentro. Quello che si verifica qui e'
-            // il suo contratto: mai oltre 0 dBFS, mai un campione non finito (renderPeak
-            // controlla isfinite su ognuno). Che un accordo *normale* resti sotto la soglia
-            // del clipper, cioe' che non ci sia distorsione nell'uso reale, e' il test
-            // successivo.
+            // Sedici note tenute a fondo scala sono il caso estremo: con headroom -3 dB/voce
+            // la loro somma presenta 2.11 al soft clipper (+6.5 dBFS), ed e' esattamente il
+            // lavoro del soft clipper in SynthEngine::process tenerla dentro. Quello che si
+            // verifica qui e' il suo contratto: mai oltre 0 dBFS, mai un campione non finito
+            // (renderPeak controlla isfinite su ognuno). Che un accordo *normale* resti sotto
+            // la soglia del clipper, cioe' che non ci sia distorsione nell'uso reale, e' il
+            // test successivo.
             const auto peak = renderPeak (synth, 50, *this);
             expect (peak <= 1.0f, "picco " + juce::String (peak) + ": il soft clipper deve tenere l'uscita entro 0 dBFS");
 
@@ -610,14 +610,21 @@ struct EngineRobustnessTests final : juce::UnitTest
         beginTest ("gain staging: una nota e un accordo normale stanno sotto il soft clipper");
         {
             // Il contrappeso del test precedente. Li' si verifica che il caso estremo (16 note
-            // a fondo scala) venga contenuto; qui che l'uso *normale* non lo sfiori nemmeno,
+            // a fondo scala) venga contenuto; qui che l'uso *normale* non arrivi al clipper,
             // cioe' che il soft clipper sia una rete di sicurezza e non un compressore sempre
-            // acceso. La soglia del clipper e' 0.8: sotto quella l'uscita e' bit-identica a
+            // acceso. La soglia del clipper e' 0.95: sotto quella l'uscita e' bit-identica a
             // quella non clippata.
             //
             // Le soglie inferiori sono l'altra meta' del problema: con l'headroom precedente
             // (-20 dB per voce) una nota singola usciva a -26 dBFS, cioe' uno strumento
             // inutilizzabilmente piano, e il difetto non veniva preso da nessun test.
+            //
+            // I numeri qui sotto sono il bilancio esatto della ritaratura di kVoiceHeadroomGain
+            // (da -8 a -3 dB): sono loro a fissare quel valore, non il contrario. L'accordo
+            // arriva a 0.900 contro una soglia di 0.95, cioe' mezzo decibel di margine — ed e'
+            // tutto il margine che c'e', perche' l'headroom e' stato scelto proprio sul punto in
+            // cui l'accordo sfiora il clipper. Se un domani questo test fallisse di un soffio, la
+            // risposta e' abbassare kVoiceHeadroomGain, non alzare la soglia in SynthEngine.
             engine::SynthEngine synth;
             prepareEngine (synth, store);
             synth.setParams (defaultParams());
@@ -632,9 +639,16 @@ struct EngineRobustnessTests final : juce::UnitTest
             }
 
             const auto singleNote = renderPeak (synth, 20, *this);
-            expect (singleNote < 0.8f, "una nota sola non deve arrivare al soft clipper, picco "
+            expect (singleNote < 0.95f, "una nota sola non deve arrivare al soft clipper, picco "
                                            + juce::String (singleNote));
-            expect (singleNote > 0.1f, "una nota sola non deve essere inudibile, picco "
+
+            // 0.25 e non piu' 0.1: con -3 dB per voce una nota singola a volume 0.8 misura 0.363
+            // (-8.8 dBFS) su questa finestra, contro 0.204 (-13.8 dBFS) con l'headroom di prima.
+            // La vecchia soglia di 0.1 sarebbe rimasta vera anche tornando ai -8 dB, quindi non
+            // avrebbe visto la regressione: 0.25 sta in mezzo ai due livelli ed e' cio' che rende
+            // il test capace di accorgersi di un arretramento, che e' il difetto che questa
+            // ritaratura e' venuta a correggere.
+            expect (singleNote > 0.25f, "una nota sola non deve essere inudibile, picco "
                                            + juce::String (singleNote));
 
             {
@@ -647,8 +661,19 @@ struct EngineRobustnessTests final : juce::UnitTest
             }
 
             const auto chord = renderPeak (synth, 20, *this);
-            expect (chord < 0.8f, "un accordo di quattro note non deve arrivare al soft clipper, picco "
+            expect (chord < 0.95f, "un accordo di quattro note non deve arrivare al soft clipper, picco "
                                       + juce::String (chord));
+
+            // Quanto sta sopra l'accordo rispetto alla nota singola e' la quantita' che decide
+            // tutto il gain staging: e' il fattore di cresta a rendere impossibile portare la
+            // nota singola a -14 dBFS RMS *e* tenere l'accordo fuori dal clipper (vedi il
+            // commento di kVoiceHeadroomGain). Misurato 7.9 dB su questa finestra, che include
+            // l'attacco; la banda +-1.5 dB lascia respirare la misura senza lasciar passare uno
+            // spostamento vero fra i due livelli.
+            const auto crestDb = juce::Decibels::gainToDecibels (chord / singleNote);
+            expect (crestDb > 6.4f && crestDb < 9.4f,
+                    "accordo e nota singola distano " + juce::String (crestDb, 2)
+                        + " dB invece dei 7.9 misurati");
 
             const auto dbfs = [] (float peak) { return juce::String (juce::Decibels::gainToDecibels (peak), 1) + " dBFS"; };
             logMessage ("nota singola: " + dbfs (singleNote) + " | accordo di 4: " + dbfs (chord));
@@ -656,7 +681,7 @@ struct EngineRobustnessTests final : juce::UnitTest
 
         beginTest ("il soft clipper d'uscita non tocca il segnale sotto soglia");
         {
-            // Che sia davvero trasparente sotto 0.8 e' la proprieta' che rende accettabile
+            // Che sia davvero trasparente sotto 0.95 e' la proprieta' che rende accettabile
             // averlo sempre in catena: si confronta lo stesso segnale a due volumi diversi e
             // si verifica che il rapporto fra i picchi sia esattamente quello dei due gain.
             engine::SynthEngine synth;
@@ -685,7 +710,7 @@ struct EngineRobustnessTests final : juce::UnitTest
 
             const auto loud = renderPeak (louder, 20, *this);
 
-            expect (loud < 0.8f, "il test ha senso solo se entrambi restano sotto soglia, picco " + juce::String (loud));
+            expect (loud < 0.95f, "il test ha senso solo se entrambi restano sotto soglia, picco " + juce::String (loud));
             expectWithinAbsoluteError (loud, quiet * 2.0f, quiet * 0.01f,
                     "raddoppiando il volume il picco deve raddoppiare: " + juce::String (quiet)
                         + " -> " + juce::String (loud));
@@ -2255,14 +2280,19 @@ struct ModulationStressTests final : juce::UnitTest
         {
             const auto peak = sweep (store, {}, 240, "passata lunga");
 
-            // La soglia del soft clipper e' 0.8. Se il picco restasse sotto, questo test non
-            // starebbe verificando il clipper ma solo che un segnale gia' piccolo resta
-            // piccolo: l'asserzione serve a impedire che diventi vacuo se un domani il gain
-            // staging cambia. Il picco misurato, 0.98, corrisponde a ~2.5 in ingresso al
-            // clipper (+8 dBFS): con `res` modulato a fondo corsa e' il picco risonante del
-            // filtro, quello da +29.7 dB sopra Butterworth, a portarcelo.
-            expect (peak > 0.8f, "picco " + juce::String (peak)
-                                     + ": il soft clipper non e' nemmeno entrato in funzione");
+            // La soglia del soft clipper e' 0.95, e sotto soglia l'uscita e' identica
+            // all'ingresso: un picco sopra 0.95 *dimostra* che il clipper e' entrato in
+            // funzione. Se restasse sotto, questo test non starebbe verificando il clipper ma
+            // solo che un segnale gia' piccolo resta piccolo, e l'asserzione serve proprio a
+            // impedire che diventi vacuo quando il gain staging cambia.
+            //
+            // La soglia sale da 0.8 a 0.95 insieme a kSoftClipThreshold: tenerla a 0.8 avrebbe
+            // lasciato passare un caso in cui il clipper non fa piu' niente. Il picco misurato,
+            // 0.999, corrisponde a 3.48 in ingresso al clipper (+10.8 dBFS, erano +8.0 prima
+            // della ritaratura): con `res` modulato a fondo corsa e' il picco risonante del
+            // filtro, ora +26.8 dB sopra Butterworth, a portarcelo.
+            expect (peak > 0.95f, "picco " + juce::String (peak)
+                                      + ": il soft clipper non e' nemmeno entrato in funzione");
 
             logMessage ("matrix pieno, 16 note, 240 blocchi: picco " + juce::String (peak) + " ("
                         + juce::String (juce::Decibels::gainToDecibels (peak), 2) + " dBFS)");
