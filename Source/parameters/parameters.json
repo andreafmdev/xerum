@@ -13,6 +13,7 @@
     { "id": "warp",    "name": "Warp", "group": "osc", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.1, "unit": "%", "decimals": 0 },
     { "id": "detune",  "name": "Detune", "group": "osc", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.18, "unit": "ct", "decimals": 0 },
     { "id": "fine",    "name": "Fine", "group": "osc", "kind": "float", "slot": true, "map": { "type": "linear", "min": -100, "max": 100 }, "default": 0.5, "unit": "ct", "decimals": 0, "bipolar": true },
+    { "id": "pbRange", "name": "Pitch bend range", "group": "osc", "kind": "int", "slot": true, "map": { "type": "linear", "min": 0, "max": 24 }, "default": 2, "unit": "SEMI" },
     { "id": "level",   "name": "Level", "group": "osc", "kind": "float", "slot": true, "map": { "type": "db", "min": 0, "max": 1 }, "default": 0.85, "unit": "dB", "decimals": 1 },
 
     { "id": "filtOn",  "name": "Filter on", "group": "filter", "kind": "bool", "slot": true, "default": true },

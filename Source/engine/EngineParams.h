@@ -167,6 +167,14 @@ struct EngineParams
         Vedi engine::Arpeggiator: con `on` falso il MidiBuffer non viene toccato. */
     ArpConfig arp {};
     float modWheel { 0.0f };         // CC 1, 0..1
+
+    /** Ampiezza del pitch bend in semitoni a fondo corsa, dal parametro `pbRange`. Non e' una
+        quantita' audio-rate: la posizione della rotella e' `pitchBend`, questo e' quanto vale. */
+    int pitchBendRangeSemitones { 2 };
+
+    /** Posizione della rotella di pitch, -1..1. Non e' un parametro dell'APVTS: la scrive
+        SynthEngine leggendo i messaggi MIDI, come fa con `modWheel`. */
+    float pitchBend { 0.0f };
     float globalLfoLevel { 0.0f };   // LFO libero, usato dalle voci quando lfoRetrig e' falso
 
     int lfoShapeIndex { 0 };
