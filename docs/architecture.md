@@ -49,7 +49,6 @@ The front panel is `SynthWindow` (`WebUI/src/synth/ui/`): a fixed 900×600 chass
 - Three materials via `variant` (`deep` default, `soft`, `glow`) — `synth.css` overrides the `@xerum/ui` hardware tokens on the chassis. In the browser: `?variant=glow&tab=lfo`.
 - Every control is an `@xerum/ui` primitive (Knob with modulation rings and drop target, Segmented, Stepper, Meter, Tabs `bar`, Toggle, Panel, Button). Displays specific to the window (filter response, envelope, LFO scope, wavetable stack + spectrum) are app-level canvases/SVGs.
 - **Known divergence:** `WaveDisplay` (`WebUI/src/synth/ui/WaveDisplay.tsx`) draws a procedural curve from `WebUI/src/synth/curves.ts`, not the real `.xwt` table data — deliberate, not an oversight.
-- **Known gap:** the modulation rings on the knobs do not follow `env`, `env2`, `vel` or `mw` live. `MeterFrame` carries only the LFO level, so `useSourceLevels()` feeds the other four a constant — the ring shows the right *depth* but not the *movement*. Widening `MeterFrame` is bridge work and has not been done.
 - **Known gap:** the twelve factory presets (`Source/parameters/presets.json`) have been recalibrated against the current gain staging — each one now states `level`, `drive` and `volume` explicitly, the three that decide whether it clips — but they still have not been auditioned by ear, and the preset browser (`PresetOverlay`) has not been clicked through end to end in the Standalone.
 
 ## On-screen keyboard

@@ -158,6 +158,21 @@ public:
     float getLfoLevel() const noexcept { return lfoRetrig_ ? lfo_.level() : globalLfoLevel_; }
 
     /**
+     * Il livello **attuale** di una delle cinque sorgenti del matrix.
+     *
+     * E' la stessa espressione che applyModulation() usa per riempire sourceLevels_, e non e'
+     * un caso: qui c'e' una sola definizione di "quanto vale env adesso", e la usano sia il
+     * suono sia il meter. Se le due divergessero, l'anello del knob nella UI tornerebbe a
+     * raccontare una storia diversa da quella che il filtro sta suonando — il difetto che
+     * questo percorso esiste per togliere.
+     *
+     * Legge lo stato vivo (l'inviluppo, la velocity), non la cache di sourceLevels_: quella e'
+     * ferma al valore di *inizio* della sotto-fetta di controllo appena resa, e per un meter
+     * campionato ogni 33 ms il valore piu' fresco e' quello giusto.
+     */
+    float getSourceLevel (ModSource src) const noexcept;
+
+    /**
      * Il livello dell'LFO libero, e nient'altro.
      *
      * E' l'unico campo di EngineParams che cambia *dentro* il blocco: SynthEngine lo rinfresca a

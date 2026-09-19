@@ -291,16 +291,32 @@ float SynthVoice::modulated (int targetIndex) const noexcept
     return juce::jlimit (0.0f, 1.0f, value);
 }
 
+float SynthVoice::getSourceLevel (ModSource src) const noexcept
+{
+    switch (src)
+    {
+        case ModSource::lfo:   return lfoRetrig_ ? lfo_.level() : globalLfoLevel_;
+        case ModSource::env:   return envelope_.getLevel();
+        case ModSource::env2:  return envelope2_.getLevel();
+        case ModSource::vel:   return velocity_;
+        case ModSource::mw:    return params_.modWheel;
+        case ModSource::count:
+        default:               return 0.0f;
+    }
+}
+
 void SynthVoice::applyModulation() noexcept
 {
     // I livelli delle cinque sorgenti si calcolano una volta sola, prima di applicarli: env,
     // env2 e vel sono per voce (due note tenute stanno a punti diversi del loro inviluppo), mw
-    // e' globale, lfo dipende da lfoRetrig.
-    sourceLevels_[(size_t) ModSource::lfo] = lfoRetrig_ ? lfo_.level() : globalLfoLevel_;
-    sourceLevels_[(size_t) ModSource::env] = envelope_.getLevel();
-    sourceLevels_[(size_t) ModSource::env2] = envelope2_.getLevel();
-    sourceLevels_[(size_t) ModSource::vel] = velocity_;
-    sourceLevels_[(size_t) ModSource::mw] = params_.modWheel;
+    // e' globale, lfo dipende da lfoRetrig. L'argomento e' costante in ognuna di queste righe,
+    // quindi getSourceLevel si riduce alla sola espressione che c'era prima: la chiamata e'
+    // li' per avere una definizione sola, condivisa con il meter, non per fare un giro in piu'.
+    sourceLevels_[(size_t) ModSource::lfo] = getSourceLevel (ModSource::lfo);
+    sourceLevels_[(size_t) ModSource::env] = getSourceLevel (ModSource::env);
+    sourceLevels_[(size_t) ModSource::env2] = getSourceLevel (ModSource::env2);
+    sourceLevels_[(size_t) ModSource::vel] = getSourceLevel (ModSource::vel);
+    sourceLevels_[(size_t) ModSource::mw] = getSourceLevel (ModSource::mw);
 
     // `convert` e' la stessa identica funzione che collectEngineParams usa per quel target:
     // e' il requisito che impedisce a un cutoff mosso da un LFO e a uno mosso a mano di

@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { PARAM_SPECS, type ParamId } from "../synth/params.generated";
 import { formatValue, fromIndex, fromInt, paramLabel, toIndex, toInt } from "../synth/mapping";
-import type { BridgeState, MeterFrame, ModAssignment, ModSource } from "./backend";
+import { ZERO_METERS, type BridgeState, type MeterFrame, type ModAssignment, type ModSource } from "./backend";
 import { useBackend } from "./provider";
 
 function useHandle(id: ParamId) {
@@ -122,9 +122,12 @@ export function useBridgeState() {
   };
 }
 
+/** Il numero, o zero: scarta undefined, null e NaN in arrivo dal ponte. */
+const finite = (v: number) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
 export function useMeters(): MeterFrame {
   const backend = useBackend();
-  const [frame, setFrame] = useState<MeterFrame>({ in: 0, out: 0, lfo: 0, arpStep: 0 });
+  const [frame, setFrame] = useState<MeterFrame>(ZERO_METERS);
   // Istante dell'ultimo frame applicato: il decay dipende dal tempo trascorso (in
   // "tick" da 1000/30 ms), non dal numero di eventi ricevuti. Così due copie dello
   // stesso frame consegnate nello stesso istante (un listener doppione dopo un
@@ -138,7 +141,27 @@ export function useMeters(): MeterFrame {
         const elapsedTicks = at.current === null ? Infinity : (now - at.current) / (1000 / 30);
         const decay = Math.min(1, Math.pow(0.85, elapsedTicks));
         at.current = now;
-        setFrame((p) => ({ in: Math.max(m.in, p.in * decay), out: Math.max(m.out, p.out * decay), lfo: m.lfo, arpStep: m.arpStep }));
+        // Il peak hold con decay è solo per i due meter audio, dove serve a rendere leggibile
+        // un picco che dura un frame. Le cinque sorgenti passano intatte: env/env2/vel sono già
+        // il picco del frame (lo prende il motore, vedi Source/engine/MeterFrame.h), e tenerle
+        // appese per altri 100 ms farebbe scendere l'anello molto dopo l'inviluppo che mostra —
+        // di nuovo un anello che non dice la verità, solo con un ritardo invece che con una
+        // costante.
+        //
+        // finite() su ogni campo per la stessa ragione di OrphanHandle in juce-backend.ts: un
+        // binario più vecchio della WebUI manda un frame senza env/env2/vel/mw, e quegli
+        // undefined finirebbero dentro liveValue() — un NaN, cioè un anello che sparisce invece
+        // di un anello fermo.
+        setFrame((p) => ({
+          in: Math.max(finite(m.in), p.in * decay),
+          out: Math.max(finite(m.out), p.out * decay),
+          lfo: finite(m.lfo),
+          env: finite(m.env),
+          env2: finite(m.env2),
+          vel: finite(m.vel),
+          mw: finite(m.mw),
+          arpStep: finite(m.arpStep),
+        }));
       }),
     [backend],
   );

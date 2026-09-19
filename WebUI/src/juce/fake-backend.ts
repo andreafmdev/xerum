@@ -62,16 +62,40 @@ export class FakeBackend implements Backend {
   emitStateChanged(s: BridgeState, origin: string) { for (const cb of this.stateSubs) cb({ ...structuredClone(s), origin }); }
   emitMeters(m: MeterFrame) { for (const cb of this.meterSubs) cb(m); }
 
-  /** Clock finto per browser/Storybook: LFO, meter che respirano, step arp. */
+  /**
+   * Clock finto per browser/Storybook: LFO, meter che respirano, step arp e i livelli delle
+   * cinque sorgenti del mod matrix.
+   *
+   * Le sorgenti non sono rumore decorativo: senza host è l'unico modo di vedere se un anello di
+   * modulazione si muove davvero. Quindi si finge una nota ogni mezzo secondo e le si dà un
+   * inviluppo — `env` con attacco corto e decadimento, `env2` più lento e più tondo, `vel` che
+   * cambia da nota a nota e resta ferma mentre la nota dura, `mw` che va avanti e indietro come
+   * una rotella mossa a mano. Sono tutte unipolari 0..1 come quelle vere; l'LFO resta bipolare.
+   */
   private startDemo() {
     let last = 0;
     const tick = (now: number) => {
       if (now - last > 33) {
         last = now;
         const t = now / 1000;
-        const env = 0.55 + 0.25 * Math.sin(t * 1.7) + 0.1 * Math.sin(t * 7.3);
+        const audio = 0.55 + 0.25 * Math.sin(t * 1.7) + 0.1 * Math.sin(t * 7.3);
         const rate = 0.05 * Math.pow(400, this.param("lrate").get());
-        this.emitMeters({ in: env * this.param("level").get(), out: env * this.param("volume").get(), lfo: Math.sin(t * rate * 2 * Math.PI), arpStep: Math.floor(t * 8) % 16 });
+
+        const note = Math.floor(t * 2);          // due note al secondo
+        const since = t * 2 - note;              // 0..1 dentro la nota
+        const env = since < 0.08 ? since / 0.08 : 0.35 + 0.65 * Math.exp(-6 * (since - 0.08));
+        const env2 = Math.sin(Math.min(1, since * 1.4) * Math.PI * 0.5);
+
+        this.emitMeters({
+          in: audio * this.param("level").get(),
+          out: audio * this.param("volume").get(),
+          lfo: Math.sin(t * rate * 2 * Math.PI),
+          env,
+          env2,
+          vel: 0.55 + 0.4 * Math.sin(note * 2.1),
+          mw: 0.5 + 0.5 * Math.sin(t * 0.3),
+          arpStep: Math.floor(t * 8) % 16,
+        });
       }
       this.raf = requestAnimationFrame(tick);
     };

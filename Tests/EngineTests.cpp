@@ -1870,6 +1870,187 @@ static ModulationEngineTests modulationEngineTests;
 
 
 /**
+ * I livelli che il motore pubblica per gli anelli di modulazione della UI.
+ *
+ * L'anello disegnato attorno a un knob modulato mostra `base + depth x livello sorgente`
+ * (liveValue() in WebUI/src/synth/mod.ts): se i livelli non arrivano dal motore l'anello ha la
+ * profondita' giusta e il movimento sbagliato — una route env -> cutoff resta ferma mentre il
+ * filtro si apre. Qui si verifica che i cinque livelli siano quelli della voce e non costanti.
+ *
+ * Nota quale numero si osserva: getEnvLevel() e getEnv2Level() sono il **picco della sotto-fetta
+ * peggiore del blocco appena reso**, non il valore di fine blocco (vedi il commento in
+ * SynthEngine.h). Su un attacco monotono le due cose crescono insieme, quindi il test regge in
+ * entrambi i casi; a distinguerle e' l'ultimo beginTest.
+ */
+struct MeterSourceLevelTests final : juce::UnitTest
+{
+    MeterSourceLevelTests() : juce::UnitTest ("livelli delle sorgenti per il meter", "engine") {}
+
+    /** Un blocco da 128 campioni con il MIDI passato, poi i livelli pubblicati. */
+    static void runBlock (engine::SynthEngine& synth, juce::MidiBuffer& midi)
+    {
+        juce::AudioBuffer<float> b (2, 128);
+        b.clear();
+        synth.process (b, midi);
+    }
+
+    static void runBlocks (engine::SynthEngine& synth, int n)
+    {
+        juce::MidiBuffer none;
+        for (int i = 0; i < n; ++i)
+            runBlock (synth, none);
+    }
+
+    void runTest() override
+    {
+        beginTest ("senza note i livelli per voce sono zero");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+            engine::SynthEngine synth; prepareEngine (synth, store);
+            synth.setParams (defaultParams());
+
+            runBlocks (synth, 4);
+
+            expectEquals (synth.getEnvLevel(), 0.0f, "env senza note non e' zero");
+            expectEquals (synth.getEnv2Level(), 0.0f, "env2 senza note non e' zero");
+            expectEquals (synth.getVelocityLevel(), 0.0f, "vel senza note non e' zero");
+        }
+
+        beginTest ("env cresce blocco dopo blocco durante un attacco lento");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+            engine::SynthEngine synth; prepareEngine (synth, store);
+
+            auto p = defaultParams();
+            p.attackSeconds = 0.5f;    // 24000 campioni: 187 blocchi da 128, nessuno lo salta
+            p.decaySeconds = 1.0f;
+            p.sustain = 1.0f;
+            synth.setParams (p);
+
+            juce::MidiBuffer on;
+            on.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            runBlock (synth, on);
+
+            auto previous = synth.getEnvLevel();
+            expect (previous > 0.0f, "il primo blocco non ha pubblicato nessun livello");
+
+            for (int i = 0; i < 20; ++i)
+            {
+                runBlocks (synth, 1);
+                const auto now = synth.getEnvLevel();
+                expect (now > previous, "env non e' cresciuto fra due blocchi dell'attacco");
+                previous = now;
+            }
+
+            expect (previous < 1.0f, "un attacco da mezzo secondo non puo' essere finito in 21 blocchi");
+        }
+
+        beginTest ("env2 ha il suo inviluppo, indipendente da quello d'ampiezza");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+            engine::SynthEngine synth; prepareEngine (synth, store);
+
+            auto p = defaultParams();
+            p.attackSeconds = 0.001f;   // l'ampiezza e' gia' in cima
+            p.decaySeconds = 1.0f;
+            p.sustain = 1.0f;
+            p.attack2Seconds = 2.0f;    // il secondo inviluppo e' appena partito
+            p.decay2Seconds = 1.0f;
+            p.sustain2 = 1.0f;
+            synth.setParams (p);
+
+            juce::MidiBuffer on;
+            on.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            runBlock (synth, on);
+            runBlocks (synth, 10);
+
+            expect (synth.getEnvLevel() > 0.9f, "env doveva essere in cima dopo un millisecondo di attacco");
+            expect (synth.getEnv2Level() > 0.0f, "env2 non si e' mosso");
+            expect (synth.getEnv2Level() < 0.2f, "env2 con due secondi di attacco non puo' essere gia' lassu'");
+        }
+
+        beginTest ("vel e' la velocity della nota e torna a zero quando la voce si spegne");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+            engine::SynthEngine synth; prepareEngine (synth, store);
+
+            auto p = defaultParams();
+            p.releaseSeconds = 0.01f;
+            synth.setParams (p);
+
+            juce::MidiBuffer on;
+            on.addEvent (juce::MidiMessage::noteOn (1, 60, 0.5f), 0);
+            runBlock (synth, on);
+            runBlocks (synth, 2);
+
+            expectWithinAbsoluteError (synth.getVelocityLevel(), 0.5f, 0.01f,
+                                       "vel non e' la velocity della nota che suona");
+
+            juce::MidiBuffer off;
+            off.addEvent (juce::MidiMessage::noteOff (1, 60), 0);
+            runBlock (synth, off);
+            runBlocks (synth, 40);      // il release e' 10 ms: 4 blocchi bastano, 40 abbondano
+
+            expectEquals (synth.getVelocityLevel(), 0.0f, "vel non e' tornata a zero a voce spenta");
+        }
+
+        beginTest ("mw segue il CC 1 anche senza note");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+            engine::SynthEngine synth; prepareEngine (synth, store);
+            synth.setParams (defaultParams());
+
+            runBlocks (synth, 1);
+            expectEquals (synth.getModWheelLevel(), 0.0f, "il mod wheel parte da zero");
+
+            juce::MidiBuffer cc;
+            cc.addEvent (juce::MidiMessage::controllerEvent (1, 1, 127), 0);
+            runBlock (synth, cc);
+
+            expectWithinAbsoluteError (synth.getModWheelLevel(), 1.0f, 0.001f,
+                                       "il mod wheel non e' arrivato al meter");
+        }
+
+        beginTest ("env pubblica il picco del blocco, non il valore di fine blocco");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+            engine::SynthEngine synth; prepareEngine (synth, store);
+
+            // Attacco e decay piu' corti di un blocco da 128 campioni (2.67 ms a 48 kHz) ma piu'
+            // lunghi di una sotto-fetta di controllo (32 campioni, 0.67 ms): a fine blocco
+            // l'inviluppo e' gia' sceso al sustain, mentre dentro il blocco e' passato per l'uno.
+            // E' il caso che il valore di fine blocco non saprebbe mostrare, ed e' la ragione per
+            // cui si pubblica il massimo invece dell'istantaneo.
+            //
+            // La risoluzione ha un fondo, ed e' quello del tasso di controllo: un attacco piu'
+            // corto di kControlBlockSamples passa fra due campionamenti e nessuno lo vede. Per
+            // andare piu' in basso bisognerebbe guardare l'inviluppo campione per campione dentro
+            // SynthVoice::render — costo sul percorso audio per un'indicazione sullo schermo.
+            auto p = defaultParams();
+            p.attackSeconds = 0.002f;    // ~96 campioni: tre sotto-fette
+            p.decaySeconds = 0.0005f;
+            p.sustain = 0.1f;
+            synth.setParams (p);
+
+            juce::MidiBuffer on;
+            on.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            runBlock (synth, on);
+
+            expect (synth.getEnvLevel() > 0.8f,
+                    "il picco dell'attacco e' passato dentro il blocco e il meter non l'ha visto");
+
+            // Il blocco dopo: l'inviluppo e' al sustain, e il meter lo segue giu'. Se il picco
+            // restasse appeso, l'anello non tornerebbe mai indietro.
+            runBlocks (synth, 1);
+            expect (synth.getEnvLevel() < 0.2f, "il picco non e' stato azzerato all'inizio del blocco");
+        }
+    }
+};
+
+static MeterSourceLevelTests meterSourceLevelTests;
+
+
+/**
  * Il percorso che PluginProcessor::rebuildModSnapshot() fa sul message thread, meno
  * l'AudioProcessor: XerumTests non linka juce_audio_processors, quindi il processore non è
  * istanziabile qui, ma il pezzo che conta — dal JSON che la WebUI manda a setMods fino allo

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ZERO_METERS } from "./backend";
 
 type Listener = (p: unknown) => void;
 
@@ -139,9 +140,9 @@ describe("JuceBackend", () => {
     const call = stub.emitted.find((e) => e.id === "__juce__invoke" && e.p.name === "setMods")!;
     expect(call.p.params).toEqual([JSON.stringify([{ src: "lfo", target: "cutoff", depth: 0.2 }]), "abc"]);
     stub.listeners.get("stateChanged")!.forEach((fn) => fn({ version: 1, mods: [], arpSteps: [], origin: "x" }));
-    stub.listeners.get("meters")!.forEach((fn) => fn({ in: 0.1, out: 0.2, lfo: 0, arpStep: 0 }));
+    stub.listeners.get("meters")!.forEach((fn) => fn({ ...ZERO_METERS, in: 0.1, out: 0.2 }));
     expect(st).toHaveBeenCalledWith(expect.objectContaining({ origin: "x" }));
-    expect(mt).toHaveBeenCalledWith({ in: 0.1, out: 0.2, lfo: 0, arpStep: 0 });
+    expect(mt).toHaveBeenCalledWith({ ...ZERO_METERS, in: 0.1, out: 0.2 });
   });
 
   it("setArpSteps sends JSON and origin", async () => {

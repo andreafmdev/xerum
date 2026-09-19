@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { FakeBackend } from "./fake-backend";
+import { ZERO_METERS } from "./backend";
 import { PARAM_SPECS } from "../synth/params.generated";
 import { PRESETS } from "../synth/presets.generated";
 
@@ -53,8 +54,8 @@ describe("FakeBackend state and events", () => {
     const b = new FakeBackend();
     const cb = vi.fn();
     b.onMeters(cb);
-    b.emitMeters({ in: 0.5, out: 0.4, lfo: 0, arpStep: 3 });
-    expect(cb).toHaveBeenCalledWith({ in: 0.5, out: 0.4, lfo: 0, arpStep: 3 });
+    b.emitMeters({ ...ZERO_METERS, in: 0.5, out: 0.4, arpStep: 3 });
+    expect(cb).toHaveBeenCalledWith({ ...ZERO_METERS, in: 0.5, out: 0.4, arpStep: 3 });
   });
 });
 

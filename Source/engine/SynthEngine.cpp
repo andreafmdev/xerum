@@ -102,6 +102,15 @@ void SynthEngine::setMods (const engine::ModSnapshot& snapshot) noexcept
     activeMods_.store (&modRing_[slot], std::memory_order_release);
 }
 
+void SynthEngine::publishSourceLevels (float lfo, float env, float env2, float vel) noexcept
+{
+    lfoLevel_.store (lfo, std::memory_order_relaxed);
+    envPeak_.store (env, std::memory_order_relaxed);
+    env2Peak_.store (env2, std::memory_order_relaxed);
+    velPeak_.store (vel, std::memory_order_relaxed);
+    modWheelLevel_.store (modWheel_, std::memory_order_relaxed);
+}
+
 void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
 {
     if (message.isController() && message.getControllerNumber() == 1)
@@ -171,6 +180,19 @@ void SynthEngine::renderControlSlices (float* left, float* right, int numSamples
         // sotto-fette: vedi il commento di VoiceManager::setGlobalLfoLevel.
         voices_.setGlobalLfoLevel (params_.globalLfoLevel);
         voices_.render (left + offset, right + offset, slice);
+
+        // Telemetria, e nient'altro: si legge cio' che la fetta appena resa ha lasciato dietro
+        // di se' e si tiene il massimo. Nessun ramo di qui torna nel segnale — l'audio esce
+        // bit per bit come senza queste tre righe.
+        //
+        // Qui e non a fine blocco perche' qui c'e' la risoluzione: 32 campioni, 1500 Hz a
+        // 48 kHz. A fine blocco un attacco di mezzo millisecondo sarebbe gia' passato e
+        // ridisceso, e il meter mostrerebbe il sustain invece del picco.
+        const auto levels = voices_.getSourceLevels();
+        blockEnvPeak_ = std::max (blockEnvPeak_, levels.env);
+        blockEnv2Peak_ = std::max (blockEnv2Peak_, levels.env2);
+        blockVelPeak_ = std::max (blockVelPeak_, levels.vel);
+
         offset += slice;
     }
 }
@@ -183,6 +205,10 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
         // e nessuna voce che continua a suonare sotto sotto.
         voices_.allSoundOff();
         buffer.clear();
+
+        // Anche gli anelli di modulazione devono dire la verita' in bypass: niente suona,
+        // quindi niente si muove. Il mod wheel resta dov'e': e' una posizione, non un suono.
+        publishSourceLevels (0.0f, 0.0f, 0.0f, 0.0f);
         return;
     }
 
@@ -196,6 +222,13 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
 
     if (numSamples <= 0 || numChannels <= 0)
         return;
+
+    // I massimi ripartono da zero a ogni blocco: il meter deve mostrare cio' che e' successo
+    // *adesso*, non il ricordo del picco piu' alto da quando il plugin e' aperto. A tenere il
+    // picco fra una lettura dell'editor e l'altra ci pensa MeterFrame, un piano piu' in la'.
+    blockEnvPeak_ = 0.0f;
+    blockEnv2Peak_ = 0.0f;
+    blockVelPeak_ = 0.0f;
 
     // L'LFO libero gira anche senza note: e' cio' che lo rende "libero". Qui si accorda soltanto;
     // ad avanzarlo e' renderControlSlices(), una sotto-fetta per volta. Con matrix vuoto non tocca
@@ -253,9 +286,10 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
         renderControlSlices (left + samplePos, right + samplePos, numSamples - samplePos, samplePos);
 
     // Dopo il render, non prima: adesso params_.globalLfoLevel e' il livello di fine blocco,
-    // quello che il meter dell'editor deve mostrare.
-    lfoLevel_.store (params_.lfoRetrig ? voices_.getLfoLevel() : params_.globalLfoLevel,
-                     std::memory_order_relaxed);
+    // quello che il meter dell'editor deve mostrare. L'LFO e' istantaneo (bipolare: un massimo
+    // non vorrebbe dire niente), env/env2/vel sono i massimi accumulati sulle sotto-fette.
+    publishSourceLevels (params_.lfoRetrig ? voices_.getLfoLevel() : params_.globalLfoLevel,
+                         blockEnvPeak_, blockEnv2Peak_, blockVelPeak_);
 
     // Rampato, non applicato di scatto: spec 6.4 elenca volume fra i cinque bersagli di
     // smoothing (cutoff, wtpos, level, volume, pan). Un salto a gain di blocco produrrebbe lo

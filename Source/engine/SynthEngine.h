@@ -97,8 +97,39 @@ public:
      */
     void setMods (const engine::ModSnapshot& snapshot) noexcept;
 
-    /** Il livello corrente dell'LFO, per il meter dell'editor. */
+    /** Il livello corrente dell'LFO, per il meter dell'editor. Bipolare -1..1, istantaneo. */
     float getLfoLevel() const noexcept { return lfoLevel_.load (std::memory_order_relaxed); }
+
+    /**
+     * Il **picco del blocco appena reso** dell'inviluppo d'ampiezza della voce rappresentativa.
+     *
+     * Picco e non valore di fine blocco, e la ragione e' il lettore: bridge::MeterChannel
+     * campiona a 30 Hz, un frame ogni 33 ms, mentre l'attacco piu' corto che il motore sa fare
+     * dura qualche decina di campioni — meno di un millisecondo. Pubblicando l'istantaneo,
+     * l'anello del knob non vedrebbe quasi mai il punto piu' alto raggiunto da cio' che modula:
+     * su un pluck, il solo momento che conta. E' lo stesso ragionamento — e lo stesso
+     * meccanismo — dei picchi audio inPeak/outPeak, che il lettore azzera con exchange(0).
+     *
+     * Il massimo si accumula a **tasso di controllo**, non una volta per blocco: renderControlSlices()
+     * campiona dopo ogni sotto-fetta da kControlBlockSamples, cioe' 1500 Hz a 48 kHz. Prenderlo
+     * solo a fine blocco avrebbe spostato il problema invece di risolverlo — con buffer da 512 un
+     * attacco di mezzo millisecondo e' finito e gia' decaduto prima che qualcuno guardi.
+     *
+     * Il fondo della risoluzione e' quindi il tasso di controllo, non il frame del meter: un
+     * transitorio piu' corto di kControlBlockSamples passa fra due campionamenti e non si vede.
+     * Scendere sotto vorrebbe dire guardare l'inviluppo campione per campione dentro
+     * SynthVoice::render — costo sul percorso audio per un'indicazione sullo schermo.
+     *
+     * Vale per env e env2. `vel` non ha transitori dentro un blocco (e' costante per tutta la
+     * nota) ma segue la stessa regola per una ragione sua: una nota piu' corta di un frame — uno
+     * staccato, un passo d'arpeggio — con l'istantaneo non comparirebbe affatto.
+     */
+    float getEnvLevel() const noexcept { return envPeak_.load (std::memory_order_relaxed); }
+    float getEnv2Level() const noexcept { return env2Peak_.load (std::memory_order_relaxed); }
+    float getVelocityLevel() const noexcept { return velPeak_.load (std::memory_order_relaxed); }
+
+    /** La posizione del mod wheel (CC 1), 0..1. Istantanea: e' una posizione, non un transitorio. */
+    float getModWheelLevel() const noexcept { return modWheelLevel_.load (std::memory_order_relaxed); }
 
 private:
     void handleMidiEvent (const juce::MidiMessage& message) noexcept;
@@ -119,6 +150,10 @@ private:
      * quindi piu' corta, quanto basta a rimettersi in griglia.
      */
     void renderControlSlices (float* left, float* right, int numSamples, int gridPhase) noexcept;
+
+    /** Deposita i cinque livelli negli atomici che l'editor legge. `mw` viene da modWheel_:
+        e' l'unica sorgente che il motore conosce da se', senza passare dalle voci. */
+    void publishSourceLevels (float lfo, float env, float env2, float vel) noexcept;
 
     VoiceManager voices_;
     EngineSpec spec_ {};
@@ -141,5 +176,20 @@ private:
 
     std::atomic<float> lfoLevel_ { 0.0f };
     float modWheel_ { 0.0f }; // CC 1, solo thread audio
+
+    // --- telemetria per il meter ---------------------------------------------------------
+    // Sola lettura verso l'editor: niente qui dentro torna nel percorso del segnale. Gli
+    // atomici si scrivono una volta per blocco con store(relaxed), gli accumulatori sono
+    // normali float toccati solo dal thread audio.
+
+    std::atomic<float> envPeak_ { 0.0f };
+    std::atomic<float> env2Peak_ { 0.0f };
+    std::atomic<float> velPeak_ { 0.0f };
+    std::atomic<float> modWheelLevel_ { 0.0f };
+
+    /** I massimi accumulati sulle sotto-fette del blocco in corso. Azzerati da process(). */
+    float blockEnvPeak_ { 0.0f };
+    float blockEnv2Peak_ { 0.0f };
+    float blockVelPeak_ { 0.0f };
 };
 } // namespace engine

@@ -21,8 +21,15 @@ export function useMeterFrame(): MeterFrame {
   return m;
 }
 
-/** Livelli istantanei delle sorgenti: l'host manda solo l'LFO, le altre restano valori di comodo. */
+/**
+ * I livelli delle cinque sorgenti, presi dal frame che arriva dall'host.
+ *
+ * Qui c'erano quattro costanti — env 0.6, env2 0.5, vel 0.7, mw 0.5 — perché MeterFrame portava
+ * il solo LFO. L'anello attorno a un knob modulato nasceva quindi con la profondità giusta e non
+ * si muoveva mai: su una route env → cutoff restava fermo mentre il filtro si apriva. Adesso i
+ * cinque livelli li pubblica il motore (Source/engine/SynthEngine.h).
+ */
 export function useSourceLevels(): SourceLevels {
-  const { lfo } = useMeterFrame();
-  return { lfo, env: 0.6, env2: 0.5, vel: 0.7, mw: 0.5 };
+  const { lfo, env, env2, vel, mw } = useMeterFrame();
+  return { lfo, env, env2, vel, mw };
 }

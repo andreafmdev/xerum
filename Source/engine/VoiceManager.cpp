@@ -105,4 +105,16 @@ void VoiceManager::setGlobalLfoLevel (float level) noexcept
     for (auto& voice : voices_)
         voice.setGlobalLfoLevel (level);
 }
+
+VoiceManager::SourceLevels VoiceManager::getSourceLevels() const noexcept
+{
+    for (const auto& voice : voices_)
+        if (voice.isActive())
+            return { voice.getSourceLevel (ModSource::lfo),
+                     voice.getSourceLevel (ModSource::env),
+                     voice.getSourceLevel (ModSource::env2),
+                     voice.getSourceLevel (ModSource::vel) };
+
+    return {};
+}
 } // namespace engine

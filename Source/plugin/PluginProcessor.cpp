@@ -251,18 +251,31 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     // Picchi del blocco per l'editor. Finché l'engine non espone un tap pre-master, "in" e "out"
     // ricevono lo stesso picco post-master; il meter IN diventerà reale con la fase DSP.
-    // store(jmax(load, peak)) non è una CAS: va bene perché il thread audio è l'unico scrittore
-    // e il lettore (timer dell'editor) fa solo exchange(0), quindi non c'è race sulla read-modify-write.
+    // engine::storePeak non è una CAS: va bene perché il thread audio è l'unico scrittore e il
+    // lettore (timer dell'editor) fa solo exchange(0) — l'argomento sta per intero nel suo commento.
     float peak = 0.0f;
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         peak = juce::jmax (peak, buffer.getMagnitude (ch, 0, buffer.getNumSamples()));
-    meters_.outPeak.store (juce::jmax (meters_.outPeak.load (std::memory_order_relaxed), peak), std::memory_order_relaxed);
-    meters_.inPeak.store  (juce::jmax (meters_.inPeak.load  (std::memory_order_relaxed), peak), std::memory_order_relaxed);
+    engine::storePeak (meters_.outPeak, peak);
+    engine::storePeak (meters_.inPeak,  peak);
 
+    // I cinque livelli delle sorgenti del mod matrix: è ciò che fa muovere gli anelli attorno ai
+    // knob modulati. Prima arrivava il solo LFO e la UI riempiva le altre quattro con costanti,
+    // quindi l'anello mostrava la profondità giusta e il movimento sbagliato.
+    //
     // -1..1: è il puntino che il tab LFO della UI disegna. A differenza dei picchi non si
-    // accumula con jmax ma si sovrascrive: un LFO bipolare non ha un "picco di blocco" che
-    // significhi qualcosa, quello che serve è il valore di adesso.
+    // accumula con storePeak ma si sovrascrive: un LFO bipolare non ha un "picco di blocco" che
+    // significhi qualcosa, quello che serve è il valore di adesso. Stesso discorso per il mod
+    // wheel, che è una posizione e non un transitorio.
     meters_.lfo.store (engine_->getLfoLevel(), std::memory_order_relaxed);
+    meters_.mw.store  (engine_->getModWheelLevel(), std::memory_order_relaxed);
+
+    // Unipolari e più veloci di un frame del meter: si accumula il massimo, come per i picchi
+    // audio, e il lettore lo azzera. Il motore ha già preso il massimo sulle sotto-fette di
+    // questo blocco; qui si tiene il massimo fra i blocchi che cadono nello stesso frame.
+    engine::storePeak (meters_.env,  engine_->getEnvLevel());
+    engine::storePeak (meters_.env2, engine_->getEnv2Level());
+    engine::storePeak (meters_.vel,  engine_->getVelocityLevel());
 }
 
 juce::AudioProcessorEditor* SerumStyleSynthAudioProcessor::createEditor()

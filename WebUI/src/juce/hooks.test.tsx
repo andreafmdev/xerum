@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { FakeBackend } from "./fake-backend";
 import { BridgeProvider } from "./provider";
 import { parseState, useBoolParam, useBridgeState, useChoiceParam, useFloatParam, useIntParam, useMeters } from "./hooks";
-import type { BridgeState } from "./backend";
+import { ZERO_METERS, type BridgeState } from "./backend";
 
 const wrap = (b: FakeBackend) => ({ children }: { children: ReactNode }) => <BridgeProvider backend={b}>{children}</BridgeProvider>;
 
@@ -114,21 +114,30 @@ describe("useMeters", () => {
   it("returns the last frame with peak hold, decaying by elapsed time", () => {
     const b = new FakeBackend();
     const { result } = renderHook(() => useMeters(), { wrapper: wrap(b) });
-    act(() => b.emitMeters({ in: 0.8, out: 0.6, lfo: 0.1, arpStep: 2 }));
+    act(() => b.emitMeters({ ...ZERO_METERS, in: 0.8, out: 0.6, lfo: 0.1, arpStep: 2 }));
     expect(result.current.out).toBe(0.6);
     act(() => vi.advanceTimersByTime(1000 / 30));   // un tick a 30 Hz
-    act(() => b.emitMeters({ in: 0, out: 0, lfo: 0, arpStep: 3 }));
+    act(() => b.emitMeters({ ...ZERO_METERS, arpStep: 3 }));
     expect(result.current.out).toBeCloseTo(0.51);   // 0.6 · 0.85
     expect(result.current.arpStep).toBe(3);
+  });
+
+  it("un frame senza le sorgenti (binario più vecchio della UI) non produce NaN", () => {
+    const b = new FakeBackend();
+    const { result } = renderHook(() => useMeters(), { wrapper: wrap(b) });
+    // Quello che mandava MeterChannel prima che le cinque sorgenti esistessero.
+    act(() => b.emitMeters({ in: 0.5, out: 0.5, lfo: 0.2, arpStep: 1 } as never));
+    for (const v of Object.values(result.current)) expect(Number.isFinite(v)).toBe(true);
+    expect(result.current.env).toBe(0);
   });
 
   it("applying the same frame twice at the same instant leaves the hold unchanged", () => {
     const b = new FakeBackend();
     const { result } = renderHook(() => useMeters(), { wrapper: wrap(b) });
-    act(() => b.emitMeters({ in: 0.8, out: 0.6, lfo: 0.1, arpStep: 2 }));
-    act(() => b.emitMeters({ in: 0, out: 0, lfo: 0, arpStep: 3 }));   // nessun tempo trascorso
+    act(() => b.emitMeters({ ...ZERO_METERS, in: 0.8, out: 0.6, lfo: 0.1, arpStep: 2 }));
+    act(() => b.emitMeters({ ...ZERO_METERS, arpStep: 3 }));   // nessun tempo trascorso
     const afterFirst = result.current.out;
-    act(() => b.emitMeters({ in: 0, out: 0, lfo: 0, arpStep: 3 }));   // stesso frame, stesso istante
+    act(() => b.emitMeters({ ...ZERO_METERS, arpStep: 3 }));   // stesso frame, stesso istante
     expect(result.current.out).toBe(afterFirst);
   });
 });

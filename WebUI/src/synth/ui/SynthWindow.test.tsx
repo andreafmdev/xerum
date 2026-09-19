@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FakeBackend } from "../../juce/fake-backend";
+import { ZERO_METERS } from "../../juce/backend";
 import { BridgeProvider } from "../../juce/provider";
 import { SynthWindow } from "./SynthWindow";
 
@@ -146,7 +147,7 @@ describe("SynthWindow on the bridge", () => {
 
   it("meters follow the backend", () => {
     const b = mount();
-    act(() => b.emitMeters({ in: 1, out: 1, lfo: 0, arpStep: 0 }));
+    act(() => b.emitMeters({ ...ZERO_METERS, in: 1, out: 1 }));
     expect(within(screen.getByRole("meter", { name: "Output" })).getAllByTestId("meter-segment").filter((s) => s.dataset.lit === "true")).toHaveLength(24);
   });
 

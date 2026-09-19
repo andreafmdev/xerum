@@ -18,8 +18,32 @@ export type ModAssignment = { src: ModSource; target: ParamId; depth: number };
 
 /** Stato condiviso host↔WebView: versione, mod matrix e i 16 step dell'arp. */
 export type BridgeState = { version: number; mods: ModAssignment[]; arpSteps: number[] };
-/** Frame di meter inviato a 30 Hz dall'host (o simulato dal FakeBackend). */
-export type MeterFrame = { in: number; out: number; lfo: number; arpStep: number };
+/**
+ * Frame di meter inviato a 30 Hz dall'host (o simulato dal FakeBackend).
+ *
+ * `lfo`, `env`, `env2`, `vel`, `mw` sono i livelli istantanei delle cinque sorgenti del mod
+ * matrix — gli stessi nomi di ModSource — ed è ciò che fa muovere gli anelli attorno ai knob
+ * modulati (liveValue() in ../synth/mod.ts). Prima l'host mandava il solo `lfo` e le altre
+ * quattro erano costanti scritte nella UI: l'anello mostrava la profondità giusta e il movimento
+ * sbagliato. Il contratto sta in Source/engine/MeterFrame.h e in Source/bridge/MeterChannel.cpp.
+ *
+ * `env`, `env2` e `vel` arrivano già come **picco dell'ultimo frame**, non come valore
+ * istantaneo: a 30 Hz un attacco di pochi millisecondi passerebbe fra due frame. `lfo` è
+ * bipolare −1..1 e `mw` è una posizione, quindi quei due sono istantanei.
+ */
+export type MeterFrame = {
+  in: number;
+  out: number;
+  lfo: number;
+  env: number;
+  env2: number;
+  vel: number;
+  mw: number;
+  arpStep: number;
+};
+
+/** Frame a zero: valore iniziale di useMeters e base da cui i test costruiscono i loro frame. */
+export const ZERO_METERS: MeterFrame = { in: 0, out: 0, lfo: 0, env: 0, env2: 0, vel: 0, mw: 0, arpStep: 0 };
 
 /** Un singolo parametro, come esposto all'UI: lettura/scrittura normalizzata 0..1 e gesture per l'automazione host. */
 export interface ParamHandle {

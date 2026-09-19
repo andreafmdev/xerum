@@ -47,15 +47,39 @@ public:
      */
     void setGlobalLfoLevel (float level) noexcept;
 
-    /** Il livello dell'LFO della prima voce attiva, per il meter. Zero se non suona niente. */
-    float getLfoLevel() const noexcept
+    /**
+     * I livelli delle quattro sorgenti **per voce**, tutti letti dalla stessa voce.
+     *
+     * Che siano della stessa voce e' il punto, non un dettaglio di implementazione: l'anello di
+     * un knob con due route — poniamo env e vel sullo stesso cutoff — somma i due livelli, e
+     * sommare l'inviluppo di una nota alla velocity di un'altra mostrerebbe un valore che
+     * nessuna delle due voci sta suonando. Per questo si sceglie la voce una volta sola qui, e
+     * non quattro volte da quattro accessori separati.
+     *
+     * `mw` non c'e' perche' non e' per voce: e' il CC 1, e ce l'ha SynthEngine.
+     */
+    struct SourceLevels
     {
-        for (const auto& voice : voices_)
-            if (voice.isActive())
-                return voice.getLfoLevel();
+        float lfo  { 0.0f };
+        float env  { 0.0f };
+        float env2 { 0.0f };
+        float vel  { 0.0f };
+    };
 
-        return 0.0f;
-    }
+    /**
+     * I livelli della **prima voce attiva** nell'ordine del pool, tutti zero se non suona niente.
+     *
+     * "La prima" e non "l'ultima suonata": e' la scelta che getLfoLevel() faceva gia', e
+     * cambiarla adesso vorrebbe dire dare un ordine di eta' alle voci — un contatore in piu' da
+     * tenere in SynthVoice, mosso da noteOn/retrigger/kill, cioe' stato nuovo sul percorso audio
+     * per un meter. Su un accordo tenuto la piu' recente sarebbe probabilmente piu' vicina a
+     * quello che la mano ha appena fatto; su una singola nota — il caso in cui si guarda un
+     * anello per capire cosa fa una route — le due scelte coincidono. Non vale il prezzo.
+     */
+    SourceLevels getSourceLevels() const noexcept;
+
+    /** Il livello dell'LFO della prima voce attiva, per il meter. Zero se non suona niente. */
+    float getLfoLevel() const noexcept { return getSourceLevels().lfo; }
 
 private:
     SynthVoice* findFreeVoice() noexcept;
