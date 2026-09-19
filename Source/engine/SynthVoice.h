@@ -1,11 +1,16 @@
 #pragma once
 
 #include "dsp/ADSREnvelope.h"
+#include "dsp/Lfo.h"
 #include "dsp/StateVariableFilter.h"
 #include "dsp/WavetableOscillator.h"
 #include "engine/EngineParams.h"
+#include "engine/ModMatrix.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
+
+#include <array>
+#include <cstddef>
 
 namespace engine
 {
@@ -37,8 +42,28 @@ public:
     /** Applica i parametri del blocco. Nessun atomico, nessuna allocazione. */
     void setParams (const EngineParams& p) noexcept;
 
+    /** Livello dell'LFO libero del motore, usato quando lfoRetrig e' falso. Thread audio. */
+    void setGlobalLfoLevel (float level) noexcept { globalLfoLevel_ = level; }
+
+    /** Il livello dell'LFO di questa voce: lo legge SynthEngine per il meter. */
+    float getLfoLevel() const noexcept { return lfoRetrig_ ? lfo_.level() : globalLfoLevel_; }
+
 private:
     void updateCutoff (bool snap) noexcept;
+
+    /** Ricalcola i livelli delle quattro sorgenti e riapplica i sette target modulabili.
+        Gira una volta per blocco (o per fetta fra due eventi MIDI), mai per campione. */
+    void applyModulation() noexcept;
+
+    /** Somma le route che puntano a `targetIndex` sul valore normalizzato di base, e clampa.
+        Stessa aritmetica di liveValue() in WebUI/src/synth/mod.ts. */
+    float modulated (int targetIndex) const noexcept;
+
+    /** Vero se almeno una route punta a quel target. Vedi il commento di modMask_. */
+    bool isModulated (int targetIndex) const noexcept
+    {
+        return targetIndex >= 0 && (modMask_ & (1u << (unsigned) targetIndex)) != 0u;
+    }
 
     double sampleRate_ { 44100.0 };
     bool active_ { false };
@@ -66,5 +91,32 @@ private:
     juce::SmoothedValue<float> smoothedFramePosition_;
     juce::SmoothedValue<float> smoothedLevel_;
     juce::SmoothedValue<float> smoothedPan_;
+
+    // --- modulazione ---
+
+    /** I parametri del blocco per intero: la modulazione si valuta in render(), non in
+        setParams(), quindi servono ancora dopo che il processore li ha depositati. */
+    EngineParams params_ {};
+
+    dsp::Lfo lfo_;
+
+    /** I livelli delle quattro sorgenti, nell'ordine di engine::ModSource. */
+    std::array<float, (size_t) ModSource::count> sourceLevels_ {};
+
+    /**
+     * Un bit per target modulabile: acceso quando almeno una route punta li'.
+     *
+     * Serve a tenere separati i due percorsi. Per un target senza route la voce continua a
+     * usare il valore gia' denormalizzato che arriva in EngineParams, cioe' esattamente il
+     * codice di prima della modulazione: la non-regressione diventa cosi' una proprieta'
+     * strutturale invece di una coincidenza numerica fra due formule che devono combaciare.
+     * Come effetto secondario, a matrix vuoto si risparmiano sette conversioni per blocco e
+     * per voce, due delle quali con std::pow.
+     */
+    unsigned int modMask_ { 0 };
+
+    float globalLfoLevel_ { 0.0f };
+    bool lfoRetrig_ { true };
+    float lfoPhaseOffset01_ { 0.0f };
 };
 } // namespace engine

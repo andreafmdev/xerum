@@ -1247,7 +1247,7 @@ e fra i membri privati:
         lfo_.retrigger (lfoPhaseOffset01_);
 ```
 
-`retrigger()`: **non** toccare la fase dell'LFO, per la stessa ragione per cui non tocca fase dell'oscillatore e stato del filtro — è una ribattuta, non una nota nuova. Ma la dissolvenza sì, riparte: aggiungere `if (lfoRetrig_) lfo_.retrigger (lfo_.level() >= 0.0f ? lfoPhaseOffset01_ : lfoPhaseOffset01_);` **no**: lasciare l'LFO completamente intatto e documentarlo con un commento.
+`retrigger()`: **non toccare l'LFO**, né la fase né la dissolvenza. Aggiungere solo un commento che dica perché: è una ribattuta, non una nota nuova, per la stessa ragione per cui `retrigger()` già non azzera la fase dell'oscillatore né gli integratori del filtro. Far ripartire la dissolvenza qui produrrebbe un salto di profondità della modulazione su una nota che sta già suonando — lo stesso difetto di categoria del clic che `retrigger()` esiste per evitare.
 
 `setParams()`: sostituire le assegnazioni dirette dei sette target modulabili con il percorso modulato, e configurare l'LFO:
 
@@ -1522,17 +1522,20 @@ In `process()`, dopo l'applicazione della wavetable in attesa e prima del ciclo 
                      std::memory_order_relaxed);
 ```
 
-Attenzione: `numSamples` è dichiarato più in basso nella funzione attuale — spostare la sua dichiarazione sopra questo blocco.
+**Ordine dentro `process()`, che conta.** La funzione oggi dichiara `numSamples` dopo il drenaggio della wavetable in attesa, e `params_` viene riempita da `setParams()` *prima* che `process()` parta. La sequenza corretta è:
 
-In `VoiceManager`, aggiungere:
+1. controllo del bypass (invariato, resta per primo: deve uscire prima di far avanzare qualsiasi cosa);
+2. drenaggio di `pendingWavetable_` (invariato);
+3. dichiarazione di `numSamples` e `numChannels` e le loro guardie (**spostate qui sopra**, prima servivano più in basso);
+4. avanzamento dell'LFO libero di `numSamples`;
+5. riempimento di `params_.mods`, `params_.modWheel`, `params_.globalLfoLevel` e chiamata a `voices_.setParams (params_)`;
+6. il ciclo MIDI e il rendering, invariati.
+
+Il punto 5 deve stare **prima** del ciclo MIDI, non dopo: le note che partono in questo blocco devono già vedere le modulazioni di questo blocco. E il mod wheel letto al punto 5 è quello di fine blocco precedente, perché un CC 1 che arriva a metà blocco viene gestito dentro il ciclo MIDI e avrà effetto dal blocco dopo — coerente con il fatto che tutta la modulazione è a tasso di blocco.
+
+In `VoiceManager` aggiungere **una sola** cosa:
 
 ```cpp
-    void setGlobalLfoLevel (float level) noexcept
-    {
-        for (auto& voice : voices_)
-            voice.setGlobalLfoLevel (level);
-    }
-
     /** Il livello dell'LFO della prima voce attiva, per il meter. Zero se non suona niente. */
     float getLfoLevel() const noexcept
     {
@@ -1544,7 +1547,7 @@ In `VoiceManager`, aggiungere:
     }
 ```
 
-`setParams` di `VoiceManager` propaga già a tutte le voci, quindi `globalLfoLevel` arriva tramite `EngineParams`: `setGlobalLfoLevel` serve solo se si vuole aggiornarlo fuori da `setParams`. Se non serve, **non aggiungerlo**: YAGNI.
+**Non** aggiungere `VoiceManager::setGlobalLfoLevel`. Il livello dell'LFO libero arriva alle voci dentro `EngineParams::globalLfoLevel`, che `SynthEngine::process` riempie subito prima di chiamare `voices_.setParams (params_)`: un secondo canale per lo stesso dato sarebbe una via in più da tenere sincronizzata, senza guadagno. (`SynthVoice::setGlobalLfoLevel` esiste dal Task 6 e resta inutilizzata da qui: se a fine task nessuno la chiama, toglierla.)
 
 - [ ] **Step 5: Eseguire i test**
 

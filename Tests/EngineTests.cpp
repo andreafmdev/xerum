@@ -12,6 +12,7 @@
 
 #include <cmath>
 #include <map>
+#include <vector>
 
 namespace
 {
@@ -975,3 +976,188 @@ struct ParamConversionTests final : juce::UnitTest
 };
 
 static ParamConversionTests paramConversionTests;
+
+/**
+ * La modulazione dentro la voce: e' qui che la somma `base + Σ depth × livello sorgente`
+ * diventa suono. I quattro test coprono, nell'ordine, che una sorgente per voce muova davvero
+ * il parametro, che il segno del depth conti, che il clamp a 0..1 sia rispettato e — il piu'
+ * importante — che senza assegnazioni non cambi un solo campione.
+ */
+struct ModulationVoiceTests final : juce::UnitTest
+{
+    ModulationVoiceTests() : juce::UnitTest ("modulazione nella voce", "engine") {}
+
+    void runTest() override
+    {
+        beginTest ("env -> cutoff e' l'inviluppo di filtro: il timbro si apre durante l'attacco");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+
+            // Energia nei primi 107 ms di attacco e nei 107 successivi, con la stessa route su
+            // cutoff a due profondita' diverse.
+            struct Run { float early; float late; };
+
+            const auto run = [&store] (float depth) -> Run
+            {
+                engine::SynthEngine synth; prepareEngine (synth, store);
+
+                engine::ModSnapshot mods;
+                mods.count = 1;
+                mods.routes[0] = { engine::ModSource::env,
+                                   engine::modTargetIndexFor (params::ParamSlot::cutoff), depth };
+
+                auto p = defaultParams();
+                p.filterOn = true;
+                p.cutoffHz = 200.0f;                 // il valore denormalizzato non conta piu' da solo:
+                p.modBase[(size_t) engine::modTargetIndexFor (params::ParamSlot::cutoff)] = 0.15f; // conta questo
+                p.attackSeconds = 0.5f;              // attacco lento: c'e' tempo per misurare due punti
+                p.sustain = 1.0f;
+                p.mods = &mods;
+                synth.setParams (p);
+                synth.setMasterGainLinear (1.0f);
+
+                juce::MidiBuffer m;
+                m.addEvent (juce::MidiMessage::noteOn (1, 48, 1.0f), 0);
+                juce::AudioBuffer<float> first (2, 128);
+                first.clear();
+                synth.process (first, m);
+
+                const auto early = renderRms (synth, 40);   // subito dopo il note-on
+                const auto late  = renderRms (synth, 40);   // piu' avanti nell'attacco
+                return { early, late };
+            };
+
+            const auto modulated = run (1.0f);
+            const auto flat = run (0.0f);
+
+            // Cutoff piu' alto = piu' armoniche passano = piu' energia.
+            expect (modulated.late > modulated.early * 1.2f, "il filtro non si e' aperto con l'inviluppo");
+
+            // Il contrappeso, senza il quale il test non proverebbe niente: anche a depth 0
+            // l'energia cresce, perche' cresce l'inviluppo d'ampiezza. Il confronto e' quindi
+            // con la stessa nota, stesso cutoff di partenza, sola profondita' diversa.
+            // Misurato: 0.074 contro 0.0019, un fattore 38. La soglia sta molto sotto, ma non
+            // a 1: con la modulazione disattivata il rapporto sarebbe esattamente 1.
+            logMessage ("env -> cutoff: late con depth 1 " + juce::String (modulated.late)
+                            + ", con depth 0 " + juce::String (flat.late));
+            expect (modulated.late > flat.late * 5.0f,
+                    "depth 1 e depth 0 producono la stessa energia: la route non sta modulando");
+        }
+
+        beginTest ("depth negativo modula nel verso opposto");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+
+            const auto rmsWithDepth = [&store] (float depth)
+            {
+                engine::SynthEngine synth; prepareEngine (synth, store);
+
+                engine::ModSnapshot mods;
+                mods.count = 1;
+                mods.routes[0] = { engine::ModSource::vel,
+                                   engine::modTargetIndexFor (params::ParamSlot::level), depth };
+
+                auto p = defaultParams();
+                p.modBase[(size_t) engine::modTargetIndexFor (params::ParamSlot::level)] = 0.5f;
+                p.mods = &mods;
+                synth.setParams (p);
+                synth.setMasterGainLinear (1.0f);
+
+                juce::MidiBuffer m;
+                m.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+                juce::AudioBuffer<float> b (2, 128);
+                b.clear();
+                synth.process (b, m);
+
+                return renderRms (synth, 20);
+            };
+
+            const auto base = rmsWithDepth (0.0f);
+            expect (rmsWithDepth (0.4f) > base * 1.1f, "depth positivo non ha alzato il livello");
+            expect (rmsWithDepth (-0.4f) < base * 0.9f, "depth negativo non ha abbassato il livello");
+        }
+
+        beginTest ("il clamp a 0..1 impedisce di superare il massimo del parametro");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+
+            const auto rmsWith = [&store] (float base, float depth)
+            {
+                engine::SynthEngine synth; prepareEngine (synth, store);
+
+                engine::ModSnapshot mods;
+                mods.count = 1;
+                mods.routes[0] = { engine::ModSource::vel,
+                                   engine::modTargetIndexFor (params::ParamSlot::level), depth };
+
+                auto p = defaultParams();
+                p.modBase[(size_t) engine::modTargetIndexFor (params::ParamSlot::level)] = base;
+                p.mods = &mods;
+                synth.setParams (p);
+                synth.setMasterGainLinear (1.0f);
+
+                juce::MidiBuffer m;
+                m.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+                juce::AudioBuffer<float> b (2, 128);
+                b.clear();
+                synth.process (b, m);
+
+                return renderRms (synth, 20);
+            };
+
+            // 0.9 + 1.0 × 1.0 = 1.9, clampato a 1.0: identico a partire gia' da 1.0 senza modulazione.
+            expectWithinAbsoluteError (rmsWith (0.9f, 1.0f), rmsWith (1.0f, 0.0f), 1.0e-4f);
+
+            // L'uguaglianza da sola non basta: sarebbe verificata anche da un motore che
+            // ignorasse del tutto la modulazione, perche' allora entrambe le rese userebbero il
+            // livello non modulato. Questa seconda asserzione chiude il buco: con base 0.9 il
+            // depth deve *aver alzato* il livello — e il clamp deve averlo fermato a 1.0, che e'
+            // esattamente cio' che rende vera la prima.
+            expect (rmsWith (0.9f, 1.0f) > rmsWith (0.9f, 0.0f) * 1.05f,
+                    "la route non ha alzato il livello: il clamp non e' l'unica cosa in gioco");
+        }
+
+        beginTest ("nessuna assegnazione: l'uscita e' identica campione per campione a prima");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+
+            const auto render = [&store] (const engine::ModSnapshot* mods)
+            {
+                engine::SynthEngine synth; prepareEngine (synth, store);
+                auto p = defaultParams();
+                p.filterOn = true;
+                p.mods = mods;
+                synth.setParams (p);
+                synth.setMasterGainLinear (0.8f);
+
+                juce::MidiBuffer m;
+                m.addEvent (juce::MidiMessage::noteOn (1, 60, 0.9f), 0);
+                juce::AudioBuffer<float> b (2, 128);
+                b.clear();
+                synth.process (b, m);
+
+                std::vector<float> out;
+                juce::MidiBuffer none;
+                for (int i = 0; i < 30; ++i)
+                {
+                    juce::AudioBuffer<float> buf (2, 128);
+                    buf.clear();
+                    synth.process (buf, none);
+                    const auto* d = buf.getReadPointer (0);
+                    out.insert (out.end(), d, d + 128);
+                }
+                return out;
+            };
+
+            engine::ModSnapshot empty; // count = 0
+            const auto withNull = render (nullptr);
+            const auto withEmpty = render (&empty);
+
+            expectEquals ((int) withNull.size(), (int) withEmpty.size());
+            for (size_t i = 0; i < withNull.size(); ++i)
+                expectWithinAbsoluteError (withEmpty[i], withNull[i], 0.0f);
+        }
+    }
+};
+
+static ModulationVoiceTests modulationVoiceTests;
