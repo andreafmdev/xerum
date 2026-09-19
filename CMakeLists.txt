@@ -41,6 +41,8 @@ target_sources(SerumStyleSynth
         Source/engine/SynthEngine.cpp
         Source/engine/VoiceManager.cpp
         Source/engine/SynthVoice.cpp
+        Source/engine/ModMatrix.cpp
+        Source/dsp/Lfo.cpp
         Source/dsp/WavetableOscillator.cpp
         Source/dsp/StateVariableFilter.cpp
         Source/dsp/ADSREnvelope.cpp
@@ -89,9 +91,13 @@ target_sources(XerumTests
         Tests/EnvelopeFilterTests.cpp
         Tests/EngineTests.cpp
         Tests/PresetValueTests.cpp
+        Tests/ModMatrixTests.cpp
+        Tests/LfoTests.cpp
         Source/dsp/WavetableBlob.cpp
         Source/dsp/MipTable.cpp
         Source/dsp/WavetableStore.cpp
+        Source/dsp/Lfo.cpp
+        Source/engine/ModMatrix.cpp
         Source/dsp/WavetableOscillator.cpp
         Source/dsp/ADSREnvelope.cpp
         Source/dsp/StateVariableFilter.cpp
@@ -114,6 +120,7 @@ target_link_libraries(XerumTests
     PRIVATE
         juce::juce_dsp
         juce::juce_audio_basics
+        juce::juce_data_structures
         WavetableAssets
     PUBLIC
         juce::juce_recommended_config_flags
