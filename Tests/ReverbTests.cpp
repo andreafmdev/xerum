@@ -936,8 +936,8 @@ struct ReverbStageTests final : juce::UnitTest
 
         beginTest ("il margine al soft clipper: ai default e agli estremi del riverbero");
         {
-            // **Misura e riporta**: kVoiceHeadroomGain e kSoftClipThreshold restano dove sono, e
-            // la ritaratura congiunta del gain staging e' il lavoro che viene dopo.
+            // **Misura e riporta**, e i suoi numeri sono uno degli addendi del bilancio del gain
+            // staging: quanto lo stadio FX sposta il picco presentato al clipper.
             //
             // Il metodo e' quello che docs/architecture.md indica sotto la tabella del gain
             // staging, non l'inversione analitica di softClip: quella e' malcondizionata vicino
@@ -949,12 +949,12 @@ struct ReverbStageTests final : juce::UnitTest
             constexpr float kDefaultVolume = 0.8f;
             constexpr float kProbeVolume = 0.05f;
 
-            // Due numeri per configurazione, e servono tutti e due. Il **picco assoluto** lo fa
-            // l'attacco: sei note che partono sullo stesso campione partono anche sulla stessa
-            // fase della tavola, quindi il transitorio iniziale e' identico in tutte le
-            // configurazioni — gli effetti non hanno ancora avuto tempo di entrare (12 ms di
-            // dissolvenza, 16.5 di riempimento del chorus, 20 di predelay) e quel numero non
-            // distingue nulla. Il **picco a regime**, misurato dopo mezzo secondo, e' quello su
+            // Tre numeri per configurazione. Il **picco assoluto** e il **picco a regime**
+            // (misurato dopo mezzo secondo) adesso coincidono, e il fatto che coincidano e' esso
+            // stesso un risultato: prima del blocco muto qui sopra il picco assoluto era otto
+            // volte quello a regime e questo commento lo attribuiva all'attacco delle sei note.
+            // Non era l'attacco, era la rampa del gain master del primo blocco. L'attacco vero,
+            // pur partendo con sei note sulla stessa fase della tavola, non supera il regime. Il **picco a regime**, misurato dopo mezzo secondo, e' quello su
             // cui si confrontano gli effetti fra loro.
             // L'RMS a regime viaggia insieme ai due picchi perche' e' l'unica grandezza su cui
             // "equal-power" dice davvero qualcosa: il mix sin3dB conserva la **potenza**, non il
@@ -972,6 +972,19 @@ struct ReverbStageTests final : juce::UnitTest
                 p.resonanceQ = 2.0f;
                 synth.setParams (p);
                 synth.setMasterGainLinear (kProbeVolume);
+
+                // Un blocco muto **prima** delle note. `applyGainRamp` parte da
+                // previousMasterGain_, che al primissimo blocco vale ancora 1.0: senza questo
+                // scarto il primo blocco viene moltiplicato da una rampa che scende dall'unita'
+                // al gain di prova, e il "picco assoluto" che si misurava era quella rampa — un
+                // fattore otto sopra il segnale vero, e il numero che questo test riportava
+                // attribuendolo all'attacco delle sei note.
+                {
+                    juce::MidiBuffer none;
+                    juce::AudioBuffer<float> warmUp (2, kBlock);
+                    warmUp.clear();
+                    synth.process (warmUp, none);
+                }
 
                 juce::MidiBuffer midi;
 
@@ -1071,14 +1084,14 @@ struct ReverbStageTests final : juce::UnitTest
 
             // Ai default di fabbrica — quelli che l'utente trova aprendo il plugin — il riverbero
             // deve costare poco o niente, perche' e' acceso di default e nessuno lo ha chiesto.
-            // Misurato: **+0.31 dB** da solo, e -0.22 dB insieme al chorus, che ne restituisce piu'
+            // Misurato: **+0.25 dB** da solo, e -0.15 dB insieme al chorus, che ne restituisce piu'
             // di quanti il riverbero ne prenda (il chorus ai suoi default abbassa il picco: vedi
             // Tests/ChorusTests.cpp).
             const auto defaultsDb = juce::Decibels::gainToDecibels (peakReverbOnly.steady / peakDry.steady);
             expect (defaultsDb < 1.0, "il riverbero ai default alza il picco al clipper di "
                                           + juce::String (defaultsDb, 2) + " dB");
 
-            // A `rvMix` 100 % l'uscita **e'** il bagnato. Misurato: il picco sale di 2.36 dB e
+            // A `rvMix` 100 % l'uscita **e'** il bagnato. Misurato: il picco sale di 2.31 dB e
             // l'RMS di 2.23, cioe' quasi tutto l'aumento e' potenza vera e non fattore di cresta —
             // ed e' la cosa che vale la pena sapere di questa misura.
             //
@@ -1103,13 +1116,12 @@ struct ReverbStageTests final : juce::UnitTest
 
             // "Tutto a fondo corsa" e' i due effetti insieme con ogni knob al massimo: mix 100 % su
             // entrambi, feedback del chorus al 100 %, size e decay del riverbero a fondo corsa.
-            // Misurato **+3.07 dB**, di cui 2.36 sono il riverbero a mix pieno e il resto il
-            // feedback del chorus, che da solo ne vale 2.2 (vedi Tests/ChorusTests.cpp) — i due non
+            // Misurato **+3.08 dB**, di cui 2.31 sono il riverbero a mix pieno e il resto il
+            // feedback del chorus, che da solo ne vale 1.96 (vedi Tests/ChorusTests.cpp) — i due non
             // si sommano perche' il picco lo fissa comunque la coda.
             //
             // La soglia sta appena sopra la misura. Se un giorno mordera', i numeri da rivedere sono
-            // kVoiceHeadroomGain e kSoftClipThreshold nella ritaratura congiunta del gain staging —
-            // **non questa riga**.
+            // kVoiceHeadroomGain e kSoftClipThreshold — **non questa riga**.
             const auto worstDb = juce::Decibels::gainToDecibels (peakExtremes.steady / peakDry.steady);
             expect (worstDb < 3.5, "con tutto a fondo corsa il picco al clipper sale di "
                                        + juce::String (worstDb, 2) + " dB");

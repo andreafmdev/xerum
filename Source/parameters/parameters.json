@@ -22,7 +22,7 @@
       "options": [ { "value": "12", "label": "12" }, { "value": "24", "label": "24" } ] },
     { "id": "cutoff",  "name": "Cutoff", "group": "filter", "kind": "float", "slot": true, "map": { "type": "log", "min": 20, "max": 20000 }, "default": 0.62, "unit": "Hz", "decimals": 0, "labelKind": "hz" },
     { "id": "res",     "name": "Resonance", "group": "filter", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.3, "unit": "%", "decimals": 0 },
-    { "id": "drive",   "name": "Drive", "group": "filter", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 24 }, "default": 0, "unit": "dB", "decimals": 1 },
+    { "id": "drive",   "name": "Drive", "group": "filter", "kind": "float", "slot": true, "map": { "type": "ms-squared", "min": 0, "max": 24 }, "default": 0, "unit": "dB", "decimals": 1 },
     { "id": "keytrk",  "name": "Key trk", "group": "filter", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.5, "unit": "%", "decimals": 0 },
 
     { "id": "voiceMode", "name": "Voice mode", "group": "master", "kind": "choice", "slot": true, "default": 0,

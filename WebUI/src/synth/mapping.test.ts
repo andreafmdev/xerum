@@ -40,7 +40,10 @@ describe("formatValue", () => {
   it("unit + decimals", () => {
     expect(formatValue(S.warp, 0.1)).toBe("10 %");
     expect(formatValue(S.wtpos, 0.32)).toBe("21.2");
-    expect(formatValue(S.drive, 0.5)).toBe("12.0 dB");
+    // drive e' passato da `linear 0..24` a `ms-squared 0..24` nella ritaratura del gain
+    // staging: meta' knob vale 6 dB e non piu' 12, e il tetto resta 24.
+    expect(formatValue(S.drive, 0.5)).toBe("6.0 dB");
+    expect(formatValue(S.drive, 1)).toBe("24.0 dB");
     expect(formatValue(S.fine, 1)).toBe("100 ct");
     expect(formatValue(S.fine, 0)).toBe("-100 ct");
     expect(formatValue(S.lphase, 0.5)).toBe("180°");   // i gradi restano attaccati

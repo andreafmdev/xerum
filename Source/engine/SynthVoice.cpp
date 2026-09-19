@@ -14,26 +14,44 @@ constexpr double kSmoothingSeconds = 0.02;
 // divisore farebbe "respirare" il volume ogni volta che una nota parte o finisce, un difetto
 // peggiore del clipping che risolve.
 //
-// -3 dB, e non e' un numero scelto a tavolino: e' il piu' alto che tiene un accordo *ordinario*
-// fuori dal soft clipper. Con il pan centrale (0.707) e il volume di default (0.8), quattro note
-// a level 1.0 arrivano al clipper a 0.898 contro una soglia di 0.95 (kSoftClipThreshold in
-// SynthEngine.cpp): mezzo decibel di margine, e mezzo decibel piu' su la rete di sicurezza
-// diventerebbe uno stadio sempre acceso. In cambio una nota singola a level 1.0 e volume 1.0
-// esce a -15.4 dBFS RMS e -8.7 dBFS di picco, cinque decibel piu' forte di prima e nella
-// finestra in cui stanno Serum e Vital.
+// -4 dB. Era -3, ed e' **sceso**: la catena e' diventata piu' calda di quanto fosse quando quel
+// numero fu scelto, e i tre bersagli di sicurezza non ci stavano piu' dentro. Misurato prima di
+// questa ritaratura, tutto con il metodo del gain ridotto (vedi il commento di softClip in
+// SynthEngine.cpp):
+//
+//   - l'accordo di quattro note ai default di fabbrica presentava 0.933 al clipper contro una
+//     soglia di 0.95, cioe' **0.16 dB** di margine: non un margine, un arrotondamento;
+//   - il caso peggiore (matrix pieno, `res` modulato a fondo, unison 8) presentava 2.832,
+//     cioe' **+9.04 dBFS**, oltre il tetto di +8 che ci si e' dati (la nuova mappa di `drive`
+//     ne ha tolto mezzo da sola, portandolo a 2.655, e non bastava);
+//   - "Acid Line" **accendeva il clipper** su un accordo di quattro note (1.035 secco).
+//
+// A 0.63 i tre tornano dentro: l'accordo scende a 0.828 (1.20 dB di margine), il caso peggiore
+// a 2.394 (+7.58 dBFS) e nessun preset arriva al clipper — il piu' caldo e' "Init", cioe' i
+// default stessi, con 1.20 dB di margine. Il conto e' 1:1 e non c'e' modo di
+// aggirarlo — tutto cio' che sta a monte del clipper e' lineare in questa costante, quindi ogni
+// decibel di margine sull'accordo e' un decibel di livello dello strumento.
+//
+// **Cio' che si e' pagato.** Una nota sola a level 1.0 e volume 1.0 (tavola "Analog Saws",
+// filtro a Q Butterworth) esce a -16.4 dBFS RMS invece di -15.4. Il riferimento che si cita per
+// questa classe di strumenti — circa -14 dBFS RMS, dove stanno Serum e Vital — resta
+// irraggiungibile, e la ragione e' aritmetica e non prudenza: il fattore di cresta fra l'RMS di
+// una nota e il picco di un accordo di quattro e' fisso a 16.4 dB, quindi una nota a -14 dBFS
+// RMS mette l'accordo a +0.5 dBFS anche contando il volume di default. Nessuna soglia e nessuna
+// forma di soft clipper con un tetto a fondo scala puo' farci passare un accordo intatto: i due
+// bersagli non stanno insieme, e qui vince l'accordo pulito. La tabella completa del compromesso
+// sta in docs/architecture.md, sezione "Voice engine".
 //
 // Il valore precedente (0.4, -8 dB) lasciava quella stessa nota a -20.4 dBFS RMS: uno strumento
 // che bisognava alzare di sei decibel nel mixer prima di poterlo giudicare. E prima ancora era
 // -20 dB, scelto quando il filtro poteva da solo aggiungere +30 dB di picco e la saturazione ne
-// aggiungeva altri 3.5 anche a drive zero.
+// aggiungeva altri 3.5 anche a drive zero. Il verso di quella storia non si e' invertito: da
+// -20 a -4 dB lo strumento e' salito di sedici decibel, e questo ultimo decibel all'indietro e'
+// il prezzo del margine, non un ritorno indietro.
 //
-// Piu' in alto non si va, e la ragione non e' prudenza ma aritmetica: il fattore di cresta e'
-// fisso (6.7 dB fra RMS e picco su una nota, altri 9.7 dB di picco sommando quattro note), quindi
-// un accordo di quattro note sta sempre 16.4 dB sopra l'RMS di una nota sola. Portare la nota
-// singola a -14 dBFS RMS metterebbe l'accordo a +2.4 dBFS, cioe' dentro il clipper: i due
-// bersagli non stanno insieme, e qui vince l'accordo pulito. Misure in EngineTests,
-// "gain staging: una nota e un accordo normale stanno sotto il soft clipper".
-constexpr float kVoiceHeadroomGain = 0.71f; // 10^(-3/20)
+// Misure in EngineTests, "gain staging: una nota e un accordo normale stanno sotto il soft
+// clipper" e "il caso peggiore resta sotto il tetto di +8 dBFS".
+constexpr float kVoiceHeadroomGain = 0.63f; // 10^(-4/20)
 
 /**
  * Il numero di nota e' un **float** e non un intero, e non e' un allargamento di comodo: e' il
@@ -499,6 +517,16 @@ void SynthVoice::applyModulation() noexcept
     };
 
     driveGain_ = value (params::ParamSlot::drive, params_.driveGain, &params::driveGainFromRaw);
+
+    // La dissolvenza del primo tratto di `drive`: vedi kDriveFadeGain e driveMix_. Si calcola
+    // qui, una volta per sotto-fetta di controllo, non per campione — e si calcola sul
+    // **guadagno** invece che sui decibel apposta, per non chiamare un logaritmo: su due soli
+    // decibel di corsa la differenza fra una rampa lineare in gain e una lineare in dB vale
+    // meno di 0.03 dB sul risultato, cioe' niente, e il ramo resta senza libm come il resto.
+    driveMix_ = driveGain_ > 1.0f
+                   ? juce::jmin (1.0f, (driveGain_ - 1.0f) / (kDriveFadeGain - 1.0f))
+                   : 0.0f;
+
     const auto resonance = value (params::ParamSlot::res, params_.resonanceQ, &params::resonanceQFromRaw);
     filter_.setResonance (resonance);
     filterRight_.setResonance (resonance);
@@ -717,8 +745,13 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
         {
             float sample = oscOn_ ? oscillators_[0].getSample() : 0.0f;
 
-            if (driveGain_ > 1.0f)
+            // Tre rami, tutti invarianti dentro la fetta: a drive spento non si tocca niente
+            // (l'identita' bit per bit di prima), oltre kDriveFadeGain si satura e basta, e in
+            // mezzo si miscela. Il ramo centrale esiste solo su due decibel di corsa.
+            if (driveMix_ >= 1.0f)
                 sample = saturate (sample * driveGain_);
+            else if (driveMix_ > 0.0f)
+                sample += driveMix_ * (saturate (sample * driveGain_) - sample);
 
             if (filterOn_)
                 sample = filter_.processSample (sample);
@@ -749,8 +782,12 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
             {
                 float sample = oscOn_ ? oscillators_[(size_t) u].getSample() : 0.0f;
 
-                if (driveGain_ > 1.0f)
+                // Gli stessi tre rami del percorso a unison 1, con la stessa miscela: una copia
+                // dell'unison deve saturare come saturerebbe la voce da sola.
+                if (driveMix_ >= 1.0f)
                     sample = saturate (sample * driveGain_);
+                else if (driveMix_ > 0.0f)
+                    sample += driveMix_ * (saturate (sample * driveGain_) - sample);
 
                 left += sample * unisonGainL_[(size_t) u];
                 right += sample * unisonGainR_[(size_t) u];

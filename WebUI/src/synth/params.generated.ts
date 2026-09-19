@@ -31,7 +31,7 @@ export const PARAM_SPECS: Record<ParamId, ParamSpec> = {
   "slope": {"id":"slope","name":"Slope","group":"filter","kind":"choice","slot":true,"default":1,"options":[{"value":"12","label":"12"},{"value":"24","label":"24"}]},
   "cutoff": {"id":"cutoff","name":"Cutoff","group":"filter","kind":"float","slot":true,"map":{"type":"log","min":20,"max":20000},"default":0.62,"unit":"Hz","decimals":0,"labelKind":"hz"},
   "res": {"id":"res","name":"Resonance","group":"filter","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.3,"unit":"%","decimals":0},
-  "drive": {"id":"drive","name":"Drive","group":"filter","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":24},"default":0,"unit":"dB","decimals":1},
+  "drive": {"id":"drive","name":"Drive","group":"filter","kind":"float","slot":true,"map":{"type":"ms-squared","min":0,"max":24},"default":0,"unit":"dB","decimals":1},
   "keytrk": {"id":"keytrk","name":"Key trk","group":"filter","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.5,"unit":"%","decimals":0},
   "voiceMode": {"id":"voiceMode","name":"Voice mode","group":"master","kind":"choice","slot":true,"default":0,"options":[{"value":"Poly","label":"Poly"},{"value":"Mono","label":"Mono"},{"value":"Legato","label":"Legato"}]},
   "pan": {"id":"pan","name":"Pan","group":"master","kind":"float","slot":true,"map":{"type":"linear","min":-50,"max":50},"default":0.5,"decimals":0,"labelKind":"pan","bipolar":true},

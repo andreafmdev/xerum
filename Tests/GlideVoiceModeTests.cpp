@@ -896,12 +896,23 @@ struct GlideVoiceModeTests final : juce::UnitTest
 
         beginTest ("non-regressione: in Poly e con glide a zero l'uscita e' bit per bit quella di prima");
         {
-            // Il numero non e' arbitrario: e' il checksum dello stesso render misurato sul
-            // binario **prima** che glide e voiceMode fossero cablati. Se una sola operazione
-            // in piu' fosse entrata sul percorso a glide spento — un'addizione con zero, una
-            // moltiplicazione per uno che non e' esattamente uno, un ordine di operazioni
-            // diverso in midiNoteToHz — questo numero sarebbe cambiato.
-            constexpr std::uint64_t before = 16826057911581881754ull;
+            // Il numero non e' arbitrario: e' il checksum dello stesso render, e la proprieta'
+            // che protegge e' che **nessuna operazione in piu'** entri sul percorso a glide
+            // spento — un'addizione con zero, una moltiplicazione per uno che non e' esattamente
+            // uno, un ordine di operazioni diverso in midiNoteToHz lo cambierebbero.
+            //
+            // E' stato riscritto una volta, dalla ritaratura del gain staging, e quello e'
+            // l'unico modo legittimo di toccarlo: un cambiamento di suono **voluto e misurato**
+            // altrove. Qui sono entrati due valori nuovi — kVoiceHeadroomGain da 0.71 a 0.63 e la
+            // mappa di `drive`, che questo patch usa a 2.0 di guadagno — e il checksum e'
+            // ricalcolato sul binario subito dopo. Il valore precedente era
+            // 16826057911581881754, quello di prima che glide e voiceMode fossero cablati.
+            //
+            // Attenzione: il checksum e' sull'uscita bit per bit, quindi dipende dalla
+            // configurazione di compilazione. Va preso dalla build Debug, che e' quella su cui
+            // gira la suite (docs/build.md): in Release il riordinamento delle operazioni in
+            // virgola mobile ne produce un altro, ugualmente valido e diverso.
+            constexpr std::uint64_t before = 12591846455056921160ull;
 
             auto poly = glidePatch();
             expect (poly.voiceMode == engine::VoiceMode::poly);

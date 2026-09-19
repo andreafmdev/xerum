@@ -41,7 +41,7 @@ inline constexpr Spec kTable[kNumParams] = {
     { "slope", "Slope", "filter", Kind::Choice, Map::None, 0.0f, 1.0f, 0.0f, 1.0f, nullptr, 0, Label::None, kOptions_slope, 2 },
     { "cutoff", "Cutoff", "filter", Kind::Float, Map::Log, 20.0f, 20000.0f, 0.0f, 0.62f, "Hz", 0, Label::Hz, nullptr, 0 },
     { "res", "Resonance", "filter", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.3f, "%", 0, Label::None, nullptr, 0 },
-    { "drive", "Drive", "filter", Kind::Float, Map::Linear, 0.0f, 24.0f, 0.0f, 0.0f, "dB", 1, Label::None, nullptr, 0 },
+    { "drive", "Drive", "filter", Kind::Float, Map::MsSquared, 0.0f, 24.0f, 0.0f, 0.0f, "dB", 1, Label::None, nullptr, 0 },
     { "keytrk", "Key trk", "filter", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.5f, "%", 0, Label::None, nullptr, 0 },
     { "voiceMode", "Voice mode", "master", Kind::Choice, Map::None, 0.0f, 1.0f, 0.0f, 0.0f, nullptr, 0, Label::None, kOptions_voiceMode, 3 },
     { "pan", "Pan", "master", Kind::Float, Map::Linear, -50.0f, 50.0f, 0.0f, 0.5f, nullptr, 0, Label::Pan, nullptr, 0 },

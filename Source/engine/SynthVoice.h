@@ -87,6 +87,18 @@ constexpr T saturateCurve (T x) noexcept
  */
 inline float saturate (float x) noexcept { return saturateCurve (x); }
 
+/**
+ * Il guadagno di `drive` oltre il quale la saturazione entra al 100 %: +2 dB.
+ *
+ * Non e' un numero di comodo, e' l'ampiezza del gradino diviso la pendenza della curva. Il
+ * gradino misurato all'innesco vale 0.94 dB di RMS, e nella prima parte della corsa la
+ * saturazione restituisce circa mezzo decibel per ogni decibel di `drive`: serve quindi circa
+ * un paio di decibel di corsa perche' il secco e il bagnato si raggiungano senza che la somma
+ * scenda sotto il secco. Misurato: con la dissolvenza su 1 dB resta un avvallamento di 0.27 dB
+ * a meta', su 2 dB scende a 0.09 dB, che e' sotto la risoluzione di un ascolto.
+ */
+inline constexpr float kDriveFadeGain = 1.2589254f; // 10^(2/20)
+
 /** Copie dell'oscillatore per voce al massimo dell'unison. Array a dimensione fissa, come il
     pool di voci: nessuna allocazione sul thread audio, mai. */
 inline constexpr int kMaxUnison = 8;
@@ -466,6 +478,25 @@ private:
     bool oscOn_ { true };
     bool filterOn_ { true };
     float driveGain_ { 1.0f };
+
+    /**
+     * Quanto del campione saturato entra in miscela con quello secco: 0 a `drive` spento, 1 da
+     * kDriveFadeGain in su.
+     *
+     * Esiste perche' `saturate()` **non e' l'identita' sul piccolo segnale nel senso che serve
+     * qui**. La sua pendenza nell'origine vale 1, ma il segnale che le arriva e' un oscillatore
+     * a fondo scala, e li' la curva comprime da sola: saturate(1.0) = 0.778, cioe' -2.2 dB.
+     * Con il solo cancello `driveGain_ > 1` il knob passava quindi da "spenta" a "accesa a
+     * piena forza" fra 0.00 e 0.01 dB, e la misura lo diceva: un **gradino di -0.94 dB di RMS
+     * (-1.31 di picco) nel nulla**, seguito dai primi due decibel di corsa spesi solo a
+     * riemergere dalla buca. Un knob che, girato di un capello, abbassa.
+     *
+     * La miscela lo toglie senza toccare la curva: sotto kDriveFadeGain l'uscita e'
+     * `x + mix * (f(x) - x)`, cioe' parte esattamente da `x` e arriva esattamente a `f(x)`.
+     * A `drive` zero il valore e' zero e il ramo non gira affatto, quindi il percorso di
+     * default resta bit per bit quello di prima.
+     */
+    float driveMix_ { 0.0f };
     float tuningSemitones_ { 0.0f };
     float velocityAmount_ { 0.0f };
     float baseCutoffHz_ { 1000.0f };

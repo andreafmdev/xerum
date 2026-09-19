@@ -102,31 +102,58 @@ double rms (const std::vector<float>& x)
 }
 
 /**
- * L'inversa di engine::softClip (Source/engine/SynthEngine.cpp), che e' privata al motore.
+ * Il picco **presentato al soft clipper**, misurato con il metodo del gain ridotto.
  *
- * Serve a un unico scopo: risalire dal picco **misurato all'uscita** al picco **presentato al
- * clipper**, che e' il numero di cui parla docs/architecture.md e l'unico confrontabile fra una
- * versione e l'altra. E' esatta, non una stima: il clipper e' invertibile su tutto il suo
- * dominio perche' e' strettamente monotono.
+ * Qui c'era l'inversa analitica di engine::softClip, ed era il metodo sbagliato. E' esatta in
+ * aritmetica esatta — il clipper e' strettamente monotono, quindi invertibile — ma
+ * **malcondizionata** vicino alla saturazione: 0.9983 in uscita risale a 2.36 all'ingresso e
+ * 0.9990 a 3.40, cioe' sette decimillesimi di uscita diventano 3.4 dB di ingresso stimato. Su
+ * questa stessa passata il secco presentava 1.006, cioe' gia' sopra soglia: la misura viveva
+ * proprio nella regione dove l'inversione non regge, e i suoi numeri non erano confrontabili con
+ * quelli di Tests/ReverbTests.cpp ne' di Tests/EngineTests.cpp, che usano il metodo del gain
+ * ridotto.
  *
- * Sotto soglia e' l'identita', quindi un picco sotto 0.95 si legge cosi' com'e'.
+ * Il metodo giusto: si abbassa il gain master finche' il clipper resta spento, si **verifica**
+ * che sia spento, e si riscala. Tutto cio' che precede il clipper (le voci, lo stadio FX) e'
+ * esattamente lineare nel gain master, quindi il riscalamento e' esatto e non una stima.
+ *
+ * Il blocco muto prima delle note non e' decorazione: `applyGainRamp` parte da
+ * `previousMasterGain_`, che al primissimo blocco vale ancora 1.0, e senza quello scarto il
+ * picco che si misura e' la rampa del gain invece del segnale.
  */
-double softClipInput (double y) noexcept
+struct ClipperPeak { double value { 0.0 }; bool clipperOff { true }; };
+
+ClipperPeak peakAtClipper (engine::SynthEngine& synth, const std::vector<int>& notes,
+                           float realVolume, int blocks, float probeVolume = 0.02f)
 {
-    constexpr double threshold = 0.95;
-    constexpr double headroom = 1.0 - threshold;
+    synth.setMasterGainLinear (probeVolume);
 
-    const auto magnitude = std::abs (y);
+    {
+        juce::MidiBuffer none;
+        juce::AudioBuffer<float> warmUp (2, kBlock);
+        warmUp.clear();
+        synth.process (warmUp, none);
+    }
 
-    if (magnitude <= threshold)
-        return magnitude;
+    juce::MidiBuffer midi;
+    for (const auto note : notes)
+        midi.addEvent (juce::MidiMessage::noteOn (1, note, 1.0f), 0);
 
-    const auto u = (magnitude - threshold) / headroom; // = over / (1 + over)
+    double peak = 0.0;
 
-    if (u >= 1.0)
-        return std::numeric_limits<double>::infinity();
+    for (int b = 0; b < blocks; ++b)
+    {
+        juce::AudioBuffer<float> buffer (2, kBlock);
+        buffer.clear();
+        synth.process (buffer, midi);
+        midi.clear();
 
-    return threshold + headroom * (u / (1.0 - u));
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < kBlock; ++i)
+                peak = juce::jmax (peak, (double) std::abs (buffer.getSample (ch, i)));
+    }
+
+    return { peak * (double) realVolume / (double) probeVolume, peak < 0.95 };
 }
 } // namespace
 
@@ -568,15 +595,18 @@ struct FxStageTests final : juce::UnitTest
 
         beginTest ("il margine al soft clipper: ai default e agli estremi del chorus");
         {
-            // Questo test **misura e riporta**, non ritara niente: kVoiceHeadroomGain e
-            // kSoftClipThreshold restano dove sono, e la ritaratura congiunta del gain staging
-            // e' il lavoro che viene dopo il riverbero. L'unico contratto imposto qui e' che il
-            // chorus non alzi il picco presentato al clipper di piu' di quanto il mix
-            // equal-power possa giustificare.
+            // **Il metodo, prima dei numeri.** Fino alla ritaratura del gain staging questo test
+            // risaliva al picco presentato al clipper invertendo analiticamente engine::softClip
+            // sul picco d'uscita, ed era l'unico posto della suite a farlo. E' il metodo
+            // sbagliato: l'inversione e' malcondizionata vicino alla saturazione, e su questa
+            // passata il secco presentava 1.006, cioe' *gia' sopra soglia*. Adesso si usa il
+            // metodo del gain ridotto, lo stesso di Tests/ReverbTests.cpp e di
+            // Tests/EngineTests.cpp, e i tre insiemi di numeri sono finalmente confrontabili —
+            // che e' l'unica ragione per cui questi numeri servono a qualcosa.
             //
             // Il caso e' quello che docs/architecture.md usa per il suo bilancio: accordo denso,
             // volume di default, tutto il resto ai valori di fabbrica.
-            const auto peakAtClipper = [&store] (bool on, float mix, float feedback)
+            const auto measure = [&store, this] (bool on, float mix, float feedback)
             {
                 engine::SynthEngine synth;
                 prepareEngine (synth, store);
@@ -591,34 +621,16 @@ struct FxStageTests final : juce::UnitTest
                 p.chorusMix01 = mix;
                 p.chorusFeedback01 = feedback;
                 synth.setParams (p);
-                synth.setMasterGainLinear (0.8f); // il default di `volume`
 
-                juce::MidiBuffer midi;
-
-                for (const int note : { 48, 55, 60, 64, 67, 72 })
-                    midi.addEvent (juce::MidiMessage::noteOn (1, note, 1.0f), 0);
-
-                auto peak = 0.0;
-
-                for (int b = 0; b < 400; ++b)
-                {
-                    juce::AudioBuffer<float> buffer (2, kBlock);
-                    buffer.clear();
-                    synth.process (buffer, midi);
-                    midi.clear();
-
-                    for (int ch = 0; ch < 2; ++ch)
-                        for (int i = 0; i < kBlock; ++i)
-                            peak = juce::jmax (peak, softClipInput ((double) buffer.getSample (ch, i)));
-                }
-
-                return peak;
+                const auto probe = peakAtClipper (synth, { 48, 55, 60, 64, 67, 72 }, 0.8f, 400);
+                expect (probe.clipperOff, "il gain di prova non basta: la misura non vale");
+                return probe.value;
             };
 
-            const auto dry = peakAtClipper (false, 0.0f, 0.0f);
-            const auto atDefaults = peakAtClipper (true, 0.3f, 0.0f);    // i default di chMix / chFeedback
-            const auto fullMix = peakAtClipper (true, 1.0f, 0.0f);
-            const auto fullBoth = peakAtClipper (true, 1.0f, 1.0f);
+            const auto dry = measure (false, 0.0f, 0.0f);
+            const auto atDefaults = measure (true, 0.3f, 0.0f);    // i default di chMix / chFeedback
+            const auto fullMix = measure (true, 1.0f, 0.0f);
+            const auto fullBoth = measure (true, 1.0f, 1.0f);
 
             const auto report = [this] (const char* what, double peak, double reference)
             {
@@ -633,8 +645,20 @@ struct FxStageTests final : juce::UnitTest
             report ("chorus a mix 100 %, feedback 0", fullMix, dry);
             report ("chorus a mix 100 %, feedback 100 %", fullBoth, dry);
 
-            // Due contratti distinti, perche' le due cause sono distinte.
+            // Tre contratti distinti, perche' le tre cause sono distinte.
             //
+            // Ai **valori di fabbrica** il chorus e' acceso su tutti e dodici i preset, quindi
+            // non gli e' concesso di prendere margine: il mix e' equal-power e il feedback e'
+            // zero, quindi il picco puo' solo restare dov'e' o scendere. Misurato **-0.68 dB** —
+            // scende, perche' il ramo secco del mix sin3dB al 30 % vale 0.891 e il bagnato, che
+            // e' lo stesso segnale ritardato e sparpagliato, non ricostruisce quel picco. E'
+            // anche il motivo per cui i preset suonano piu' bassi di picco con gli effetti accesi
+            // che senza — fino a 1.4 dB su "Wire Pluck" (vedi Tests/EngineTests.cpp,
+            // "nessun preset di fabbrica accende il clipper su un accordo di quattro note").
+            const auto factoryDb = juce::Decibels::gainToDecibels (atDefaults / dry);
+            expect (factoryDb < 0.0, "il chorus ai valori di fabbrica alza il picco al clipper di "
+                                         + juce::String (factoryDb, 2) + " dB: ai default non deve prendere margine");
+
             // Il **mix** e' equal-power su segnali decorrelati, quindi per costruzione non alza
             // il picco: un decibel e' il margine che lascia passare la correlazione residua fra
             // secco e bagnato (non sono indipendenti, sono lo stesso segnale ritardato) e
@@ -648,13 +672,19 @@ struct FxStageTests final : juce::UnitTest
             // passa da un saturatore e per cui dsp::Chorus::kMaxFeedback si ferma a mezzo: la
             // tabella nel suo commento e' questa misura al variare di quel tetto.
             //
-            // Due decibel e mezzo e' quanto il caso piu' estremo puo' costare restando dentro i
-            // 3 dB di margine che docs/architecture.md dichiara ancora liberi. Se un giorno
-            // questa soglia mordera', il numero da rivedere e' kMaxFeedback o — nella ritaratura
-            // congiunta che verra' dopo il riverbero — kVoiceHeadroomGain. **Non questa riga.**
+            // Misurato **+1.96 dB**, e la soglia sta appena sopra. Non e' piu' la rete larga che
+            // era prima della ritaratura: il caso peggiore del chorus e' uno dei tre addendi che
+            // il gain staging ha in bilancio, e un suo aumento va visto subito. Se un giorno
+            // questa riga mordera', il numero da rivedere e' kMaxFeedback o kVoiceHeadroomGain.
             const auto worstDb = juce::Decibels::gainToDecibels (fullBoth / dry);
             expect (worstDb < 2.5, "il chorus al caso peggiore alza il picco al clipper di "
                                        + juce::String (worstDb, 2) + " dB");
+
+            // E il valore assoluto, che e' quello che il gain staging deve tenere: anche con il
+            // chorus a fondo corsa su un accordo di sei note l'ingresso al clipper resta ben
+            // sotto il tetto di +8 dBFS del caso peggiore (misurato 1.260, +2.01 dBFS).
+            expect (fullBoth < 2.512, "con il chorus a fondo corsa l'ingresso al clipper arriva a "
+                                          + juce::String (fullBoth, 3) + ", oltre il tetto di +8 dBFS");
         }
     }
 };

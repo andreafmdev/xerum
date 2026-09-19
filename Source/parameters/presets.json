@@ -1,30 +1,30 @@
 {
   "version": 1,
-  "_note": "Valori NORMALIZZATI 0..1, la stessa convenzione dell'APVTS. Riferimenti rapidi: cutoff (log 20..20 kHz) x = log10(f/20)/3; att/dec/rel (ms-squared 1..8001) x = sqrt((ms-1)/8000); res -> Q = 0.707 * 16.97^x (vedi ParamCollect.h); wtIndex/ftype/slope sono choice, x = indice/(numOpzioni-1). Ogni preset elenca esplicitamente level, drive e volume: sono i tre che decidono se clippa.",
+  "_note": "Valori NORMALIZZATI 0..1, la stessa convenzione dell'APVTS. Riferimenti rapidi: cutoff (log 20..20 kHz) x = log10(f/20)/3; att/dec/rel (ms-squared 1..8001) x = sqrt((ms-1)/8000); res -> Q = 0.707 * 16.97^x (vedi ParamCollect.h); drive (ms-squared 0..24 dB) x = sqrt(dB/24); wtIndex/ftype/slope sono choice, x = indice/(numOpzioni-1). Ogni preset elenca esplicitamente level, drive e volume: sono i tre che decidono se clippa.",
   "presets": [
     { "name": "Init", "cat": "User", "values": {} },
 
     { "name": "Sub Pulse", "cat": "Bass", "values": {
       "wtIndex": 1.0, "wtpos": 0.1, "oct": 0.3333,
-      "ftype": 0.0, "slope": 1.0, "cutoff": 0.392, "res": 0.25, "drive": 0.12, "keytrk": 0.6,
+      "ftype": 0.0, "slope": 1.0, "cutoff": 0.392, "res": 0.25, "drive": 0.3464, "keytrk": 0.6,
       "att": 0.0, "dec": 0.25, "sus": 0.75, "rel": 0.078,
       "level": 0.9, "volume": 0.8 } },
 
     { "name": "Reese Wide", "cat": "Bass", "values": {
       "wtIndex": 0.2, "wtpos": 0.45, "oct": 0.3333,
-      "ftype": 0.0, "slope": 1.0, "cutoff": 0.434, "res": 0.35, "drive": 0.25, "keytrk": 0.5,
+      "ftype": 0.0, "slope": 1.0, "cutoff": 0.434, "res": 0.35, "drive": 0.5, "keytrk": 0.5,
       "att": 0.0, "dec": 0.316, "sus": 0.8, "rel": 0.099,
       "level": 0.6, "volume": 0.8 } },
 
     { "name": "Acid Line", "cat": "Bass", "values": {
       "wtIndex": 0.2, "wtpos": 0.0, "oct": 0.3333,
-      "ftype": 0.0, "slope": 0.0, "cutoff": 0.333, "res": 0.78, "drive": 0.2, "keytrk": 0.9,
+      "ftype": 0.0, "slope": 0.0, "cutoff": 0.333, "res": 0.78, "drive": 0.4472, "keytrk": 0.9,
       "att": 0.0, "dec": 0.193, "sus": 0.1, "rel": 0.049,
-      "level": 0.9, "volume": 0.8 } },
+      "level": 0.8, "volume": 0.8 } },
 
     { "name": "Neon Lead", "cat": "Lead", "values": {
       "wtIndex": 0.4, "wtpos": 0.6,
-      "ftype": 0.0, "slope": 1.0, "cutoff": 0.693, "res": 0.3, "drive": 0.15, "keytrk": 0.5,
+      "ftype": 0.0, "slope": 1.0, "cutoff": 0.693, "res": 0.3, "drive": 0.3873, "keytrk": 0.5,
       "att": 0.022, "dec": 0.25, "sus": 0.85, "rel": 0.122,
       "level": 0.8, "volume": 0.8 } },
 
@@ -60,7 +60,7 @@
 
     { "name": "Wire Pluck", "cat": "Pluck", "values": {
       "wtIndex": 0.4, "wtpos": 0.25,
-      "ftype": 0.0, "slope": 1.0, "cutoff": 0.735, "res": 0.35, "drive": 0.1, "keytrk": 0.7,
+      "ftype": 0.0, "slope": 1.0, "cutoff": 0.735, "res": 0.35, "drive": 0.3162, "keytrk": 0.7,
       "att": 0.0, "dec": 0.158, "sus": 0.0, "rel": 0.078,
       "level": 0.9, "volume": 0.8 } },
 
