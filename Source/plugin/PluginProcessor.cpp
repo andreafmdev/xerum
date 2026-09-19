@@ -45,6 +45,7 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
     // salvate deve suonare modulato dal primo blocco, senza aspettare che l'utente tocchi
     // qualcosa. (setStateInformation, se arriva, rifà comunque il giro sul nuovo albero.)
     rebuildModSnapshot();
+    rebuildArpSnapshot();
 
     apvts_.addParameterListener ("wtIndex", this);
     startTimerHz (kWavetablePollHz);
@@ -72,12 +73,19 @@ void SerumStyleSynthAudioProcessor::rebuildModSnapshot()
     engine_->setMods (snapshot);
 }
 
+void SerumStyleSynthAudioProcessor::rebuildArpSnapshot()
+{
+    engine::ArpSnapshot snapshot;
+    engine::buildArpSnapshot (apvts_.state.getChildWithName (state::ids::ARP), snapshot);
+    engine_->setArpSteps (snapshot);
+}
+
 // Il listener sta sulla radice dell'APVTS, quindi qui passa *ogni* proprietà dell'albero: ogni
 // movimento di ogni knob, che vive nei figli PARAM. Senza questo filtro ricostruiremmo lo
 // snapshot a ogni giro di automazione, per niente.
 void SerumStyleSynthAudioProcessor::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier&)
 {
-    if (tree.hasType (state::ids::MOD) || tree.hasType (state::ids::MODS))
+    if (tree.hasType (state::ids::MOD) || tree.hasType (state::ids::MODS) || tree.hasType (state::ids::ARP))
         triggerAsyncUpdate();
 }
 
@@ -102,7 +110,12 @@ void SerumStyleSynthAudioProcessor::valueTreeChildRemoved (juce::ValueTree& pare
 // coalizza il suo emitState.
 void SerumStyleSynthAudioProcessor::handleAsyncUpdate()
 {
+    // Tutti e due, senza guardare quale dei due nodi si sia mosso: ricostruirli costa una
+    // manciata di confronti di stringhe e una tokenizzazione di sedici numeri, una volta per giro
+    // di message loop. Un flag per nodo sarebbe uno stato in piu' da tenere allineato in cambio
+    // di niente.
     rebuildModSnapshot();
+    rebuildArpSnapshot();
 }
 
 int SerumStyleSynthAudioProcessor::wavetableIndexFromParam() const noexcept
@@ -224,13 +237,27 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     // params::collectEngineParams legge solo l'APVTS, e il tempo non è un parametro.
     auto params = collectParams();
 
-    // Il tempo serve al solo LFO, e solo quando `lsync` è attivo. Senza playhead (Standalone,
-    // qualche render offline) o senza BPM esposto si resta a 120, lo stesso fallback che
-    // dsp::syncedRateHz applica per conto suo: nessun ramo speciale da mantenere.
+    // Il tempo serve all'LFO quando `lsync` è attivo e **sempre** all'arpeggiatore, la cui
+    // divisione è tempo-sincrona in tutti e due i regimi. Senza playhead (Standalone, qualche
+    // render offline) o senza BPM esposto si resta a 120, lo stesso fallback che dsp::syncedRateHz
+    // applica per conto suo: nessun ramo speciale da mantenere.
+    //
+    // PPQ e `isPlaying` servono al solo arpeggiatore, ed è la coppia che lo fa agganciare alla
+    // timeline dell'host quando il transport gira. Un host che dica "sto suonando" ma non esponga
+    // la posizione non dà niente a cui agganciarsi: in quel caso l'arp resta nel regime libero,
+    // che è il comportamento giusto e non un ripiego.
     if (auto* playHead = getPlayHead())
         if (const auto position = playHead->getPosition())
+        {
             if (const auto bpm = position->getBpm())
                 params.bpm = (float) *bpm;
+
+            if (const auto ppq = position->getPpqPosition())
+            {
+                params.ppqPosition = *ppq;
+                params.transportPlaying = position->getIsPlaying();
+            }
+        }
 
     engine_->setParams (params);
 
@@ -269,6 +296,10 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     // wheel, che è una posizione e non un transitorio.
     meters_.lfo.store (engine_->getLfoLevel(), std::memory_order_relaxed);
     meters_.mw.store  (engine_->getModWheelLevel(), std::memory_order_relaxed);
+
+    // L'indice di griglia dell'arp: è ciò che accende il riquadro sul passo in riproduzione nel
+    // tab Arp. Istantaneo come i due sopra — è una posizione dentro il pattern, non un picco.
+    meters_.arpStep.store (engine_->getArpStep(), std::memory_order_relaxed);
 
     // Unipolari e più veloci di un frame del meter: si accumula il massimo, come per i picchi
     // audio, e il lettore lo azzera. Il motore ha già preso il massimo sulle sotto-fette di
@@ -342,6 +373,11 @@ void SerumStyleSynthAudioProcessor::setStateInformation (const void* data, int s
             // vorrebbe dire suonare il preset nuovo con le mod di quello vecchio.
             cancelPendingUpdate();
             rebuildModSnapshot();
+
+            // Sincrono anche questo, e per la stessa ragione: caricare un preset mentre l'audio
+            // gira con il pattern d'arpeggio di quello precedente e' lo stesso problema del mod
+            // matrix, con un sintomo piu' evidente — la sequenza sbagliata si sente a ogni passo.
+            rebuildArpSnapshot();
 
             stateReplaced_.sendChangeMessage();
         }

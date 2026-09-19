@@ -2,6 +2,7 @@
 
 #include "dsp/Chorus.h"
 #include "dsp/PlateReverb.h"
+#include "engine/Arpeggiator.h"
 #include "engine/EngineParams.h"
 #include "engine/VoiceManager.h"
 
@@ -100,6 +101,17 @@ public:
      */
     void setMods (const engine::ModSnapshot& snapshot) noexcept;
 
+    /**
+     * Pubblica una nuova sequenza di step per l'arpeggiatore. Gemella di setMods(), stesso
+     * anello di quattro slot preallocati e stesso puntatore atomico, per la stessa ragione: nel
+     * ValueTree gli step sono una **stringa CSV**, e sul thread audio non si tokenizza niente.
+     *
+     * Chiamabile da qualunque thread. Come per le mod, il peggio che un'infilata di pubblicazioni
+     * dentro un solo blocco audio puo' produrre e' una sequenza sbagliata per un blocco, mai una
+     * lettura di memoria liberata: gli slot vivono quanto il motore.
+     */
+    void setArpSteps (const engine::ArpSnapshot& snapshot) noexcept;
+
     /** Il livello corrente dell'LFO, per il meter dell'editor. Bipolare -1..1, istantaneo. */
     float getLfoLevel() const noexcept { return lfoLevel_.load (std::memory_order_relaxed); }
 
@@ -133,6 +145,15 @@ public:
 
     /** La posizione del mod wheel (CC 1), 0..1. Istantanea: e' una posizione, non un transitorio. */
     float getModWheelLevel() const noexcept { return modWheelLevel_.load (std::memory_order_relaxed); }
+
+    /**
+     * L'indice di griglia dell'ultimo passo dell'arpeggiatore, 0..15, per MeterFrame::arpStep.
+     *
+     * Istantaneo come `lfo` e `mw`, e per la stessa ragione: e' una **posizione** dentro il
+     * pattern, non un transitorio. Un massimo su un frame del meter mostrerebbe l'indice piu'
+     * alto degli ultimi 33 ms, cioe' un riquadro che salta avanti e torna indietro.
+     */
+    int getArpStep() const noexcept { return arpStep_.load (std::memory_order_relaxed); }
 
 private:
     void handleMidiEvent (const juce::MidiMessage& message) noexcept;
@@ -244,6 +265,16 @@ private:
     ModSnapshot modRing_[4] {};
     std::atomic<int> modWriteSlot_ { 0 };
     std::atomic<const ModSnapshot*> activeMods_ { nullptr };
+
+    // --- arpeggiatore --------------------------------------------------------------------
+    // Sta in testa a process(), prima del ciclo degli eventi: riscrive il MidiBuffer e basta.
+    // Con `arpOn` falso non lo tocca, quindi il resto del motore non sa nemmeno che esiste.
+
+    Arpeggiator arp_;
+    ArpSnapshot arpRing_[4] {};
+    std::atomic<int> arpWriteSlot_ { 0 };
+    std::atomic<const ArpSnapshot*> activeArp_ { nullptr };
+    std::atomic<int> arpStep_ { 0 };
 
     std::atomic<float> lfoLevel_ { 0.0f };
     float modWheel_ { 0.0f }; // CC 1, solo thread audio

@@ -42,6 +42,7 @@ target_sources(SerumStyleSynth
         Source/engine/VoiceManager.cpp
         Source/engine/SynthVoice.cpp
         Source/engine/ModMatrix.cpp
+        Source/engine/Arpeggiator.cpp
         Source/dsp/Lfo.cpp
         Source/dsp/Chorus.cpp
         Source/dsp/PlateReverb.cpp
@@ -99,6 +100,7 @@ target_sources(XerumTests
         Tests/ChorusTests.cpp
         Tests/ReverbTests.cpp
         Tests/GlideVoiceModeTests.cpp
+        Tests/ArpeggiatorTests.cpp
         Source/dsp/WavetableBlob.cpp
         Source/dsp/MipTable.cpp
         Source/dsp/WavetableStore.cpp
@@ -106,6 +108,7 @@ target_sources(XerumTests
         Source/dsp/Chorus.cpp
         Source/dsp/PlateReverb.cpp
         Source/engine/ModMatrix.cpp
+        Source/engine/Arpeggiator.cpp
         Source/dsp/WavetableOscillator.cpp
         Source/dsp/ADSREnvelope.cpp
         Source/dsp/StateVariableFilter.cpp

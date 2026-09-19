@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsp/StateVariableFilter.h"
+#include "engine/Arpeggiator.h"
 #include "engine/ModMatrix.h"
 
 #include <array>
@@ -146,6 +147,25 @@ struct EngineParams
     const ModSnapshot* mods { nullptr };
 
     float bpm { 120.0f };            // dal playhead dell'host; 120 quando non c'e'
+
+    /**
+     * La posizione della testina dell'host in quarti, e se il transport sta girando.
+     *
+     * Li legge il solo arpeggiatore, e la differenza fra i due regimi e' tutta qui: con
+     * `transportPlaying` falso l'arp gira libero su un contatore suo, con `transportPlaying` vero
+     * i suoi confini vengono da `ppqPosition` e si riancorano a ogni blocco. Senza playhead
+     * (Standalone, qualche render offline) restano a 0/false, cioe' il regime libero: e' il
+     * comportamento giusto, non un ripiego.
+     *
+     * `bpm` qui sopra serve a tutti e due i regimi — la divisione dell'arp e' sempre a tempo — e
+     * resta uno solo per non avere due verita' sul tempo dentro la stessa struct.
+     */
+    double ppqPosition { 0.0 };
+    bool transportPlaying { false };
+
+    /** I sei parametri dell'arp piu' il puntatore alla sequenza pubblicata dal message thread.
+        Vedi engine::Arpeggiator: con `on` falso il MidiBuffer non viene toccato. */
+    ArpConfig arp {};
     float modWheel { 0.0f };         // CC 1, 0..1
     float globalLfoLevel { 0.0f };   // LFO libero, usato dalle voci quando lfoRetrig e' falso
 

@@ -65,6 +65,9 @@ void SynthEngine::prepare (const EngineSpec& spec) noexcept
     voices_.prepare (spec_.sampleRate);
     globalLfo_.prepare (spec_.sampleRate);
 
+    // L'arpeggiatore chiede qui tutta la memoria del suo buffer MIDI: vedi engine::Arpeggiator.
+    arp_.prepare (spec_.sampleRate);
+
     // Tutto cio' che alloca nello stadio FX alloca **qui**: la linea di ritardo del chorus, la
     // copia del secco per la dissolvenza di bypass e il buffer interno del DryWetMixer. Da
     // process() in avanti non c'e' piu' una sola richiesta di memoria.
@@ -118,6 +121,8 @@ void SynthEngine::prepare (const EngineSpec& spec) noexcept
 void SynthEngine::reset() noexcept
 {
     voices_.reset();
+    arp_.reset();
+    arpStep_.store (0, std::memory_order_relaxed);
     chorusMix_.reset();
     reverbMix_.reset();
     stopFx();
@@ -164,6 +169,14 @@ void SynthEngine::setMods (const engine::ModSnapshot& snapshot) noexcept
     const auto slot = modWriteSlot_.fetch_add (1, std::memory_order_relaxed) & 3;
     modRing_[slot] = snapshot;
     activeMods_.store (&modRing_[slot], std::memory_order_release);
+}
+
+void SynthEngine::setArpSteps (const engine::ArpSnapshot& snapshot) noexcept
+{
+    // Identica a setMods(), anello compreso: vedi li' perche' fetch_add e perche' quattro slot.
+    const auto slot = arpWriteSlot_.fetch_add (1, std::memory_order_relaxed) & 3;
+    arpRing_[slot] = snapshot;
+    activeArp_.store (&arpRing_[slot], std::memory_order_release);
 }
 
 void SynthEngine::publishSourceLevels (float lfo, float env, float env2, float vel) noexcept
@@ -522,6 +535,12 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
         // Lo stadio FX si spegne con tutto il resto, e con lui la sua memoria: senza, togliendo
         // il bypass si sentirebbe ricomparire la coda del chorus di prima che scattasse.
         stopFx();
+
+        // E anche l'arpeggiatore: le voci sono gia' state ammutolite qui sopra, quindi non c'e'
+        // nessun note-off da emettere — c'e' solo uno stato da dimenticare, altrimenti togliendo
+        // il bypass ripartirebbe da meta' pattern con dei tasti che nessuno sta piu' premendo.
+        arp_.reset();
+        arpStep_.store (0, std::memory_order_relaxed);
         return;
     }
 
@@ -563,6 +582,21 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
         params_.mods = published;
 
     params_.modWheel = modWheel_;
+
+    // Stesso trattamento delle mod, e per la stessa ragione: se il message thread non ha ancora
+    // pubblicato niente si tiene il puntatore arrivato con setParams(), che e' nullptr in
+    // produzione ed e' la via con cui i test iniettano una sequenza senza passare da setArpSteps.
+    if (const auto* publishedArp = activeArp_.load (std::memory_order_acquire); publishedArp != nullptr)
+        params_.arp.steps = publishedArp;
+
+    // **L'arpeggiatore, in testa a tutto**: riscrive il MidiBuffer prima che il ciclo qui sotto lo
+    // legga, cosi' la precisione campione-esatta e' quella che il ciclo ha gia' (spezza il render
+    // a ogni evento) e VoiceManager non sa nemmeno che l'arp esiste. Con `arpOn` falso non tocca
+    // il buffer: e' da quella riga che discende la non-regressione bit per bit.
+    arp_.process (midi, numSamples, params_.arp,
+                  ArpTransport { (double) params_.bpm, params_.ppqPosition, params_.transportPlaying });
+
+    arpStep_.store (arp_.currentStep(), std::memory_order_relaxed);
 
     // Il livello di fine blocco precedente, non ancora avanzato: dentro il ciclo lo rinfresca
     // renderControlSlices() a ogni sotto-fetta.

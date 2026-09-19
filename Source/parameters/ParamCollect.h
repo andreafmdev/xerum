@@ -59,6 +59,25 @@ inline engine::VoiceMode voiceModeFromChoice (float rawIndex) noexcept
     }
 }
 
+/**
+ * `arpMode` e' un AudioParameterChoice come `ftype`, `unison` e `voiceMode`: il grezzo e' gia'
+ * l'indice, e le quattro opzioni sono "Up", "Down", "UpDn", "Rand" nell'ordine di engine::ArpMode.
+ *
+ * Lo switch invece del cast diretto e' la stessa scelta di unisonVoicesFromChoice: se la lista di
+ * opzioni cambiasse, qui si vedrebbe subito che va aggiornata anche questa funzione, mentre un
+ * cast avrebbe continuato a compilare mappando l'opzione nuova su un modo sbagliato.
+ */
+inline engine::ArpMode arpModeFromChoice (float rawIndex) noexcept
+{
+    switch ((int) rawIndex)
+    {
+        case 1:  return engine::ArpMode::down;
+        case 2:  return engine::ArpMode::upDown;
+        case 3:  return engine::ArpMode::random;
+        default: return engine::ArpMode::up;
+    }
+}
+
 /** detune 0..100 -> cent. Non e' un target modulabile: nessuna base in modBase. */
 inline float detuneCentsFromRaw (float raw) noexcept
 {
@@ -271,6 +290,34 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.reverbMix01 = params::denormalise (*specRvMix, rawFor (ParamSlot::rvMix)) * 0.01f;
     p.reverbDecay01 = params::denormalise (*specRvDecay, rawFor (ParamSlot::rvDecay)) * 0.01f;
     p.reverbPredelaySeconds = params::denormalise (*specRvPredelay, rawFor (ParamSlot::rvPredelay)) * 0.001f;
+
+    // --- arpeggiatore ---------------------------------------------------------------------
+    // Fino a oggi questi sei avevano "slot": false e il motore non li leggeva: il tab Arp
+    // disegnava un interruttore, quattro knob, un selettore di modo e sedici step perfettamente
+    // funzionanti attaccati a niente. Come per il glide e per lo stadio FX, passare a
+    // "slot": true sposta gli indici di params::ParamSlot ma **non** quelli esposti all'host,
+    // che sono l'ordine di kTable, cioe' del file: nessuna automazione salvata si sposta.
+    //
+    // La sequenza dei sedici step non passa di qui: vive nel nodo ARP del ValueTree, viene
+    // tradotta in un engine::ArpSnapshot sul message thread e arriva al motore come puntatore
+    // (engine::SynthEngine::setArpSteps), esattamente come le assegnazioni del mod matrix.
+    constexpr auto* specArpGate = params::find ("arpGate");
+    constexpr auto* specArpOct = params::find ("arpOct");
+    constexpr auto* specArpSwing = params::find ("arpSwing");
+    static_assert (specArpGate != nullptr && specArpOct != nullptr && specArpSwing != nullptr,
+                   "i parametri dell'arpeggiatore non sono in ParameterTable.h");
+
+    p.arp.on = rawFor (ParamSlot::arpOn) >= 0.5f;
+    p.arp.mode = arpModeFromChoice (rawFor (ParamSlot::arpMode));
+
+    // Grezzo, come `lrate`: la divisione non e' una denormalizzazione ma la scelta di una voce in
+    // una tabella di quattro, e quella tabella vive in engine::arpBeatsPerStep accanto alla
+    // ragione per cui non e' quella dell'LFO.
+    p.arp.rateRaw = rawFor (ParamSlot::arpRate);
+
+    p.arp.gate01 = params::denormalise (*specArpGate, rawFor (ParamSlot::arpGate)) * 0.01f;
+    p.arp.octaves = juce::roundToInt (params::denormalise (*specArpOct, rawFor (ParamSlot::arpOct)));
+    p.arp.swing01 = params::denormalise (*specArpSwing, rawFor (ParamSlot::arpSwing)) * 0.01f;
 
     // Le basi normalizzate dei target modulabili: nessuna conversione, e' il valore grezzo
     // dell'APVTS. La denormalizzazione avviene dopo la somma delle modulazioni, dentro

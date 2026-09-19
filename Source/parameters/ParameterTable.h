@@ -108,7 +108,7 @@ inline constexpr const Spec* find (const char* id) noexcept
 // scrive l'accessore, non un ABI pubblico: nessuno stato salvato contiene un indice di slot.
 // Non coincide con l'indice dentro kTable, perche' i parametri senza slot creano dei buchi:
 // per passare dall'uno all'altro c'e' specForSlot().
-inline constexpr int kNumSlots = 45;
+inline constexpr int kNumSlots = 51;
 
 enum class ParamSlot : int
 {
@@ -116,8 +116,9 @@ enum class ParamSlot : int
     filtOn, ftype, slope, cutoff, res, drive, keytrk, voiceMode,
     pan, glide, bypass, att, dec, sus, rel, envVel,
     lshape, lsync, lretrig, lrate, lphase, lfade, fx1On, chRate,
-    chDepth, chMix, fx2On, rvSize, rvDamp, rvMix, att2, dec2,
-    sus2, rel2, chFeedback, rvPredelay, rvDecay,
+    chDepth, chMix, fx2On, rvSize, rvDamp, rvMix, arpOn, arpMode,
+    arpRate, arpGate, arpOct, arpSwing, att2, dec2, sus2, rel2,
+    chFeedback, rvPredelay, rvDecay,
     count
 };
 
@@ -129,15 +130,17 @@ inline constexpr const char* kSlotIds[kNumSlots] = {
     "filtOn", "ftype", "slope", "cutoff", "res", "drive", "keytrk", "voiceMode",
     "pan", "glide", "bypass", "att", "dec", "sus", "rel", "envVel",
     "lshape", "lsync", "lretrig", "lrate", "lphase", "lfade", "fx1On", "chRate",
-    "chDepth", "chMix", "fx2On", "rvSize", "rvDamp", "rvMix", "att2", "dec2",
-    "sus2", "rel2", "chFeedback", "rvPredelay", "rvDecay",
+    "chDepth", "chMix", "fx2On", "rvSize", "rvDamp", "rvMix", "arpOn", "arpMode",
+    "arpRate", "arpGate", "arpOct", "arpSwing", "att2", "dec2", "sus2", "rel2",
+    "chFeedback", "rvPredelay", "rvDecay",
 };
 
 /** L'indice dentro kTable di ogni slot: kTable[kSlotTableIndex[i]].id e' kSlotIds[i]. */
 inline constexpr int kSlotTableIndex[kNumSlots] = {
     0, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
     18, 19, 21, 22, 23, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35,
-    36, 37, 38, 39, 40, 41, 48, 49, 50, 51, 52, 53, 54,
+    36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51,
+    52, 53, 54,
 };
 
 /** La spec del parametro dietro uno slot. constexpr: non costa niente a runtime. */

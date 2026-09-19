@@ -102,6 +102,11 @@ private:
         arriva solo un puntatore a uno slot preallocato (vedi engine::SynthEngine::setMods). */
     void rebuildModSnapshot();
 
+    /** Traduce il nodo ARP (una stringa CSV) in un engine::ArpSnapshot e lo pubblica al motore.
+        Message thread, per la stessa ragione di rebuildModSnapshot(): qui si tokenizza e si
+        alloca, al thread audio arriva solo un puntatore a uno slot preallocato. */
+    void rebuildArpSnapshot();
+
     void parameterChanged (const juce::String& id, float newValue) override;
     void timerCallback() override;
 
