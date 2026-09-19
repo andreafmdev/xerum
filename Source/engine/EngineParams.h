@@ -20,6 +20,12 @@ struct EngineParams
     float fineCents { 0.0f };
     float level { 1.0f };            // guadagno lineare
 
+    /** Copie dell'oscillatore per voce: 1, 2, 4 o 8 (il choice `unison`). */
+    int unisonVoices { 1 };
+
+    /** Ampiezza dello scordamento, in cent: le copie coprono +-detuneCents attorno alla nota. */
+    float detuneCents { 0.0f };
+
     bool filterOn { true };
     dsp::StateVariableFilter::Type filterType { dsp::StateVariableFilter::Type::lowPass };
     int filterStages { 2 };

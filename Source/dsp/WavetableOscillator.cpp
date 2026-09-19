@@ -51,6 +51,15 @@ void WavetableOscillator::reset() noexcept
     phase_ = 0.0;
 }
 
+void WavetableOscillator::resetToPhase (float normalisedPhase) noexcept
+{
+    // std::fmod e non un while: la fase arriva da chi calcola i/N, non da un loop audio, ma
+    // un NaN qui manderebbe in undefined behaviour il cast a intero dentro getSample(). Il
+    // confronto scritto in positivo lo intercetta, come in levelForFrequency.
+    const auto wrapped = (double) normalisedPhase - std::floor ((double) normalisedPhase);
+    phase_ = (wrapped >= 0.0 && wrapped < 1.0) ? wrapped : 0.0;
+}
+
 void WavetableOscillator::setTable (const MipTable* table) noexcept
 {
     table_ = table;

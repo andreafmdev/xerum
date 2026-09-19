@@ -25,6 +25,31 @@ inline dsp::StateVariableFilter::Type filterTypeFromChoice (float rawIndex) noex
 }
 
 /**
+ * `unison` e' un AudioParameterChoice come `ftype`: il valore grezzo e' gia' l'indice, e le
+ * quattro opzioni sono le etichette "1", "2", "4", "8". Lo switch traduce l'indice nel numero
+ * di copie invece di fidarsi di una formula (1 << index): se un domani la lista di opzioni
+ * cambiasse, qui si vedrebbe subito che va aggiornata anche questa funzione.
+ */
+inline int unisonVoicesFromChoice (float rawIndex) noexcept
+{
+    switch ((int) rawIndex)
+    {
+        case 1:  return 2;
+        case 2:  return 4;
+        case 3:  return 8;
+        default: return 1;
+    }
+}
+
+/** detune 0..100 -> cent. Non e' un target modulabile: nessuna base in modBase. */
+inline float detuneCentsFromRaw (float raw) noexcept
+{
+    constexpr auto* spec = params::find ("detune");
+    static_assert (spec != nullptr, "detune non e' in ParameterTable.h");
+    return params::denormalise (*spec, raw);
+}
+
+/**
  * Da valore normalizzato 0..1 a valore reale, un target per funzione.
  *
  * Esistono come funzioni e non in linea dentro collectEngineParams perche' il percorso
@@ -132,6 +157,8 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.semitones = juce::roundToInt (params::denormalise (*specSemi, rawFor (ParamSlot::semi)));
     p.fineCents = fineCentsFromRaw (rawFor (ParamSlot::fine));
     p.level = levelGainFromRaw (rawFor (ParamSlot::level));
+    p.unisonVoices = unisonVoicesFromChoice (rawFor (ParamSlot::unison));
+    p.detuneCents = detuneCentsFromRaw (rawFor (ParamSlot::detune));
 
     p.filterOn = rawFor (ParamSlot::filtOn) >= 0.5f;
     p.filterType = filterTypeFromChoice (rawFor (ParamSlot::ftype));

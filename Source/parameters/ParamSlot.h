@@ -16,6 +16,7 @@ enum class ParamSlot : int
     oscOn, wtpos, oct, semi, fine, level, filtOn, ftype, slope, cutoff,
     res, drive, keytrk, att, dec, sus, rel, envVel, pan, bypass,
     lshape, lrate, lsync, lphase, lfade, lretrig,
+    unison, detune,
     count
 };
 } // namespace params

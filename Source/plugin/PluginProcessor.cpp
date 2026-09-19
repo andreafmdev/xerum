@@ -24,6 +24,8 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
     paramSlots_[(size_t) params::ParamSlot::semi] = apvts_.getRawParameterValue ("semi");
     paramSlots_[(size_t) params::ParamSlot::fine] = apvts_.getRawParameterValue ("fine");
     paramSlots_[(size_t) params::ParamSlot::level] = apvts_.getRawParameterValue ("level");
+    paramSlots_[(size_t) params::ParamSlot::unison] = apvts_.getRawParameterValue ("unison");
+    paramSlots_[(size_t) params::ParamSlot::detune] = apvts_.getRawParameterValue ("detune");
     paramSlots_[(size_t) params::ParamSlot::filtOn] = apvts_.getRawParameterValue ("filtOn");
     paramSlots_[(size_t) params::ParamSlot::ftype] = apvts_.getRawParameterValue ("ftype");
     paramSlots_[(size_t) params::ParamSlot::slope] = apvts_.getRawParameterValue ("slope");

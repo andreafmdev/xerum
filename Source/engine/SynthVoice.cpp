@@ -49,8 +49,15 @@ float saturate (float x) noexcept
 void SynthVoice::prepare (double sampleRate) noexcept
 {
     sampleRate_ = sampleRate > 0.0 ? sampleRate : 44100.0;
-    oscillator_.prepare (sampleRate_);
+
+    // Tutte e otto, non solo quelle che girano adesso: l'unison puo' salire a nota gia' viva e
+    // una copia preparata a meta' produrrebbe un incremento di fase calcolato sul sample rate
+    // sbagliato.
+    for (auto& oscillator : oscillators_)
+        oscillator.prepare (sampleRate_);
+
     filter_.prepare (sampleRate_);
+    filterRight_.prepare (sampleRate_);
     envelope_.prepare (sampleRate_);
     lfo_.prepare (sampleRate_);
 
@@ -67,8 +74,12 @@ void SynthVoice::reset() noexcept
     active_ = false;
     midiNote_ = -1;
     velocity_ = 0.0f;
-    oscillator_.reset();
+
+    for (auto& oscillator : oscillators_)
+        oscillator.reset();
+
     filter_.reset();
+    filterRight_.reset();
     envelope_.reset();
 }
 
@@ -98,11 +109,23 @@ void SynthVoice::start (int midiNote, float velocity) noexcept
     applyModulation();
     updateCutoff (true);
 
+    // Le copie partono distribuite su i/N del ciclo. Senza, al note-on sono il medesimo
+    // segnale sommato N volte: N volte piu' forte e senza un solo battimento finche' il detune
+    // non le separa, cioe' proprio il contrario di cio' che serve.
+    //
+    // Con unison 1 la fase non si tocca, ed e' deliberato: oggi start() non resetta
+    // l'oscillatore (lo fa solo kill()), quindi azzerarla qui cambierebbe il segnale di una
+    // voce che riprende uno slot del pool. La non-regressione e' strutturale, non numerica.
+    if (unisonVoices_ > 1)
+        for (int i = 0; i < unisonVoices_; ++i)
+            oscillators_[(size_t) i].resetToPhase ((float) i / (float) unisonVoices_);
+
     // Lo slot del pool puo' arrivare dalla nota precedente con i due integratori dell'SVF
     // ancora carichi: alla prima nota nuova quello stato viene reiniettato nel segnale, udibile
     // come un clic (piu' forte quanto piu' e' alta la risonanza). reset() non e' ridondante con
     // SynthVoice::reset(): quello gira solo su kill(), non a ogni note-on.
     filter_.reset();
+    filterRight_.reset();
 
     // Una nota nuova parte subito ai valori correnti: niente rampa "ereditata" dalla
     // voce precedentemente occupata da questo slot del pool.
@@ -161,10 +184,15 @@ int SynthVoice::getMidiNote() const noexcept
 
 void SynthVoice::setWavetable (const dsp::MipTable* table) noexcept
 {
-    oscillator_.setTable (table); // resetta la posizione di frame a 0 internamente
-    // Rimette subito la posizione corrente: senza questo, il cambio tavola resterebbe
-    // silenziosamente sul frame 0 fino alla prossima render(), udibile come un salto.
-    oscillator_.setFramePosition (smoothedFramePosition_.getCurrentValue());
+    // Tutte e otto anche qui: una copia che entra in servizio dopo un cambio di tavola
+    // suonerebbe altrimenti con un puntatore nullo (silenzio) o con la tavola precedente.
+    for (auto& oscillator : oscillators_)
+    {
+        oscillator.setTable (table); // resetta la posizione di frame a 0 internamente
+        // Rimette subito la posizione corrente: senza questo, il cambio tavola resterebbe
+        // silenziosamente sul frame 0 fino alla prossima render(), udibile come un salto.
+        oscillator.setFramePosition (smoothedFramePosition_.getCurrentValue());
+    }
 }
 
 void SynthVoice::setParams (const EngineParams& p) noexcept
@@ -185,6 +213,10 @@ void SynthVoice::setParams (const EngineParams& p) noexcept
 
     filter_.setType (p.filterType);
     filter_.setNumStages (p.filterStages);
+    filterRight_.setType (p.filterType);
+    filterRight_.setNumStages (p.filterStages);
+
+    updateUnison (p.unisonVoices, p.detuneCents);
 
     // Key tracking: il cutoff segue la nota. Calcolato una volta per blocco, non per campione.
     keyTrack_ = p.keyTrack;
@@ -257,7 +289,9 @@ void SynthVoice::applyModulation() noexcept
 
     baseCutoffHz_ = value (params::ParamSlot::cutoff, params_.cutoffHz, &params::cutoffHzFromRaw);
     driveGain_ = value (params::ParamSlot::drive, params_.driveGain, &params::driveGainFromRaw);
-    filter_.setResonance (value (params::ParamSlot::res, params_.resonanceQ, &params::resonanceQFromRaw));
+    const auto resonance = value (params::ParamSlot::res, params_.resonanceQ, &params::resonanceQFromRaw);
+    filter_.setResonance (resonance);
+    filterRight_.setResonance (resonance);
 
     smoothedFramePosition_.setTargetValue (
         value (params::ParamSlot::wtpos, params_.framePosition, &params::framePositionFromRaw));
@@ -272,8 +306,42 @@ void SynthVoice::applyModulation() noexcept
     if (midiNote_ >= 0)
     {
         frequencyHz_ = midiNoteToHz (midiNote_, tuningSemitones_);
-        oscillator_.setFrequencyHz (frequencyHz_);
+
+        // Il rapporto e' gia' pronto: qui c'e' una moltiplicazione per copia, non un exp2.
+        // Con unison 1 il fattore vale esattamente 1.0f, quindi la frequenza e' bit per bit
+        // quella di prima.
+        for (int i = 0; i < unisonVoices_; ++i)
+            oscillators_[(size_t) i].setFrequencyHz (frequencyHz_ * detuneRatio_[(size_t) i]);
     }
+}
+
+void SynthVoice::updateUnison (int voices, float detuneCents) noexcept
+{
+    voices = juce::jlimit (1, kMaxUnison, voices);
+
+    // exp2() e sqrt() girano solo quando uno dei due knob si muove davvero: a parametri fermi
+    // questa funzione e' due confronti per blocco e per voce.
+    // exactlyEqual e non un confronto con tolleranza: qui non si cerca "quasi lo stesso
+    // valore", si cerca "il knob non si e' mosso", e la risposta giusta a una differenza di un
+    // ulp e' ricalcolare i rapporti, non ignorarla.
+    if (voices == unisonVoices_ && juce::exactlyEqual (detuneCents, detuneCents_))
+        return;
+
+    const auto previous = unisonVoices_;
+    unisonVoices_ = voices;
+    detuneCents_ = detuneCents;
+
+    // sqrt(1) = 1 esatto: la compensazione non tocca il percorso a copia singola.
+    unisonGain_ = 1.0f / std::sqrt ((float) voices);
+
+    for (int i = 0; i < voices; ++i)
+        detuneRatio_[(size_t) i] = std::exp2 (detuneCents * unisonSpread (i, voices) / 1200.0f);
+
+    // Le copie che prima non giravano entrano in servizio adesso e la loro fase e' ferma dove
+    // l'aveva lasciata un'altra nota: si distribuiscono. Quelle gia' attive non si toccano —
+    // riazzerarne la fase sarebbe un gradino su un segnale che sta suonando.
+    for (int i = previous; i < voices; ++i)
+        oscillators_[(size_t) i].resetToPhase ((float) i / (float) voices);
 }
 
 void SynthVoice::updateCutoff (bool snap) noexcept
@@ -307,33 +375,97 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
 
     // Cutoff e posizione si aggiornano una volta per blocco: ricalcolano tan() e gli
     // indici di frame, troppo costosi per girare per campione.
-    filter_.setCutoffHz (smoothedCutoff_.skip (numSamples));
-    oscillator_.setFramePosition (smoothedFramePosition_.skip (numSamples));
+    const auto cutoffNow = smoothedCutoff_.skip (numSamples);
+    filter_.setCutoffHz (cutoffNow);
+    filterRight_.setCutoffHz (cutoffNow);
+
+    const auto positionNow = smoothedFramePosition_.skip (numSamples);
+    for (int i = 0; i < unisonVoices_; ++i)
+        oscillators_[(size_t) i].setFramePosition (positionNow);
 
     // Pan a potenza costante: se seguisse la rampa campione per campione userebbe
     // cos()/sin() per campione, vietato. Il guadagno si ricalcola quindi una sola
     // volta per blocco dal valore rampato; solo Level resta rampato per campione,
     // perché getNextValue() è una semplice interpolazione lineare, senza libm.
+    //
+    // Con l'unison diventano N coppie invece di una — le copie si distribuiscono attorno al pan
+    // della voce su kUnisonSpreadWidth — ma restano N calcoli *per blocco*, non per campione.
     const auto panNow = smoothedPan_.skip (numSamples);
-    const auto angle = (panNow * 0.5f + 0.5f) * 1.5707963f;
-    const auto gainL = std::cos (angle) * kVoiceHeadroomGain;
-    const auto gainR = std::sin (angle) * kVoiceHeadroomGain;
 
-    for (int i = 0; i < numSamples; ++i)
+    for (int i = 0; i < unisonVoices_; ++i)
     {
-        float sample = oscOn_ ? oscillator_.getSample() : 0.0f;
+        const auto position = juce::jlimit (-1.0f, 1.0f,
+                                            panNow + kUnisonSpreadWidth * unisonSpread (i, unisonVoices_));
+        const auto angle = (position * 0.5f + 0.5f) * 1.5707963f;
 
-        if (driveGain_ > 1.0f)
-            sample = saturate (sample * driveGain_);
+        // Con unison 1 lo spread vale 0, jlimit non morde (il pan e' gia' in -1..1),
+        // unisonGain_ vale 1.0f: le due righe danno gli stessi bit di prima.
+        unisonGainL_[(size_t) i] = std::cos (angle) * kVoiceHeadroomGain * unisonGain_;
+        unisonGainR_[(size_t) i] = std::sin (angle) * kVoiceHeadroomGain * unisonGain_;
+    }
 
-        if (filterOn_)
-            sample = filter_.processSample (sample);
+    if (unisonVoices_ == 1)
+    {
+        // Il percorso di prima dell'unison, riga per riga: mono fino al pan finale, un filtro
+        // solo. Non e' una duplicazione da unificare — e' cio' che rende la non-regressione una
+        // proprieta' strutturale invece di una coincidenza fra due formule che devono
+        // combaciare, lo stesso argomento di modMask_ per la modulazione.
+        const auto gainL = unisonGainL_[0];
+        const auto gainR = unisonGainR_[0];
 
-        sample *= envelope_.getNextSample();
-        sample *= smoothedLevel_.getNextValue();
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float sample = oscOn_ ? oscillators_[0].getSample() : 0.0f;
 
-        outL[i] += sample * gainL;
-        outR[i] += sample * gainR;
+            if (driveGain_ > 1.0f)
+                sample = saturate (sample * driveGain_);
+
+            if (filterOn_)
+                sample = filter_.processSample (sample);
+
+            sample *= envelope_.getNextSample();
+            sample *= smoothedLevel_.getNextValue();
+
+            outL[i] += sample * gainL;
+            outR[i] += sample * gainR;
+        }
+    }
+    else
+    {
+        // La saturazione si applica a ogni copia *prima* del pan, non alla somma: e' l'unico
+        // stadio non lineare della catena, e metterlo dopo la miscela stereo farebbe distorcere
+        // una copia in modo diverso a seconda di dove sta panpottata. Cosi' invece ogni copia
+        // suona come suonerebbe da sola, e poi si colloca nel campo.
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float left = 0.0f;
+            float right = 0.0f;
+
+            for (int u = 0; u < unisonVoices_; ++u)
+            {
+                float sample = oscOn_ ? oscillators_[(size_t) u].getSample() : 0.0f;
+
+                if (driveGain_ > 1.0f)
+                    sample = saturate (sample * driveGain_);
+
+                left += sample * unisonGainL_[(size_t) u];
+                right += sample * unisonGainR_[(size_t) u];
+            }
+
+            if (filterOn_)
+            {
+                left = filter_.processSample (left);
+                right = filterRight_.processSample (right);
+            }
+
+            // Inviluppo e livello sono per voce, non per copia: si leggono una volta sola e si
+            // applicano ai due canali. getNextSample()/getNextValue() avanzano uno stato, non
+            // sono funzioni pure — chiamarle due volte farebbe correre l'inviluppo al doppio.
+            const auto amplitude = envelope_.getNextSample() * smoothedLevel_.getNextValue();
+
+            outL[i] += left * amplitude;
+            outR[i] += right * amplitude;
+        }
     }
 
     if (! envelope_.isActive())

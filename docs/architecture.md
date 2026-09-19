@@ -72,9 +72,9 @@ The editor loads the UI with `?gutter=0`, which tells `SynthWindow` to fit the c
 
 - Instrument plugin: AU + VST3 + Standalone
 - MIDI note on/off allocates voices (16-voice pool, round-robin steal)
-- The engine is audible: a wavetable oscillator with band-limited mipmaps (`dsp::WavetableOscillator` / `dsp::MipTable`) feeds an exponential ADSR (`dsp::ADSREnvelope`) into a TPT state-variable filter (`dsp::StateVariableFilter`, 1 or 2 stages). 28 parameters are wired end to end: `oscOn`, `wtIndex`, `wtpos`, `oct`, `semi`, `fine`, `level`, `filtOn`, `ftype`, `slope`, `cutoff`, `res`, `drive`, `keytrk`, `att`, `dec`, `sus`, `rel`, `envVel`, `volume`, `pan`, `bypass`, plus the six LFO parameters `lshape`, `lrate`, `lsync`, `lphase`, `lfade`, `lretrig`
+- The engine is audible: a wavetable oscillator with band-limited mipmaps (`dsp::WavetableOscillator` / `dsp::MipTable`) feeds an exponential ADSR (`dsp::ADSREnvelope`) into a TPT state-variable filter (`dsp::StateVariableFilter`, 1 or 2 stages). 30 parameters are wired end to end: `oscOn`, `wtIndex`, `wtpos`, `oct`, `semi`, `fine`, `level`, `filtOn`, `ftype`, `slope`, `cutoff`, `res`, `drive`, `keytrk`, `att`, `dec`, `sus`, `rel`, `envVel`, `volume`, `pan`, `bypass`, plus the six LFO parameters `lshape`, `lrate`, `lsync`, `lphase`, `lfade`, `lretrig`, and `unison` / `detune`
 - The mod matrix is live: four sources (`lfo`, `env`, `vel`, `mw`) onto seven targets (`cutoff`, `res`, `wtpos`, `level`, `pan`, `fine`, `drive`), at control rate — see **Modulation** below
-- Still inert (accepted by the APVTS, no effect on sound yet): `envCurve`, `glide`, `voiceMode`, `unison`, `detune`, `warp`, `fx1On`/`ch*` (chorus), `fx2On`/`rv*` (reverb), every `arp*`
+- Still inert (accepted by the APVTS, no effect on sound yet): `envCurve`, `glide`, `voiceMode`, `warp`, `fx1On`/`ch*` (chorus), `fx2On`/`rv*` (reverb), every `arp*`
 
 ## Parameter mapping
 
@@ -87,6 +87,27 @@ This split exists because of a bug: an early version cast a denormalised `oct`/`
 **Headroom.** `Source/engine/SynthVoice.cpp` applies a fixed per-voice gain, `kVoiceHeadroomGain = 0.4f` (-8 dB), to every sample before panning — not a `1 / numVoices` divisor, which would pump the overall level up and down every time a note starts or ends. Measured at the *plugin* output (engine + default `volume` of 0.8 linear, filter at Butterworth Q): a single note at `level = 1.0` sits at -13.8 dBFS, a four-note chord at -6.0 dBFS. Both numbers come from `Tests/EngineTests.cpp`, "gain staging: una nota e un accordo normale stanno sotto il soft clipper", which also pins them below the output soft clipper's 0.8 threshold and above an audibility floor.
 
 This constant used to be `0.1f` (-20 dB), chosen when two other stages could each add uncontrolled gain: the filter multiplied its resonance peak stage by stage (see below), and `saturate()` had a small-signal slope of 1.5 so it added +3.5 dB even at drive zero. With those two fixed, -20 dB left a single note at -26 dBFS — an unusably quiet instrument. Anything that still exceeds full scale is caught by the output soft clipper rather than by keeping every voice far from it.
+
+**Unison** (`SynthVoice`, `engine::unisonSpread`). Each voice holds a fixed array of eight `WavetableOscillator`s and runs the first N, where N is 1, 2, 4 or 8 from the `unison` choice. The copies are detuned symmetrically around the note — with N = 4 and `detune` at 18 cents: −18, −6, +6, +18 — and `unisonSpread(i, N)` returns that position on −1..+1. The same function drives both the detuning and the stereo placement, which is what keeps the outermost copy outermost in both senses.
+
+Three things that are easy to get wrong and are pinned by tests:
+
+*Starting phases are spread over `i / N` of the cycle.* Without that the N copies are identical at note-on and sum in phase: √N times louder with no beating until the detuning pulls them apart. Measured at `detune = 0`, unison 8: the fundamental is 0.079× the single-copy level with spread phases, and would be 2.83× (√8) without. The spreading only happens when N > 1 — at N = 1 the phase is left alone, because `start()` does not reset the oscillator and zeroing it would change the signal of a voice taking over a pool slot.
+
+*The gain compensation is `1 / sqrt(N)`.* Summing N uncorrelated oscillators grows as the root, not linearly; without it, going from unison 1 to 8 would add about 9 dB. Measured: −20.34 dBFS RMS at unison 1 against −21.31 at unison 8.
+
+*Unison needs a second filter.* The SVF is single-in single-out. With the copies spread across the stereo field the two channels carry different mixtures, and one filter would fold them back into one — the spread would not survive the filter, which is the point of having it. `filterRight_` exists for that and never sees a sample at unison 1, so there is no stale state to restart from when unison goes up.
+
+The stereo width is fixed at ±0.6 (`kUnisonSpreadWidth`) because there is no `width` parameter and adding one would touch the UI, the presets and the generated files. At full width the outermost copies land entirely in one channel, and — more decisively — the spread adds to the voice's own `pan` before clamping to ±1, so at full width the cluster would already touch both edges with `pan` centred and **the pan knob would stop doing anything**. At 0.6 there are 0.4 of travel per side before the clamp bites. Constant-power panning makes the compensation exact regardless: over a symmetric set of positions the cos² terms sum to N·cos²(pan). Measured L/R correlation: 1.000 at unison 1, 0.847 at unison 8.
+
+**Cost.** Release build, 128-sample blocks at 48 kHz, 16 held notes, 24 dB filter at Q 2 — budget is 2.67 ms per block:
+
+| | µs/block | % of budget |
+|---|---|---|
+| unison 1 × 16 voices | 19.2 | 0.72 % |
+| unison 8 × 16 voices | 77.1 | 2.89 % |
+
+Eight times the oscillators cost four times the block, not eight: the envelope, level, master gain and soft clipper do not scale, and the filter only doubles. There is no polyphony cap.
 
 **Filter resonance** (`dsp::StateVariableFilter`). Two deliberate choices keep resonance from becoming a gain stage. First, in the 24 dB configuration the resonance sits on the *last* stage only and the first stays Butterworth: applying it to both made the peak grow as Q², over +40 dB at Q 12. Second, the filter input is attenuated by `(Qbutter / Q)^(1/32)` (`kResonanceCompensation`) — a shaving off the peak that leaves the passband where it was.
 

@@ -45,6 +45,18 @@ public:
     void prepare (double sampleRate) noexcept;
     void reset() noexcept;
 
+    /**
+     * Riparte da una fase scelta invece che da zero, 0..1 sul ciclo. Serve all'unison: N copie
+     * che partono tutte a fase zero sono lo stesso identico segnale sommato N volte — N volte
+     * piu' forte e senza un battimento finche' il detune non le separa — mentre distribuite
+     * sul ciclo si sommano subito come sorgenti distinte.
+     *
+     * Il valore viene avvolto invece che limitato: i/N con i = N e' zero, non "l'ultimo punto
+     * prima del giro", e un chiamante che sbaglia di un giro deve ottenere la stessa fase, non
+     * un estremo.
+     */
+    void resetToPhase (float normalisedPhase) noexcept;
+
     /** Tavola attiva; nullptr significa silenzio, non crash. */
     void setTable (const MipTable* table) noexcept;
 
