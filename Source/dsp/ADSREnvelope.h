@@ -32,6 +32,11 @@ public:
     void noteOff() noexcept;
 
     bool isActive() const noexcept { return stage_ != Stage::idle; }
+
+    /** Il livello corrente 0..1, senza avanzare. Serve al mod matrix: la sorgente `env` e'
+        questo inviluppo riusato come modulatore, non un secondo inviluppo dedicato (vedi
+        docs/superpowers/specs/2026-09-19-modulation-design.md). */
+    float getLevel() const noexcept { return level_; }
     float getNextSample() noexcept;
 
 private:

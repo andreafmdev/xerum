@@ -150,6 +150,29 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.pan = panFromRaw (rawFor (ParamSlot::pan));
     p.bypass = rawFor (ParamSlot::bypass) >= 0.5f;
 
+    // Le basi normalizzate dei target modulabili: nessuna conversione, e' il valore grezzo
+    // dell'APVTS. La denormalizzazione avviene dopo la somma delle modulazioni, dentro
+    // SynthVoice, con le stesse funzioni usate qui sopra.
+    p.modBase[(size_t) engine::modTargetIndexFor (ParamSlot::cutoff)] = rawFor (ParamSlot::cutoff);
+    p.modBase[(size_t) engine::modTargetIndexFor (ParamSlot::res)] = rawFor (ParamSlot::res);
+    p.modBase[(size_t) engine::modTargetIndexFor (ParamSlot::wtpos)] = rawFor (ParamSlot::wtpos);
+    p.modBase[(size_t) engine::modTargetIndexFor (ParamSlot::level)] = rawFor (ParamSlot::level);
+    p.modBase[(size_t) engine::modTargetIndexFor (ParamSlot::pan)] = rawFor (ParamSlot::pan);
+    p.modBase[(size_t) engine::modTargetIndexFor (ParamSlot::fine)] = rawFor (ParamSlot::fine);
+    p.modBase[(size_t) engine::modTargetIndexFor (ParamSlot::drive)] = rawFor (ParamSlot::drive);
+
+    constexpr auto* specLphase = params::find ("lphase");
+    constexpr auto* specLfade = params::find ("lfade");
+    static_assert (specLphase != nullptr && specLfade != nullptr,
+                   "lphase/lfade non sono in ParameterTable.h");
+
+    p.lfoShapeIndex = (int) rawFor (ParamSlot::lshape); // choice: il grezzo e' gia' l'indice
+    p.lfoRateRaw = rawFor (ParamSlot::lrate);
+    p.lfoSync = rawFor (ParamSlot::lsync) >= 0.5f;
+    p.lfoPhaseOffset01 = params::denormalise (*specLphase, rawFor (ParamSlot::lphase)) / 360.0f;
+    p.lfoFadeSeconds = params::denormalise (*specLfade, rawFor (ParamSlot::lfade)) * 0.001f;
+    p.lfoRetrig = rawFor (ParamSlot::lretrig) >= 0.5f;
+
     return p;
 }
 } // namespace params

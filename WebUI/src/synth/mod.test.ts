@@ -56,3 +56,20 @@ describe("addModPure / modsFor", () => {
     expect(SOURCE_TONE).toEqual({ lfo: "lfo", env: "env", vel: "master", mw: "filter" });
   });
 });
+
+// Stessi valori attesi del test C++ in Tests/LfoTests.cpp ("le forme d'onda coincidono con
+// lfoShape di WebUI/src/synth/mod.ts"). Se una delle due implementazioni cambia, uno dei due
+// test se ne accorge.
+describe("parità con il DSP", () => {
+  const PHASES = [0, 0.125, 0.25, 0.5, 0.75, 0.999];
+
+  it("sine, tri, saw, square, S&H seguono le formule condivise", () => {
+    for (const ph of PHASES) {
+      expect(lfoShape("Sine", ph)).toBeCloseTo(Math.sin(ph * Math.PI * 2), 5);
+      expect(lfoShape("Tri", ph)).toBeCloseTo(1 - 4 * Math.abs(ph - 0.5), 5);
+      expect(lfoShape("Saw", ph)).toBeCloseTo(1 - 2 * ph, 5);
+      expect(lfoShape("Square", ph)).toBeCloseTo(ph < 0.5 ? 1 : -1, 5);
+      expect(lfoShape("S&H", ph)).toBeCloseTo(Math.sin(Math.floor(ph * 8) * 7.3), 5);
+    }
+  });
+});

@@ -1,6 +1,9 @@
 #pragma once
 
 #include "dsp/StateVariableFilter.h"
+#include "engine/ModMatrix.h"
+
+#include <array>
 
 namespace engine
 {
@@ -33,5 +36,32 @@ struct EngineParams
 
     float pan { 0.0f };              // -1..1
     bool bypass { false };
+
+    // --- modulazione ---
+
+    /**
+     * Valori normalizzati 0..1 dei sette target modulabili, indicizzati da engine::kModTargets.
+     * Sono la base su cui SynthVoice somma depth × livello sorgente **prima** di denormalizzare:
+     * la stessa aritmetica di liveValue() in WebUI/src/synth/mod.ts, cosi' l'anello del knob
+     * nella UI e il suono raccontano la stessa storia.
+     *
+     * Convivono con i campi denormalizzati sopra e non li sostituiscono: senza nessuna route
+     * attiva il percorso resta quello di prima, campione per campione.
+     */
+    std::array<float, (size_t) kNumModTargets> modBase {};
+
+    /** Le assegnazioni attive, pubblicate dal message thread. nullptr: nessuna modulazione. */
+    const ModSnapshot* mods { nullptr };
+
+    float bpm { 120.0f };            // dal playhead dell'host; 120 quando non c'e'
+    float modWheel { 0.0f };         // CC 1, 0..1
+    float globalLfoLevel { 0.0f };   // LFO libero, usato dalle voci quando lfoRetrig e' falso
+
+    int lfoShapeIndex { 0 };
+    float lfoRateRaw { 0.0f };       // grezzo: diventa Hz o divisione a seconda di lfoSync
+    bool lfoSync { false };
+    float lfoPhaseOffset01 { 0.0f };
+    float lfoFadeSeconds { 0.0f };
+    bool lfoRetrig { true };
 };
 } // namespace engine

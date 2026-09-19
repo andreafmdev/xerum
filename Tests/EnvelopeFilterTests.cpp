@@ -163,6 +163,27 @@ struct ADSRTests final : juce::UnitTest
             expect (! env.isActive(), "sustain effettivo sotto -80 dB deve spegnere la voce");
         }
 
+        beginTest ("getLevel() ritorna il livello corrente senza avanzare l'inviluppo");
+        {
+            dsp::ADSREnvelope env;
+            env.prepare (sampleRate);
+            env.setAttackSeconds (0.1f);
+            env.setDecaySeconds (0.1f);
+            env.setSustainLevel (0.5f);
+            env.setReleaseSeconds (0.1f);
+
+            expectWithinAbsoluteError (env.getLevel(), 0.0f, 1.0e-6f);
+
+            env.noteOn (1.0f);
+            runFor (env, (int) (sampleRate * 0.05));   // meta' dell'attacco
+
+            const auto snapshot = env.getLevel();
+            expect (snapshot > 0.0f && snapshot < 1.0f, "l'inviluppo dovrebbe essere a meta' attacco");
+
+            // E' una lettura, non un passo: chiamarla due volte di fila non cambia niente.
+            expectWithinAbsoluteError (env.getLevel(), snapshot, 1.0e-9f);
+        }
+
         beginTest ("reset clears all state");
         {
             dsp::ADSREnvelope env;

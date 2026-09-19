@@ -2,6 +2,7 @@
 #include "dsp/WavetableBlob.h"
 #include "dsp/WavetableStore.h"
 #include "engine/EngineParams.h"
+#include "engine/ModMatrix.h"
 #include "engine/SynthEngine.h"
 #include "parameters/ParamCollect.h"
 #include "parameters/ParameterTable.h"
@@ -886,6 +887,71 @@ struct ParamConversionTests final : juce::UnitTest
 
     void runTest() override
     {
+        beginTest ("collectEngineParams riempie le basi normalizzate dei target modulabili");
+        {
+            // Ogni slot ritorna un valore diverso, cosi' uno scambio fra due target si vede.
+            const auto rawFor = [] (params::ParamSlot slot) noexcept
+            {
+                switch (slot)
+                {
+                    case params::ParamSlot::cutoff: return 0.11f;
+                    case params::ParamSlot::res:    return 0.22f;
+                    case params::ParamSlot::wtpos:  return 0.33f;
+                    case params::ParamSlot::level:  return 0.44f;
+                    case params::ParamSlot::pan:    return 0.55f;
+                    case params::ParamSlot::fine:   return 0.66f;
+                    case params::ParamSlot::drive:  return 0.77f;
+                    default:                        return 0.5f;
+                }
+            };
+
+            const auto p = params::collectEngineParams (rawFor);
+
+            const auto base = [&p] (params::ParamSlot slot)
+            {
+                return p.modBase[(size_t) engine::modTargetIndexFor (slot)];
+            };
+
+            expectWithinAbsoluteError (base (params::ParamSlot::cutoff), 0.11f, 1.0e-6f);
+            expectWithinAbsoluteError (base (params::ParamSlot::res), 0.22f, 1.0e-6f);
+            expectWithinAbsoluteError (base (params::ParamSlot::wtpos), 0.33f, 1.0e-6f);
+            expectWithinAbsoluteError (base (params::ParamSlot::level), 0.44f, 1.0e-6f);
+            expectWithinAbsoluteError (base (params::ParamSlot::pan), 0.55f, 1.0e-6f);
+            expectWithinAbsoluteError (base (params::ParamSlot::fine), 0.66f, 1.0e-6f);
+            expectWithinAbsoluteError (base (params::ParamSlot::drive), 0.77f, 1.0e-6f);
+
+            // I campi denormalizzati restano quelli di sempre: le basi si aggiungono, non sostituiscono.
+            expectWithinAbsoluteError (p.cutoffHz, params::cutoffHzFromRaw (0.11f), 1.0e-2f);
+        }
+
+        beginTest ("i parametri dell'LFO arrivano grezzi in EngineParams");
+        {
+            const auto rawFor = [] (params::ParamSlot slot) noexcept
+            {
+                switch (slot)
+                {
+                    case params::ParamSlot::lshape:  return 2.0f;  // choice: il grezzo e' gia' l'indice
+                    case params::ParamSlot::lrate:   return 0.45f;
+                    case params::ParamSlot::lsync:   return 1.0f;
+                    case params::ParamSlot::lphase:  return 0.25f;
+                    case params::ParamSlot::lfade:   return 0.5f;
+                    case params::ParamSlot::lretrig: return 0.0f;
+                    default:                         return 0.0f;
+                }
+            };
+
+            const auto p = params::collectEngineParams (rawFor);
+
+            expectEquals (p.lfoShapeIndex, 2);
+            expectWithinAbsoluteError (p.lfoRateRaw, 0.45f, 1.0e-6f);
+            expect (p.lfoSync);
+            // lphase e' 0..360 gradi nella tabella: in EngineParams diventa 0..1.
+            expectWithinAbsoluteError (p.lfoPhaseOffset01, 0.25f, 1.0e-6f);
+            // lfade e' 0..4000 ms: in EngineParams diventa secondi.
+            expectWithinAbsoluteError (p.lfoFadeSeconds, 2.0f, 1.0e-3f);
+            expect (! p.lfoRetrig);
+        }
+
         beginTest ("le conversioni estratte coincidono con quelle di collectEngineParams");
         {
             // Griglia fitta: una divergenza anche solo agli estremi della corsa si vede.
