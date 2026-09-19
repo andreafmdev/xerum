@@ -40,6 +40,25 @@ inline int unisonVoicesFromChoice (float rawIndex) noexcept
     }
 }
 
+/**
+ * `voiceMode` e' un AudioParameterChoice come `ftype` e `unison`: il grezzo e' gia' l'indice, e
+ * le tre opzioni sono "Poly", "Mono", "Legato" nell'ordine di engine::VoiceMode.
+ *
+ * Lo switch, invece di un cast diretto sull'intero, e' la stessa scelta di
+ * unisonVoicesFromChoice: un domani che la lista di opzioni cambiasse, qui si vedrebbe subito
+ * che va aggiornata anche questa funzione, mentre un cast avrebbe continuato a compilare
+ * mappando l'opzione nuova su un modo sbagliato.
+ */
+inline engine::VoiceMode voiceModeFromChoice (float rawIndex) noexcept
+{
+    switch ((int) rawIndex)
+    {
+        case 1:  return engine::VoiceMode::mono;
+        case 2:  return engine::VoiceMode::legato;
+        default: return engine::VoiceMode::poly;
+    }
+}
+
 /** detune 0..100 -> cent. Non e' un target modulabile: nessuna base in modBase. */
 inline float detuneCentsFromRaw (float raw) noexcept
 {
@@ -194,6 +213,19 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
 
     p.pan = panFromRaw (rawFor (ParamSlot::pan));
     p.bypass = rawFor (ParamSlot::bypass) >= 0.5f;
+
+    // Glide e modo di voce. Fino a oggi avevano "slot": false e nessuno li leggeva: i due
+    // controlli si muovevano nella UI e non succedeva niente — non una funzione mancante, una
+    // funzione rotta (punto 14 di docs/research/2026-09-19-confronto-synth-open-source.md).
+    //
+    // Passare a "slot": true sposta gli indici di params::ParamSlot ma **non** quelli esposti
+    // all'host, che sono l'ordine di kTable, cioe' del file: nessuna automazione salvata si
+    // sposta. E' la stessa manovra gia' fatta per i parametri del riverbero.
+    constexpr auto* specGlide = params::find ("glide");
+    static_assert (specGlide != nullptr, "glide non e' in ParameterTable.h");
+
+    p.glideSeconds = params::denormalise (*specGlide, rawFor (ParamSlot::glide)) * 0.001f; // la mappa e' in ms
+    p.voiceMode = voiceModeFromChoice (rawFor (ParamSlot::voiceMode));
 
     // --- stadio FX ------------------------------------------------------------------------
     // Fino a oggi questi quattro avevano "slot": false e il motore non li leggeva: il tab FX

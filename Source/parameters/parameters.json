@@ -25,10 +25,10 @@
     { "id": "drive",   "name": "Drive", "group": "filter", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 24 }, "default": 0, "unit": "dB", "decimals": 1 },
     { "id": "keytrk",  "name": "Key trk", "group": "filter", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.5, "unit": "%", "decimals": 0 },
 
-    { "id": "voiceMode", "name": "Voice mode", "group": "master", "kind": "choice", "slot": false, "default": 0,
+    { "id": "voiceMode", "name": "Voice mode", "group": "master", "kind": "choice", "slot": true, "default": 0,
       "options": [ { "value": "Poly", "label": "Poly" }, { "value": "Mono", "label": "Mono" }, { "value": "Legato", "label": "Legato" } ] },
     { "id": "pan",     "name": "Pan", "group": "master", "kind": "float", "slot": true, "map": { "type": "linear", "min": -50, "max": 50 }, "default": 0.5, "decimals": 0, "labelKind": "pan", "bipolar": true },
-    { "id": "glide",   "name": "Glide", "group": "master", "kind": "float", "slot": false, "map": { "type": "ms-squared", "min": 0, "max": 2000 }, "default": 0, "unit": "ms", "decimals": 0 },
+    { "id": "glide",   "name": "Glide", "group": "master", "kind": "float", "slot": true, "map": { "type": "ms-squared", "min": 0, "max": 2000 }, "default": 0, "unit": "ms/oct", "decimals": 0 },
     { "id": "volume",  "name": "Volume", "group": "master", "kind": "float", "slot": false, "map": { "type": "db", "min": 0, "max": 1 }, "default": 0.8, "unit": "dB", "decimals": 1 },
     { "id": "bypass",  "name": "Bypass", "group": "master", "kind": "bool", "slot": true, "default": false },
 

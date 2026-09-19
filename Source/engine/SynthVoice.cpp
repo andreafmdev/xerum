@@ -35,10 +35,20 @@ constexpr double kSmoothingSeconds = 0.02;
 // "gain staging: una nota e un accordo normale stanno sotto il soft clipper".
 constexpr float kVoiceHeadroomGain = 0.71f; // 10^(-3/20)
 
-float midiNoteToHz (int note, float offsetSemitones) noexcept
+/**
+ * Il numero di nota e' un **float** e non un intero, e non e' un allargamento di comodo: e' il
+ * punto in cui il glide entra nella catena.
+ *
+ * Con `note` uguale a `(float) midiNote_` — cioe' fuori da un glide, e sempre quando `glide` sta
+ * a zero — l'espressione e' esattamente quella di prima, stesse operazioni nello stesso ordine
+ * sugli stessi valori: il risultato ha gli stessi bit. La nota frazionaria e' quindi una strada
+ * in piu' che si apre, non una strada diversa per chi passava di qui gia' prima.
+ */
+float midiNoteToHz (float note, float offsetSemitones) noexcept
 {
-    // std::pow gira solo a note-on, mai per campione: niente libm nel loop audio.
-    return 440.0f * std::pow (2.0f, ((float) note + offsetSemitones - 69.0f) / 12.0f);
+    // std::pow gira una volta per sotto-fetta di controllo, mai per campione: niente libm nel
+    // loop audio.
+    return 440.0f * std::pow (2.0f, (note + offsetSemitones - 69.0f) / 12.0f);
 }
 } // namespace
 
@@ -79,6 +89,14 @@ void SynthVoice::reset() noexcept
     velocity_ = 0.0f;
     released_ = false;
 
+    // Posizione ferma all'arrivo e nota interpolata a zero: una voce spenta non sta gliddando,
+    // e il primo start() riscrivera' comunque tutti e quattro i numeri prima che qualcuno li
+    // legga. L'uno e' l'identita' del glide come 1.0f lo e' della dissolvenza del furto.
+    glideSourceNote_ = 0.0f;
+    glideTargetNote_ = 0.0f;
+    glideNote_ = 0.0f;
+    glidePosition_ = 1.0f;
+
     // L'identita' moltiplicativa, non uno zero: e' questo che rende `x * fadeGain_` trasparente
     // sul percorso normale. startOrder_ invece non si tocca — vedi la sua dichiarazione.
     fading_ = false;
@@ -109,6 +127,15 @@ void SynthVoice::start (int midiNote, float velocity, unsigned long long startOr
     velocity_ = velocity;
     startOrder_ = startOrder;
     released_ = false;
+
+    // Una nota nuova parte alla propria altezza: il glide di partenza, quando c'e', lo arma
+    // VoiceManager subito dopo con glideFrom(), perche' e' li' che si sa quale fosse l'ultima
+    // nota suonata — un dato fra voci, non di questa voce. Qui si azzera la coda di un glide
+    // lasciato a meta' dalla nota che occupava questo slot del pool.
+    glideSourceNote_ = (float) midiNote;
+    glideTargetNote_ = (float) midiNote;
+    glideNote_ = (float) midiNote;
+    glidePosition_ = 1.0f;
 
     // Uno slot appena liberato da una dissolvenza e' gia' a posto (reset() l'ha rimessa a uno),
     // ma uno slot la cui *dissolvenza non era ancora finita quando l'inviluppo si e' spento*
@@ -198,6 +225,108 @@ void SynthVoice::retrigger (float velocity) noexcept
     active_ = true;
 }
 
+void SynthVoice::beginGlide (float fromNote) noexcept
+{
+    glideTargetNote_ = (float) midiNote_;
+
+    // La distanza decide sia se il glide esista sia quanto duri: e' tutto il constant rate.
+    const auto distance = std::abs (glideTargetNote_ - fromNote);
+
+    // Due bypass, e sono lo stesso ramo per due ragioni diverse. `glide` a zero (il default)
+    // spegne la funzione; una distanza nulla vuol dire che non c'e' niente da percorrere — e
+    // senza questa meta' l'incremento sarebbe una divisione per zero travestita da infinito.
+    if (glideSeconds_ <= kGlideMinSeconds || distance <= 0.0f)
+    {
+        glideSourceNote_ = glideTargetNote_;
+        glideNote_ = glideTargetNote_;
+        glidePosition_ = 1.0f;
+        return;
+    }
+
+    glideSourceNote_ = fromNote;
+    glideNote_ = fromNote;
+    glidePosition_ = 0.0f;
+}
+
+void SynthVoice::advanceGlide (int numSamples) noexcept
+{
+    // Il caso normale, e quello che deve costare zero: nessun glide in corso. Un confronto fra
+    // float e la funzione e' finita, e nessuna riga sotto ha toccato la frequenza.
+    if (glidePosition_ >= 1.0f)
+        return;
+
+    if (glideSeconds_ <= kGlideMinSeconds)
+    {
+        // Il knob e' stato portato a zero a glide in corso: si arriva subito invece di
+        // proseguire con il tempo di prima. Lo scatto d'intonazione e' cio' che l'utente ha
+        // appena chiesto.
+        glidePosition_ = 1.0f;
+        glideNote_ = glideTargetNote_;
+        return;
+    }
+
+    const auto distance = std::abs (glideTargetNote_ - glideSourceNote_);
+
+    // La posizione avanza di numSamples / (T' * fs) con T' = glideSeconds_ * distanza / 12,
+    // cioe' di numSamples * 12 / (glideSeconds_ * distanza * fs). E' la stessa ricorrenza di
+    // Vital (portamento_slope.cpp), con in piu' il fattore di scala del constant rate.
+    const auto step = (float) ((double) numSamples * 12.0
+                               / ((double) glideSeconds_ * (double) distance * sampleRate_));
+
+    glidePosition_ = juce::jmin (1.0f, glidePosition_ + step);
+
+    // All'arrivo si prende il bersaglio esatto invece del risultato dell'interpolazione: a
+    // posizione 1 `source + 1 * (target - source)` e' giusto in aritmetica reale ma puo'
+    // arrivare a un ulp di distanza in float, e quell'ulp resterebbe li' per tutta la nota.
+    glideNote_ = glidePosition_ >= 1.0f
+                     ? glideTargetNote_
+                     : glideSourceNote_ + glidePosition_ * (glideTargetNote_ - glideSourceNote_);
+}
+
+void SynthVoice::glideToNote (int midiNote, bool glide) noexcept
+{
+    // La sorgente e' dove la voce sta **adesso**, glide interrotto compreso: vedi il commento
+    // della dichiarazione. Va letta prima di riscrivere midiNote_, perche' beginGlide() prende
+    // il bersaglio da li'.
+    //
+    // Il salto si ottiene passando a beginGlide() la nota d'arrivo come partenza: distanza zero,
+    // e il bypass che c'e' gia' fa il resto. Nessun secondo percorso da tenere allineato.
+    const auto from = glide ? glideNote_ : (float) midiNote;
+
+    midiNote_ = midiNote;
+    beginGlide (from);
+    updatePitch();
+
+    // Il cutoff **non** si snappa: la voce sta suonando, e il keytracking deve seguire la stessa
+    // rampa del glide invece di saltare alla nota d'arrivo. updateCutoff(false) gira comunque
+    // alla prossima sotto-fetta, con la nota interpolata.
+}
+
+void SynthVoice::glideFrom (float sourceNote) noexcept
+{
+    beginGlide (sourceNote);
+    updatePitch();
+
+    // Qui invece si snappa, ed e' l'opposto del caso sopra per la stessa ragione: start() ha
+    // appena portato lo smoother del cutoff sulla nota d'arrivo, e senza questa riga il
+    // keytracking partirebbe da li' per tornare indietro alla nota di partenza del glide.
+    updateCutoff (true);
+}
+
+void SynthVoice::updatePitch() noexcept
+{
+    if (midiNote_ < 0)
+        return;
+
+    frequencyHz_ = midiNoteToHz (glideNote_, tuningSemitones_);
+
+    // Il rapporto e' gia' pronto: qui c'e' una moltiplicazione per copia, non un exp2.
+    // Con unison 1 il fattore vale esattamente 1.0f, quindi la frequenza e' bit per bit
+    // quella di prima.
+    for (int i = 0; i < unisonVoices_; ++i)
+        oscillators_[(size_t) i].setFrequencyHz (frequencyHz_ * detuneRatio_[(size_t) i]);
+}
+
 void SynthVoice::stop() noexcept
 {
     envelope_.noteOff();
@@ -269,6 +398,12 @@ void SynthVoice::setParams (const EngineParams& p) noexcept
 
     // Key tracking: il cutoff segue la nota. Calcolato una volta per blocco, non per campione.
     keyTrack_ = p.keyTrack;
+
+    // Il tempo del glide si copia e basta: non arma niente e non cambia un glide gia' in corso
+    // se non attraverso advanceGlide(), che ricalcola l'incremento da qui a ogni sotto-fetta.
+    // Il modo di voce invece non arriva alla voce: e' VoiceManager a deciderlo, perche' riguarda
+    // *quale* voce prende una nota, non come una voce suona.
+    glideSeconds_ = p.glideSeconds;
 
     // La maschera dei target che hanno almeno una route: si costruisce qui, una volta per
     // blocco, cosi' applyModulation() non deve riscorrere la lista per ognuno dei sette.
@@ -430,16 +565,12 @@ void SynthVoice::applyModulation() noexcept
 
     // Il vibrato ha senso solo se l'intonazione segue la modulazione anche a nota gia' partita:
     // senza questo, una route su `fine` cambierebbe solo l'accordatura delle note successive.
-    if (midiNote_ >= 0)
-    {
-        frequencyHz_ = midiNoteToHz (midiNote_, tuningSemitones_);
-
-        // Il rapporto e' gia' pronto: qui c'e' una moltiplicazione per copia, non un exp2.
-        // Con unison 1 il fattore vale esattamente 1.0f, quindi la frequenza e' bit per bit
-        // quella di prima.
-        for (int i = 0; i < unisonVoices_; ++i)
-            oscillators_[(size_t) i].setFrequencyHz (frequencyHz_ * detuneRatio_[(size_t) i]);
-    }
+    //
+    // Glide e modulazione di `fine` si **compongono** invece di escludersi, ed e' una proprieta'
+    // di come sono scritti: il glide muove il numero di nota, `fine` muove tuningSemitones_, e
+    // updatePitch() li somma. Un vibrato su una nota che sta gliddando oscilla attorno al punto
+    // in cui il glide e' arrivato, che e' cio' che fa un dito su una tastata.
+    updatePitch();
 }
 
 void SynthVoice::updateUnison (int voices, float detuneCents) noexcept
@@ -474,7 +605,12 @@ void SynthVoice::updateUnison (int voices, float detuneCents) noexcept
 void SynthVoice::updateCutoff (bool snap) noexcept
 {
     // A keyTrack 1 il cutoff raddoppia per ottava sopra il DO centrale.
-    const auto offsetSemitones = keyTrack_ * (float) (midiNote_ - 60);
+    //
+    // La nota e' quella **suonata**, glide compreso: durante un glide il filtro sale insieme
+    // all'intonazione invece di essere gia' arrivato. Fuori da un glide glideNote_ e'
+    // esattamente (float) midiNote_ e la sottrazione da' lo stesso identico float di prima —
+    // i piccoli interi sono esatti in binario — quindi il percorso senza glide non cambia.
+    const auto offsetSemitones = keyTrack_ * (glideNote_ - 60.0f);
     const auto target = baseCutoffHz_ * std::exp2 (offsetSemitones / 12.0f);
 
     if (snap)
@@ -490,6 +626,14 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
 
     if (lfoRetrig_)
         lfo_.advance (numSamples);
+
+    // Il glide avanza **prima** di applyModulation(), non dopo: quella legge glideNote_ per
+    // calcolare la frequenza, e leggerlo dopo vorrebbe dire suonare ogni sotto-fetta con la
+    // nota della sotto-fetta precedente. Come per l'LFO, il passo e' in campioni: il tasso e'
+    // quello delle sotto-fette di controllo (32 campioni, 1500 Hz a 48 kHz), non quello del
+    // buffer che passa l'host, quindi lo stesso glide dura lo stesso a qualunque dimensione di
+    // blocco. Senza glide in corso e' un solo confronto.
+    advanceGlide (numSamples);
 
     // La modulazione si valuta qui e non in setParams() per una ragione sola: `env` e `vel`
     // sono sorgenti per voce e cambiano *dentro* il blocco (un note-on arriva a meta' buffer),

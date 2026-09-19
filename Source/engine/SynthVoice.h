@@ -157,6 +157,19 @@ inline constexpr float kStealFadeSeconds = 0.008f;
  */
 inline constexpr float kStealFadeFloor = 1.0e-4f;
 
+/**
+ * Sotto questo tempo il glide non esiste: la nota nuova arriva subito.
+ *
+ * E' la soglia di Vital (`portamento_slope.cpp`: sotto un millisecondo la pendenza va in
+ * bypass), e serve a due cose diverse. La prima e' numerica: l'incremento per campione e'
+ * `12 / (T * |dnota| * fs)`, e con T che tende a zero tende all'infinito — un ramo di bypass
+ * costa meno di una guardia su un quoziente enorme. La seconda e' che a `glide` = 0, cioe' il
+ * default del parametro, il bypass e' *l'unica* cosa che rende il percorso bit per bit quello
+ * di prima: la posizione resta ferma a 1, la nota interpolata e' esattamente `(float) midiNote_`
+ * e midiNoteToHz calcola gli stessi identici bit.
+ */
+inline constexpr float kGlideMinSeconds = 0.001f;
+
 /** Single synth voice: legge una EngineParams per blocco e sintetizza. */
 class SynthVoice
 {
@@ -178,6 +191,49 @@ public:
     void retrigger (float velocity) noexcept;
     void stop() noexcept;
     void kill() noexcept;
+
+    /**
+     * Cambia la nota di una voce che sta gia' suonando: e' il cambio d'intonazione del mono e
+     * del legato, e il glide — se c'e' — parte da dove la voce si trova **adesso**.
+     *
+     * "Adesso" e non "dalla nota nominale precedente": se il glide precedente era a meta'
+     * strada, la sorgente del nuovo e' il punto intermedio, non il capolinea che non e' mai
+     * stato raggiunto. E' il comportamento di Surge (`update_portamento` conserva `portaphase`
+     * e `portasrc_key` correnti), ed e' cio' che rende continuo un trillo suonato piu' veloce
+     * del tempo di glide: senza, ogni nota nuova salterebbe indietro all'ultima nota nominale.
+     *
+     * Non tocca ne' l'inviluppo, ne' la fase, ne' il filtro: chi vuole anche il ritrigger
+     * chiama retrigger() dopo. La separazione fra i due e' esattamente la differenza fra Mono e
+     * Legato, e sta in VoiceManager.
+     *
+     * Con `glide` falso l'intonazione salta: e' il caso in cui la nota nuova non e' legata alla
+     * precedente (vedi VoiceManager::canGlideFromLastNote). Non e' la stessa cosa di `glide`
+     * vero con il knob a zero solo perche' il risultato coincide: li' e' il parametro a dire di
+     * no, qui e' il modo di suonare.
+     */
+    void glideToNote (int midiNote, bool glide) noexcept;
+
+    /**
+     * Fa partire la nota gia' avviata da `sourceNote` invece che dalla propria altezza: e' il
+     * glide **poly**, dove ogni voce nuova scivola dall'ultima nota suonata alla propria.
+     *
+     * Si chiama dopo start(), non al suo posto: start() e' il percorso che azzera il filtro,
+     * risincronizza le rampe e fa partire gli inviluppi, e nessuna di quelle decisioni cambia
+     * per via del glide. Qui si riscrive solo l'altezza da cui la voce parte.
+     */
+    void glideFrom (float sourceNote) noexcept;
+
+    /** La nota **suonata** in questo istante, in numero di nota frazionario: durante un glide
+        sta fra la sorgente e il bersaglio, altrove coincide con getMidiNote(). E' il numero su
+        cui si interpola — non la frequenza — ed e' quello che i test misurano. */
+    float getGlideNote() const noexcept { return glideNote_; }
+
+    /** Vero finche' il glide non e' arrivato. Falso a glide spento: la posizione parte da 1. */
+    bool isGliding() const noexcept { return glidePosition_ < 1.0f; }
+
+    /** La frequenza della copia base dell'unison, in hertz: il detune delle altre copie e'
+        relativo a questa. La leggono i test per verificare l'interpolazione. */
+    float getFrequencyHz() const noexcept { return frequencyHz_; }
 
     /**
      * La voce e' stata rubata: smette di contare per la polifonia e scende a zero in
@@ -255,6 +311,34 @@ public:
 private:
     void updateCutoff (bool snap) noexcept;
 
+    /**
+     * Arma un glide da `fromNote` alla nota corrente, o lo salta se non c'e' niente da fare.
+     *
+     * **Constant rate**: il tempo vero non e' `glideSeconds_`, e' `glideSeconds_ * |dnota| / 12`
+     * — il knob dice quanto dura un'**ottava**. Costa la moltiplicazione che si vede qui sotto,
+     * e ce l'hanno sia Vital (`kPortamentoScale`) sia Surge (`porta_constrate`), perche' e' cio'
+     * che rende il glide musicale su intervalli diversi: a tempo fisso un semitono e due ottave
+     * ci mettono lo stesso, cioe' il semitono striscia e il salto sembra istantaneo. A rate
+     * costante la velocita' in semitoni al secondo e' la stessa, che e' quello che fa una mano
+     * su una corda.
+     *
+     * L'incremento **non** viene memorizzato: advanceGlide() lo ricalcola da glideSeconds_ e
+     * dagli estremi a ogni sotto-fetta. Costa una divisione per voce e solo mentre un glide e'
+     * in corso, e in cambio muovere il knob a nota tenuta ha effetto subito invece che dalla
+     * prossima nota — che e' il comportamento che ci si aspetta da un knob.
+     */
+    void beginGlide (float fromNote) noexcept;
+
+    /** Avanza la posizione del glide di `numSamples` e ricalcola la nota interpolata. Gira una
+        volta per sotto-fetta di controllo, come tutto il resto: le fette valgono al piu'
+        SynthEngine::kControlBlockSamples, quindi 1500 Hz a 48 kHz. */
+    void advanceGlide (int numSamples) noexcept;
+
+    /** Riporta la frequenza degli oscillatori alla nota suonata (glide + accordatura). E' la
+        coda di applyModulation(), estratta perche' anche glideFrom() e glideToNote() devono
+        poterla richiamare senza rifare tutta la modulazione. */
+    void updatePitch() noexcept;
+
     /** Ricalcola rapporti di detune e guadagno di compensazione. Gira solo quando `unison` o
         `detune` cambiano davvero: exp2() non ha niente da fare in un loop per campione. */
     void updateUnison (int voices, float detuneCents) noexcept;
@@ -282,6 +366,35 @@ private:
     /** Il tasto e' stato lasciato: lo sa questa classe perche' ADSREnvelope non espone lo
         stadio in cui si trova. Falso a ogni start()/retrigger(), vero a stop(). */
     bool released_ { false };
+
+    // --- glide ---
+
+    /**
+     * I quattro numeri del glide, e il motivo per cui si interpola il **numero di nota** e non
+     * la frequenza in hertz.
+     *
+     * L'orecchio sente l'altezza in logaritmo della frequenza: un'ottava e' un'ottava sia fra 100
+     * e 200 Hz sia fra 1000 e 2000. Interpolare linearmente in hertz — che e' cio' che fa Odin 2,
+     * con un polo singolo sulla frequenza — vuol dire che a meta' strada fra DO3 e DO4 si sente
+     * il SOL e non il FA#, che un glide in su e uno in giu' sullo stesso intervallo hanno forme
+     * percettive diverse, e che il tempo d'arrivo percepito dipende da dove si parte. Vital,
+     * Surge, Serum e Diva interpolano tutti in numero di nota; qui non costa nulla, perche'
+     * midiNoteToHz prende gia' un offset frazionario per il fine tuning e l'esponenziale gira
+     * comunque una volta per sotto-fetta.
+     *
+     * A riposo `glidePosition_` vale esattamente 1 e `glideNote_` esattamente `(float) midiNote_`:
+     * advanceGlide() esce al primo confronto e la frequenza calcolata e' bit per bit quella di
+     * prima che il glide esistesse. E' lo stesso argomento di fadeGain_ per il furto — il
+     * percorso spento non e' "quasi" trasparente, e' l'identita'.
+     */
+    float glideSourceNote_ { 0.0f };
+    float glideTargetNote_ { 0.0f };
+    float glideNote_ { 0.0f };
+    float glidePosition_ { 1.0f };
+
+    /** Il tempo del glide per **ottava**, in secondi, copiato da EngineParams a ogni blocco.
+        Vedi EngineParams::glideSeconds e beginGlide() per il perche' di "per ottava". */
+    float glideSeconds_ { 0.0f };
 
     // --- furto ---
 

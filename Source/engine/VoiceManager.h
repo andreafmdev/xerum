@@ -128,7 +128,127 @@ public:
         Indice fuori range: la voce zero, che e' sempre un oggetto valido. */
     const SynthVoice& getVoice (int index) const noexcept;
 
+    /** Quante note sono fisicamente premute in questo momento, secondo la lista dei tasti
+        tenuti. In Poly non viene aggiornata: e' un dato che serve solo ai due modi monofonici. */
+    int countHeld() const noexcept { return held_.count; }
+
 private:
+    /**
+     * I tasti premuti, nell'ordine in cui sono stati premuti, a capacita' fissa.
+     *
+     * Serve ai due modi monofonici e a nient'altro: quando si lascia il tasto che sta suonando
+     * e un altro e' ancora giu', la voce deve tornare su quest'ultimo invece di spegnersi. E'
+     * il modello di Odin 2 (`PluginProcessorMidi.cpp`), che e' anche quello con cui una mano
+     * suona: l'ultimo premuto e' quello che si sente, e lasciandolo si torna al precedente.
+     *
+     * Array e contatore, niente std::vector e niente std::deque: questa struttura viene scritta
+     * dal thread audio a ogni nota, e un'allocazione li' dentro e' vietata. Sedici e' la stessa
+     * capacita' della polifonia — non ha senso poter tenere piu' tasti di quante note il
+     * sintetizzatore sappia suonare — e a tastiera piena il piu' vecchio viene scartato invece
+     * di far crescere l'array: e' il tasto di cui l'esecutore si e' gia' dimenticato.
+     *
+     * La velocity viaggia insieme alla nota perche' il ritorno al tasto precedente, in Mono,
+     * ritriggera l'inviluppo: senza, ripartirebbe con la velocity della nota appena lasciata,
+     * cioe' di un tasto che non e' piu' premuto.
+     */
+    struct HeldNotes
+    {
+        struct Key { int note { -1 }; float velocity { 0.0f }; };
+
+        std::array<Key, (size_t) maxVoices> keys {};
+        int count { 0 };
+
+        /** Ribattere un tasto gia' premuto lo **sposta** in cima invece di duplicarlo: la lista
+            deve restare un insieme, altrimenti un note-off solo ne lascerebbe dentro una copia
+            e la voce tornerebbe su una nota che nessuno sta piu' tenendo. */
+        void add (int note, float velocity) noexcept
+        {
+            remove (note);
+
+            if (count == maxVoices)
+            {
+                for (int i = 1; i < count; ++i)
+                    keys[(size_t) (i - 1)] = keys[(size_t) i];
+
+                --count;
+            }
+
+            keys[(size_t) count++] = { note, velocity };
+        }
+
+        /** Toglie il tasto, se c'e'. Vero se c'era. */
+        bool remove (int note) noexcept
+        {
+            for (int i = 0; i < count; ++i)
+                if (keys[(size_t) i].note == note)
+                {
+                    for (int j = i + 1; j < count; ++j)
+                        keys[(size_t) (j - 1)] = keys[(size_t) j];
+
+                    --count;
+                    return true;
+                }
+
+            return false;
+        }
+
+        /** L'ultimo premuto: quello che si sente. `note` vale -1 con la lista vuota. */
+        Key last() const noexcept { return count > 0 ? keys[(size_t) (count - 1)] : Key {}; }
+
+        void clear() noexcept { count = 0; }
+    };
+
+    /** Il ramo monofonico di noteOn/noteOff: una voce sola, la lista dei tasti, e il ritrigger
+        dell'inviluppo che c'e' in Mono e non in Legato. */
+    void monoNoteOn (int midiNote, float velocity) noexcept;
+    void monoNoteOff (int midiNote) noexcept;
+
+    /**
+     * Se la nota che sta per partire debba scivolare da `lastStartedNote_` o cominciare alla
+     * propria altezza. Va chiamata **prima** di aggiungere la nota nuova a `held_`.
+     *
+     * E' il `kPortamentoForce` di Vital con force spento, che e' il suo default: il glide si
+     * applica solo fra note **legate**, non a ogni nota. Le tre condizioni sono tutte
+     * necessarie, e ognuna toglie di mezzo un caso che altrimenti suonerebbe sbagliato.
+     *
+     * 1. `lastStartedNote_ >= 0` — deve esserci una nota da cui partire. La prima nota dopo un
+     *    reset non ce l'ha.
+     *
+     * 2. `held_.count > 0` — un tasto dev'essere gia' premuto. Senza questa, una nota suonata
+     *    dieci secondi dopo l'ultima scivolerebbe comunque da quella: un glissando che arriva
+     *    dal nulla, in mezzo a un silenzio, su una frase nuova che non c'entra niente con la
+     *    precedente. E' la condizione che descrive il *legato* come lo intende una mano.
+     *
+     * 3. `soundedSinceLastNoteOn_` — la nota precedente dev'essere stata **suonata**, cioe'
+     *    dev'essere passato almeno un campione dal suo note-on. Questa e' la meta' meno ovvia,
+     *    e senza di lei la seconda non basta: le note di un accordo arrivano come note-on
+     *    consecutivi senza nessun render in mezzo, quindi quando la seconda entra la prima
+     *    risulta gia' "premuta" e l'accordo partirebbe smerdato — ogni nota che scivola dalla
+     *    precedente, con un ritardo d'intonazione che nessuno ha chiesto. Un accordo non e' una
+     *    sequenza di note legate: e' un evento solo, e un glide da una nota che non ha ancora
+     *    emesso un campione e' un glide da qualcosa che non si e' sentito.
+     *
+     * L'alternativa — glide **sempre**, anche dopo il silenzio e dentro un accordo — esiste ed
+     * e' un `bool glideForce` in EngineParams piu' un `||` qui dentro. Non e' esposta adesso
+     * perche' vorrebbe dire un parametro in piu' in parameters.json, quindi un controllo in piu'
+     * nella UI e un giro di generazione, per un'opzione che in Vital e' spenta di default e che
+     * nessuno ci ha chiesto: il caso che serve davvero e' il glide fra note legate, e quello c'e'.
+     */
+    bool canGlideFromLastNote() const noexcept
+    {
+        return lastStartedNote_ >= 0 && held_.count > 0 && soundedSinceLastNoteOn_;
+    }
+
+    /** Registra che una nota e' partita: da qui in poi si riparte a contare i campioni resi. */
+    void noteStarted (int midiNote) noexcept
+    {
+        lastStartedNote_ = midiNote;
+        soundedSinceLastNoteOn_ = false;
+    }
+
+    /** La voce che i modi monofonici stanno usando, o nullptr se non ce n'e' piu' una viva. */
+    SynthVoice* monoVoice() noexcept;
+
     SynthVoice* findFreeVoice() noexcept;
     SynthVoice* findVoiceForNote (int midiNote) noexcept;
 
@@ -164,5 +284,42 @@ private:
      * sarebbero confrontabili. A 64 bit non torna mai indietro (vedi SynthVoice::startOrder_).
      */
     unsigned long long nextStartOrder_ { 1 };
+
+    // --- glide e modi di voce ---
+
+    /** Poly finche' qualcuno non dice il contrario: setParams() lo aggiorna una volta per blocco. */
+    VoiceMode mode_ { VoiceMode::poly };
+
+    HeldNotes held_ {};
+
+    /**
+     * Lo slot del pool che i modi monofonici stanno usando, -1 se nessuno.
+     *
+     * Un indice e non un puntatore: gli slot non si spostano mai, ma un indice si confronta con
+     * -1 senza che ci sia un oggetto a cui puntare, e sopravvive a un reset() del pool senza
+     * restare appeso.
+     */
+    int monoVoiceIndex_ { -1 };
+
+    /**
+     * L'ultima nota **avviata**, per il glide in Poly: una voce nuova scivola da li' alla
+     * propria, come fa Vital.
+     *
+     * Sta qui e non dentro SynthVoice per la stessa ragione di nextStartOrder_: e' un dato che
+     * mette in relazione due note diverse, e quindi due voci diverse, e una voce non puo'
+     * conoscerlo da sola. Vale -1 finche' non e' stata suonata nessuna nota — la prima nota
+     * dopo un reset() non ha da dove scivolare e parte alla propria altezza.
+     */
+    int lastStartedNote_ { -1 };
+
+    /**
+     * Se sia stato reso almeno un campione dall'ultimo note-on. Vedi canGlideFromLastNote(): e'
+     * cio' che distingue una nota legata a quella prima da una nota dello stesso accordo.
+     *
+     * Un bool e non un contatore: la domanda e' "e' passato del tempo?", non "quanto". E lo
+     * alza render(), cioe' l'unico posto in cui del tempo passa davvero — non setParams(), che
+     * gira una volta per blocco anche se poi non si rende niente.
+     */
+    bool soundedSinceLastNoteOn_ { false };
 };
 } // namespace engine

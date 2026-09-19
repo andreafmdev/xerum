@@ -8,6 +8,21 @@
 namespace engine
 {
 /**
+ * Come il pool di voci reagisce a una nota nuova. E' il choice `voiceMode`, nello stesso ordine
+ * delle sue tre opzioni: l'indice grezzo dell'APVTS e' direttamente questo enum.
+ *
+ * - `poly`: com'e' sempre stato, una voce per nota fino a VoiceManager::maxVoices.
+ * - `mono`: una voce sola, e una nota nuova **ritriggera** l'inviluppo.
+ * - `legato`: una voce sola, e una nota nuova suonata mentre un'altra e' ancora tenuta **non**
+ *   ritriggera l'inviluppo: cambia solo l'intonazione, con il glide se e' attivo.
+ *
+ * La differenza fra i due modi monofonici e' quindi una sola riga, e riguarda solo il caso in
+ * cui un altro tasto sia gia' premuto: con nessun tasto premuto (la nota precedente e' in
+ * release) anche il legato ritriggera, perche' non c'e' niente a cui legarsi.
+ */
+enum class VoiceMode { poly = 0, mono = 1, legato = 2 };
+
+/**
  * I parametri già denormalizzati, riempiti una volta per blocco dal processore.
  * Le voci leggono questa struct: nessun atomico e nessuna mappatura per campione.
  */
@@ -54,6 +69,28 @@ struct EngineParams
 
     float pan { 0.0f };              // -1..1
     bool bypass { false };
+
+    // --- glide e modo di voce ---
+
+    /**
+     * Quanto dura il glide **per ottava**, in secondi. Zero (il default del parametro `glide`)
+     * lo spegne del tutto.
+     *
+     * "Per ottava" e non "per salto": il tempo vero e' `glideSeconds * |dnota| / 12`, cioe' il
+     * *constant rate* di Vital (`kPortamentoScale`) e di Surge (`porta_constrate`). Con un tempo
+     * fisso un semitono e due ottave impiegherebbero lo stesso, il che suona sbagliato non
+     * appena l'intervallo cambia dentro una frase. La motivazione per esteso sta accanto a
+     * SynthVoice::beginGlide(), e l'unita' del parametro lo dice: "ms/oct".
+     *
+     * Un tempo diverso da zero non basta a far scivolare *ogni* nota: il glide si applica solo
+     * fra note legate. Chi decide e' VoiceManager::canGlideFromLastNote(), che e' anche dove sta
+     * scritto perche'.
+     */
+    float glideSeconds { 0.0f };
+
+    /** Poly, Mono o Legato. Il default e' `poly`: e' il valore che rende questa struct, usata
+        come punto di partenza dai test scritti a mano, identica a com'era prima del glide. */
+    VoiceMode voiceMode { VoiceMode::poly };
 
     // --- stadio FX ---
 
