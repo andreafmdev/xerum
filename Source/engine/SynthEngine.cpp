@@ -219,6 +219,14 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
         slot.store (on ? (current | bit) : (current & ~bit), std::memory_order_relaxed);
     };
 
+    // Il panico (all-notes-off e all-sound-off) azzera il mask per intero: gemella di
+    // setNoteBit, condivisa fra i due rami sotto perche' e' lo stesso azzeramento.
+    const auto clearNoteMask = [this]() noexcept
+    {
+        activeNotesLo_.store (0, std::memory_order_relaxed);
+        activeNotesHi_.store (0, std::memory_order_relaxed);
+    };
+
     if (message.isNoteOn())
     {
         voices_.noteOn (message.getNoteNumber(), message.getFloatVelocity());
@@ -232,14 +240,12 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
     else if (message.isAllNotesOff())
     {
         voices_.allNotesOff();
-        activeNotesLo_.store (0, std::memory_order_relaxed);
-        activeNotesHi_.store (0, std::memory_order_relaxed);
+        clearNoteMask();
     }
     else if (message.isAllSoundOff())
     {
         voices_.allSoundOff();
-        activeNotesLo_.store (0, std::memory_order_relaxed);
-        activeNotesHi_.store (0, std::memory_order_relaxed);
+        clearNoteMask();
     }
 }
 
