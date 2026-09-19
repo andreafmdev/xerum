@@ -91,6 +91,7 @@ target_sources(XerumTests
         Tests/EnvelopeFilterTests.cpp
         Tests/EngineTests.cpp
         Tests/PresetValueTests.cpp
+        Tests/ParameterSeamTests.cpp
         Tests/ModMatrixTests.cpp
         Tests/LfoTests.cpp
         Source/dsp/WavetableBlob.cpp
@@ -103,7 +104,8 @@ target_sources(XerumTests
         Source/dsp/StateVariableFilter.cpp
         Source/engine/SynthEngine.cpp
         Source/engine/VoiceManager.cpp
-        Source/engine/SynthVoice.cpp)
+        Source/engine/SynthVoice.cpp
+        Source/parameters/ParameterLayout.cpp)
 
 target_include_directories(XerumTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
 
@@ -121,6 +123,7 @@ target_link_libraries(XerumTests
         juce::juce_dsp
         juce::juce_audio_basics
         juce::juce_data_structures
+        juce::juce_audio_processors
         WavetableAssets
     PUBLIC
         juce::juce_recommended_config_flags

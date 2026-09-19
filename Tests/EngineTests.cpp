@@ -446,11 +446,14 @@ struct EngineParamsTests final : juce::UnitTest
             expect (maxJump < 0.05f, "salto massimo fra campioni " + juce::String (maxJump));
         }
 
-        beginTest ("oct/semi: il valore normalizzato si arrotonda, non si tronca");
+        beginTest ("oct/semi: la mappa lineare della UI e' invertibile");
         {
-            // Combinazioni segnalate dalla review come sbagliate con un cast troncante
-            // ((int) invece di roundToInt): semi -4,-1,+2,+5,+8 e oct -1,+2, piu' qualche
-            // controllo di cornice.
+            // Attenzione a cosa prova questo test: la mappa Linear di oct/semi, che serve alla
+            // *UI* (formatValue in ParameterMapping.h e il relay web, che scambiano valori
+            // normalizzati 0..1). Il motore invece li legge in unita' naturali dall'APVTS —
+            // vedi "oct/semi arrivano in unita' naturali" piu' sotto e ParameterSeamTests.cpp.
+            // Confondere i due percorsi e' esattamente il difetto che ha trasposto lo strumento
+            // di quattro ottave, quindi vale la pena dire qui quale dei due si sta guardando.
             const auto* semiSpec = params::find ("semi");
             const auto* octSpec = params::find ("oct");
             expect (semiSpec != nullptr && octSpec != nullptr, "spec di oct/semi non trovate");
@@ -816,27 +819,38 @@ struct ParamCollectTests final : juce::UnitTest
 
     void runTest() override
     {
-        beginTest ("oct/semi: il valore normalizzato si arrotonda, non si tronca (sito reale)");
+        beginTest ("oct/semi arrivano in unita' naturali, non normalizzate");
         {
-            // Le combinazioni segnalate dalla review come sbagliate con un cast troncante
-            // ((int) invece di roundToInt): semi -4,-1,+2,+5,+8 e oct -1,+2.
-            const int semiCases[] = { -4, -1, 2, 5, 8 };
+            // Questo test alimentava l'accessore finto con valori *normalizzati*, ed e' quella
+            // assunzione ad aver nascosto per mesi il difetto vero: oct e semi sono gli unici
+            // Kind::Int, creati da ParameterMapping.h come juce::AudioParameterInt nel loro
+            // range naturale, quindi getRawParameterValue restituisce -3..3 e -12..12, non
+            // 0..1. Denormalizzarli dava -3 ottave e -12 semitoni al default, cioe' ogni nota
+            // quattro ottave sotto il tasto premuto. La verifica contro l'APVTS vero sta in
+            // Tests/ParameterSeamTests.cpp; qui si blocca l'aritmetica.
+            const int semiCases[] = { -12, -4, -1, 0, 2, 5, 8, 12 };
             for (auto expected : semiCases)
             {
                 FakeRaw raw;
-                raw.values[params::ParamSlot::semi] = rawForLinear ("semi", (float) expected);
+                raw.values[params::ParamSlot::semi] = (float) expected;
                 const auto p = params::collectEngineParams (raw);
                 expectEquals (p.semitones, expected, "semi " + juce::String (expected));
             }
 
-            const int octCases[] = { -1, 2 };
+            const int octCases[] = { -3, -1, 0, 2, 3 };
             for (auto expected : octCases)
             {
                 FakeRaw raw;
-                raw.values[params::ParamSlot::oct] = rawForLinear ("oct", (float) expected);
+                raw.values[params::ParamSlot::oct] = (float) expected;
                 const auto p = params::collectEngineParams (raw);
                 expectEquals (p.octave, expected, "oct " + juce::String (expected));
             }
+
+            // Il float che arriva puo' cadere appena sotto l'intero per arrotondamento: e' il
+            // caso che rende roundToInt necessario al posto di un cast troncante.
+            FakeRaw nearlyEight;
+            nearlyEight.values[params::ParamSlot::semi] = 7.999998f;
+            expectEquals (params::collectEngineParams (nearlyEight).semitones, 8);
         }
 
         beginTest ("att/dec/rel: da ms denormalizzati a secondi per il motore");

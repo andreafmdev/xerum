@@ -128,8 +128,6 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
 {
     engine::EngineParams p;
 
-    constexpr auto* specOct = params::find ("oct");
-    constexpr auto* specSemi = params::find ("semi");
     constexpr auto* specKeytrk = params::find ("keytrk");
     constexpr auto* specAtt = params::find ("att");
     constexpr auto* specDec = params::find ("dec");
@@ -141,20 +139,29 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     // sotto i piedi: meglio un errore di compilazione qui che una dereferenziazione di un
     // puntatore nullo a runtime. I sette target modulabili non compaiono qui: le loro spec
     // stanno dentro le funzioni di conversione sopra, con lo stesso static_assert.
-    static_assert (specOct != nullptr && specSemi != nullptr && specKeytrk != nullptr
-                       && specAtt != nullptr && specDec != nullptr && specSus != nullptr
-                       && specRel != nullptr && specEnvVel != nullptr,
+    static_assert (specKeytrk != nullptr && specAtt != nullptr && specDec != nullptr
+                       && specSus != nullptr && specRel != nullptr && specEnvVel != nullptr,
                    "una spec di parametro usata da collectEngineParams non e' in ParameterTable.h");
 
     p.oscOn = rawFor (ParamSlot::oscOn) >= 0.5f;
     p.framePosition = framePositionFromRaw (rawFor (ParamSlot::wtpos));
 
-    // roundToInt, non un cast troncante: denormalise() torna un float che per via degli
-    // arrotondamenti in virgola mobile puo' cadere leggermente sotto l'intero vero (es.
-    // 7.999998), e un cast tronca verso zero invece di arrotondare, sbagliando la nota di
-    // un semitono/ottava (bug corretto nella Task 7).
-    p.octave = juce::roundToInt (params::denormalise (*specOct, rawFor (ParamSlot::oct)));
-    p.semitones = juce::roundToInt (params::denormalise (*specSemi, rawFor (ParamSlot::semi)));
+    // `oct` e `semi` sono gli unici Kind::Int del progetto, e ParameterMapping.h li crea come
+    // juce::AudioParameterInt nel loro range naturale (-3..3 e -12..12). getRawParameterValue
+    // restituisce quindi gia' il valore reale: denormalizzarlo come se fosse 0..1 e' sbagliato
+    // due volte. Al default (0 e 0) dava -3 ottave e -12 semitoni, cioe' ogni nota quattro
+    // ottave sotto il tasto premuto; e siccome denormalise() clampa a 0..1, il knob poteva
+    // produrre *solo* i due estremi del range, mai un valore intermedio.
+    //
+    // I Kind::Float non hanno lo stesso problema perche' sono creati con NormalisableRange
+    // {0, 1}: per loro naturale e normalizzato coincidono. E' il motivo per cui il difetto
+    // riguardava questi due parametri e nessun altro.
+    //
+    // roundToInt e non un cast troncante: il valore arriva come float e gli arrotondamenti
+    // possono lasciarlo appena sotto l'intero vero (7.999998), dove un cast troncherebbe
+    // verso zero sbagliando di un semitono.
+    p.octave = juce::roundToInt (rawFor (ParamSlot::oct));
+    p.semitones = juce::roundToInt (rawFor (ParamSlot::semi));
     p.fineCents = fineCentsFromRaw (rawFor (ParamSlot::fine));
     p.level = levelGainFromRaw (rawFor (ParamSlot::level));
     p.unisonVoices = unisonVoicesFromChoice (rawFor (ParamSlot::unison));
