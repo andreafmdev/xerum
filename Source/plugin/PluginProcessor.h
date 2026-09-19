@@ -39,7 +39,11 @@ public:
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 0.0; }
+    /** Lo stadio FX tiene viva la coda dopo l'ultima nota: il chorus ha ~150 ms udibili a
+        feedback alto e il ringout smette di far girare l'effetto dopo 0.5 s di silenzio in
+        ingresso. Dichiarare 0.0 significava dire all'host che puo' tagliare subito, e in
+        render offline alcuni lo fanno davvero. Il valore cresce quando entra il riverbero. */
+    double getTailLengthSeconds() const override { return 0.5; }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }

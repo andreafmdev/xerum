@@ -74,7 +74,7 @@ The editor loads the UI with `?gutter=0`, which tells `SynthWindow` to fit the c
 - MIDI note on/off allocates voices (16 simultaneous, a 19-slot pool, quietest-releasing steal with a fade)
 - The engine is audible: a wavetable oscillator with band-limited mipmaps (`dsp::WavetableOscillator` / `dsp::MipTable`) feeds an exponential ADSR (`dsp::ADSREnvelope`) into a TPT state-variable filter (`dsp::StateVariableFilter`, 1 or 2 stages). 34 parameters are wired end to end: `oscOn`, `wtIndex`, `wtpos`, `oct`, `semi`, `fine`, `level`, `filtOn`, `ftype`, `slope`, `cutoff`, `res`, `drive`, `keytrk`, `att`, `dec`, `sus`, `rel`, `envVel`, `volume`, `pan`, `bypass`, plus the six LFO parameters `lshape`, `lrate`, `lsync`, `lphase`, `lfade`, `lretrig`, `unison` / `detune`, and the second envelope's `att2` / `dec2` / `sus2` / `rel2`
 - The mod matrix is live: five sources (`lfo`, `env`, `env2`, `vel`, `mw`) onto seven targets (`cutoff`, `res`, `wtpos`, `level`, `pan`, `fine`, `drive`), at control rate — see **Modulation** below
-- Still inert (accepted by the APVTS, no effect on sound yet): `envCurve`, `glide`, `voiceMode`, `warp`, `fx1On`/`ch*` (chorus), `fx2On`/`rv*` (reverb), every `arp*`
+- Still inert (accepted by the APVTS, no effect on sound yet): `envCurve`, `glide`, `voiceMode`, `warp`, `fx2On`/`rv*` (reverb), every `arp*`
 
 ## Parameter mapping
 

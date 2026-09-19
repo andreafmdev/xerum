@@ -55,6 +55,24 @@ struct EngineParams
     float pan { 0.0f };              // -1..1
     bool bypass { false };
 
+    // --- stadio FX ---
+
+    /**
+     * Il chorus. Sta in fondo alla catena, fra la fine del rendering delle voci e il gain
+     * master: non e' un parametro di voce e nessuna voce lo legge.
+     *
+     * `chorusOn` e' **falso** qui e **vero** in parameters.json, e la differenza e' voluta.
+     * Questa struct e' il valore di partenza che usano i test quando costruiscono un motore a
+     * mano: lasciandolo falso, ogni test scritto prima dello stadio FX continua a misurare
+     * esattamente la catena di prima, campione per campione. Il default che l'utente vede e'
+     * quello del file di parametri, e ci arriva da params::collectEngineParams.
+     */
+    bool chorusOn { false };
+    float chorusRateHz { 1.6f };     // 0.1..5.1 Hz
+    float chorusDepth01 { 0.0f };    // 0..1, frazione del ritardo base (vedi dsp::Chorus)
+    float chorusMix01 { 0.0f };      // 0..1, proporzione di bagnato con regola sin3dB
+    float chorusFeedback01 { 0.0f }; // 0..1, scalato da dsp::Chorus::kMaxFeedback
+
     // --- modulazione ---
 
     /**

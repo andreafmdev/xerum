@@ -1,9 +1,11 @@
 #pragma once
 
+#include "dsp/Chorus.h"
 #include "engine/EngineParams.h"
 #include "engine/VoiceManager.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_dsp/juce_dsp.h>
 
 #include <atomic>
 
@@ -155,6 +157,44 @@ private:
         e' l'unica sorgente che il motore conosce da se', senza passare dalle voci. */
     void publishSourceLevels (float lfo, float env, float env2, float vel) noexcept;
 
+    /**
+     * Lo stadio FX, fra la fine del rendering e `applyGainRamp`.
+     *
+     * **Dove sta, e perche' li'.** Dopo il render delle voci e prima del gain master, che e' la
+     * stessa posizione che gli danno Vital, Surge e Odin. Il soft clipper resta l'ultima cosa
+     * della catena: continua a essere la rete di sicurezza per tutto cio' che lo precede, FX
+     * compresi. Uno stadio FX **e'** uno stadio di guadagno dopo il filtro, quindi tocca lo
+     * stesso margine di cui parla docs/architecture.md — vedi ModulationStressTests, dove la
+     * stessa passata gira adesso anche con il chorus acceso.
+     *
+     * **Bypass con dissolvenza, non a taglio netto.** `fx1On` muove il bersaglio di
+     * fxWetGain_, che ci arriva in kFxCrossfadeSeconds; finche' la dissolvenza e' in corso
+     * l'uscita e' `secco + g * (lavorato - secco)`. Tutti e quattro i synth studiati tagliano
+     * netto, e tutti e quattro fanno clic. Quando il guadagno e' arrivato **esattamente** a
+     * zero questa funzione esce senza toccare un solo campione: da li' discende il criterio di
+     * accettazione piu' importante del lavoro — con `fx1On` falso l'uscita e' bit per bit
+     * quella di prima che lo stadio FX esistesse. E' la stessa proprieta' strutturale del mod
+     * matrix vuoto, ottenuta nello stesso modo: non un ramo che calcola l'identita', un ramo
+     * che non calcola niente.
+     *
+     * **Ringout.** Si contano i campioni consecutivi in cui l'**ingresso** dello stadio e'
+     * silenzioso; oltre kFxRingoutSeconds l'effetto si spegne e la sua linea di ritardo si
+     * azzera. E' il pattern di Surge. Mezzo secondo copre con larghezza la coda peggiore che il
+     * chorus sappia produrre (feedback a fondo corsa su un ritardo di 11 ms: -145 dB dopo mezzo
+     * secondo) e servira' identico al riverbero, che di coda ne ha molta di piu'.
+     *
+     * Non alloca: la linea di ritardo, il buffer del secco e quello del DryWetMixer sono
+     * dimensionati in prepare().
+     */
+    void processFx (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) noexcept;
+
+    /** Una fetta dello stadio, mai piu' lunga di quanto prepare() abbia dimensionato. */
+    void processFxChunk (juce::AudioBuffer<float>& buffer, int startSample, int numSamples,
+                         int numChannels) noexcept;
+
+    /** Spegne l'effetto e azzera la sua memoria. Non alloca. */
+    void stopFx() noexcept;
+
     VoiceManager voices_;
     EngineSpec spec_ {};
     EngineParams params_ {};
@@ -191,5 +231,55 @@ private:
     float blockEnvPeak_ { 0.0f };
     float blockEnv2Peak_ { 0.0f };
     float blockVelPeak_ { 0.0f };
+
+    // --- stadio FX -----------------------------------------------------------------------
+
+public:
+    /**
+     * Durata della dissolvenza di bypass dello stadio FX, in secondi.
+     *
+     * Dodici millisecondi: dentro la finestra 5-20 ms che rende il passaggio inudibile senza
+     * diventare un dissolvenza percepibile a se'. Sotto i 5 ms il gradino residuo su un'onda a
+     * fondo scala torna a sentirsi; sopra i 20 l'interruttore smette di sembrare un interruttore.
+     * Pubblica perche' e' il numero su cui il test del bypass dimensiona la sua finestra.
+     */
+    static constexpr double kFxCrossfadeSeconds = 0.012;
+
+    /** Silenzio in ingresso oltre il quale l'effetto smette di girare. Vedi processFx(). */
+    static constexpr double kFxRingoutSeconds = 0.5;
+
+    /** Sotto questo modulo un campione conta come silenzio per il ringout. -140 dBFS: sotto la
+        risoluzione del float a livelli musicali, e ben sotto la coda di qualunque voce. */
+    static constexpr float kFxSilenceFloor = 1.0e-7f;
+
+private:
+    dsp::Chorus chorus_;
+
+    /**
+     * Il dry/wet dello stadio, con regola `sin3dB` — l'equal-power, la stessa di Vital.
+     *
+     * Non scritto a mano: juce::dsp::DryWetMixer implementa sette regole di mix e smussa da se'
+     * i due guadagni su 50 ms, quindi muovere `chMix` non produce zipper. A mix 0 il guadagno
+     * del secco vale esattamente 1 e quello del bagnato esattamente 0, il che rende il caso
+     * degenere gratuito invece che un ramo in piu' da mantenere.
+     */
+    juce::dsp::DryWetMixer<float> chorusMix_;
+
+    /** Copia del secco del blocco, per la dissolvenza di bypass. Il DryWetMixer ha una copia
+        sua ma la consuma dentro mixWetSamples(): servono entrambe. Dimensionato in prepare(). */
+    juce::AudioBuffer<float> fxDry_;
+
+    /** 0 = stadio FX completamente fuori, 1 = completamente dentro. Vedi processFx(). */
+    juce::SmoothedValue<float> fxWetGain_;
+
+    int fxSilentSamples_ { 0 };
+    int fxRingoutSamples_ { 0 };
+
+    /** Campioni che mancano al riempimento della linea prima che la dissolvenza possa partire,
+        e la sua lunghezza a regime (il ritardo massimo del chorus). Vedi processFx(). */
+    int fxPrimeSamples_ { 0 };
+    int fxPrimeLength_ { 0 };
+
+    bool fxRunning_ { false };
 };
 } // namespace engine

@@ -24,7 +24,7 @@ inline constexpr const char* const kOptions_voiceMode[] = { "Poly", "Mono", "Leg
 inline constexpr const char* const kOptions_lshape[] = { "Sine", "Tri", "Saw", "Square", "S&H" };
 inline constexpr const char* const kOptions_arpMode[] = { "Up", "Down", "UpDn", "Rand" };
 
-inline constexpr int kNumParams = 52;
+inline constexpr int kNumParams = 53;
 inline constexpr Spec kTable[kNumParams] = {
     { "oscOn", "Oscillator on", "osc", Kind::Bool, Map::None, 0.0f, 1.0f, 0.0f, 1.0f, nullptr, 0, Label::None, nullptr, 0 },
     { "wtIndex", "Wavetable", "osc", Kind::Choice, Map::None, 0.0f, 1.0f, 0.0f, 0.0f, nullptr, 0, Label::None, kOptions_wtIndex, 6 },
@@ -78,6 +78,7 @@ inline constexpr Spec kTable[kNumParams] = {
     { "dec2", "Decay", "env2", Kind::Float, Map::MsSquared, 1.0f, 8001.0f, 0.0f, 0.4f, nullptr, 0, Label::Time, nullptr, 0 },
     { "sus2", "Sustain", "env2", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.7f, "%", 0, Label::None, nullptr, 0 },
     { "rel2", "Release", "env2", Kind::Float, Map::MsSquared, 1.0f, 8001.0f, 0.0f, 0.35f, nullptr, 0, Label::Time, nullptr, 0 },
+    { "chFeedback", "Feedback", "fx1", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.0f, "%", 0, Label::None, nullptr, 0 },
 };
 
 inline constexpr const Spec* find (const char* id) noexcept
@@ -105,14 +106,15 @@ inline constexpr const Spec* find (const char* id) noexcept
 // scrive l'accessore, non un ABI pubblico: nessuno stato salvato contiene un indice di slot.
 // Non coincide con l'indice dentro kTable, perche' i parametri senza slot creano dei buchi:
 // per passare dall'uno all'altro c'e' specForSlot().
-inline constexpr int kNumSlots = 32;
+inline constexpr int kNumSlots = 37;
 
 enum class ParamSlot : int
 {
     oscOn, unison, oct, semi, wtpos, detune, fine, level,
     filtOn, ftype, slope, cutoff, res, drive, keytrk, pan,
     bypass, att, dec, sus, rel, envVel, lshape, lsync,
-    lretrig, lrate, lphase, lfade, att2, dec2, sus2, rel2,
+    lretrig, lrate, lphase, lfade, fx1On, chRate, chDepth, chMix,
+    att2, dec2, sus2, rel2, chFeedback,
     count
 };
 
@@ -123,13 +125,15 @@ inline constexpr const char* kSlotIds[kNumSlots] = {
     "oscOn", "unison", "oct", "semi", "wtpos", "detune", "fine", "level",
     "filtOn", "ftype", "slope", "cutoff", "res", "drive", "keytrk", "pan",
     "bypass", "att", "dec", "sus", "rel", "envVel", "lshape", "lsync",
-    "lretrig", "lrate", "lphase", "lfade", "att2", "dec2", "sus2", "rel2",
+    "lretrig", "lrate", "lphase", "lfade", "fx1On", "chRate", "chDepth", "chMix",
+    "att2", "dec2", "sus2", "rel2", "chFeedback",
 };
 
 /** L'indice dentro kTable di ogni slot: kTable[kSlotTableIndex[i]].id e' kSlotIds[i]. */
 inline constexpr int kSlotTableIndex[kNumSlots] = {
     0, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18,
-    21, 22, 23, 24, 25, 26, 28, 29, 30, 31, 32, 33, 48, 49, 50, 51,
+    21, 22, 23, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37,
+    48, 49, 50, 51, 52,
 };
 
 /** La spec del parametro dietro uno slot. constexpr: non costa niente a runtime. */

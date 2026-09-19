@@ -218,6 +218,7 @@ export function FxTab() {
         <>
           <ParamKnob id="chRate" size="sm" />
           <ParamKnob id="chDepth" size="sm" />
+          <ParamKnob id="chFeedback" size="sm" />
           <ParamKnob id="chMix" size="sm" />
         </>
       ))}

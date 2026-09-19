@@ -47,10 +47,10 @@
     { "id": "lphase",  "name": "Phase", "group": "lfo", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 360 }, "default": 0, "unit": "°", "decimals": 0 },
     { "id": "lfade",   "name": "Fade in", "group": "lfo", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 4000 }, "default": 0, "unit": "ms", "decimals": 0 },
 
-    { "id": "fx1On",   "name": "Chorus on", "group": "fx1", "kind": "bool", "slot": false, "default": true },
-    { "id": "chRate",  "name": "Rate", "group": "fx1", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0.1, "max": 5.1 }, "default": 0.3, "unit": "Hz", "decimals": 2 },
-    { "id": "chDepth", "name": "Depth", "group": "fx1", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.4, "unit": "%", "decimals": 0 },
-    { "id": "chMix",   "name": "Mix", "group": "fx1", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.3, "unit": "%", "decimals": 0 },
+    { "id": "fx1On",   "name": "Chorus on", "group": "fx1", "kind": "bool", "slot": true, "default": true },
+    { "id": "chRate",  "name": "Rate", "group": "fx1", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0.1, "max": 5.1 }, "default": 0.3, "unit": "Hz", "decimals": 2 },
+    { "id": "chDepth", "name": "Depth", "group": "fx1", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.4, "unit": "%", "decimals": 0 },
+    { "id": "chMix",   "name": "Mix", "group": "fx1", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.3, "unit": "%", "decimals": 0 },
     { "id": "fx2On",   "name": "Reverb on", "group": "fx2", "kind": "bool", "slot": false, "default": true },
     { "id": "rvSize",  "name": "Size", "group": "fx2", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.6, "unit": "%", "decimals": 0 },
     { "id": "rvDamp",  "name": "Damp", "group": "fx2", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.4, "unit": "%", "decimals": 0 },
@@ -67,6 +67,8 @@
     { "id": "att2",    "name": "Attack", "group": "env2", "kind": "float", "slot": true, "map": { "type": "ms-squared", "min": 1, "max": 8001 }, "default": 0.12, "labelKind": "time" },
     { "id": "dec2",    "name": "Decay", "group": "env2", "kind": "float", "slot": true, "map": { "type": "ms-squared", "min": 1, "max": 8001 }, "default": 0.4, "labelKind": "time" },
     { "id": "sus2",    "name": "Sustain", "group": "env2", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.7, "unit": "%", "decimals": 0 },
-    { "id": "rel2",    "name": "Release", "group": "env2", "kind": "float", "slot": true, "map": { "type": "ms-squared", "min": 1, "max": 8001 }, "default": 0.35, "labelKind": "time" }
+    { "id": "rel2",    "name": "Release", "group": "env2", "kind": "float", "slot": true, "map": { "type": "ms-squared", "min": 1, "max": 8001 }, "default": 0.35, "labelKind": "time" },
+
+    { "id": "chFeedback", "name": "Feedback", "group": "fx1", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0, "unit": "%", "decimals": 0 }
   ]
 }

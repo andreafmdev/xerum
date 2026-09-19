@@ -3121,6 +3121,33 @@ struct ModulationStressTests final : juce::UnitTest
         bool republishEachBlock { false };
         int unisonVoices { 1 };
         float detuneCents { 0.0f };
+
+        /** Lo stadio FX acceso, con il chorus a tutti gli estremi: mix e feedback a fondo corsa.
+            E' uno stadio di guadagno dopo il filtro, quindi appartiene a questa passata quanto
+            il filtro stesso — vedi docs/architecture.md, "anything that ... adds a gain stage
+            after the filter". */
+        bool chorus { false };
+        float chorusRateHz { 5.1f };
+        float chorusDepth01 { 1.0f };
+        float chorusMix01 { 1.0f };
+        float chorusFeedback01 { 1.0f };
+
+        /**
+         * Fattore applicato al gain master, cioe' all'**unico** stadio che sta fra lo stadio FX
+         * e il soft clipper.
+         *
+         * Serve a misurare il picco presentato al clipper, che e' il numero di cui parla
+         * docs/architecture.md, e non si puo' ottenere invertendo il clipper: sopra soglia
+         * l'inversa e' malcondizionata da far spavento — 0.9983 in uscita risale a 2.36
+         * all'ingresso e 0.9990 a 3.40, cioe' tre decibel e mezzo di differenza fra due numeri
+         * che differiscono alla quarta cifra. Abbassando il gain finche' il clipper resta
+         * spento, invece, il picco d'uscita **e'** il picco d'ingresso diviso per il fattore, e
+         * la misura e' esatta.
+         *
+         * Tutto cio' che precede e' lineare nel gain master (le voci e lo stadio FX stanno prima
+         * di lui), quindi il fattore non cambia una virgola di cio' che si sta misurando.
+         */
+        float masterGainScale { 1.0f };
     };
 
     static size_t targetOf (params::ParamSlot slot) noexcept
@@ -3162,6 +3189,11 @@ struct ModulationStressTests final : juce::UnitTest
         p.bpm = 200.0f;          // sync a tempo alto: divisioni brevi, quindi LFO veloce
         p.unisonVoices = cfg.unisonVoices;
         p.detuneCents = cfg.detuneCents;
+        p.chorusOn = cfg.chorus;
+        p.chorusRateHz = cfg.chorusRateHz;
+        p.chorusDepth01 = cfg.chorusDepth01;
+        p.chorusMix01 = cfg.chorusMix01;
+        p.chorusFeedback01 = cfg.chorusFeedback01;
         p.modBase.fill (0.5f);
 
         juce::MidiBuffer midi;
@@ -3214,7 +3246,7 @@ struct ModulationStressTests final : juce::UnitTest
 
             // Anche il master gain si muove: il ramp fra previousMasterGain_ e masterGain_ e'
             // l'ultimo stadio prima del soft clipper.
-            synth.setMasterGainLinear ((b % 2) == 0 ? 1.0f : 0.6f);
+            synth.setMasterGainLinear (cfg.masterGainScale * ((b % 2) == 0 ? 1.0f : 0.6f));
 
             // Ripubblicare a ogni blocco fa girare l'anello di quattro slot: un giro completo
             // ogni quattro blocchi, con il lettore che nel frattempo sta usando uno di essi.
@@ -3285,7 +3317,11 @@ struct ModulationStressTests final : juce::UnitTest
 
         // release e' 80 ms: si scarta il decadimento (che sta ancora suonando) prima di
         // misurare il silenzio vero. Il numero di blocchi segue il sample rate.
-        const int releaseBlocks = (int) std::ceil (0.08 * cfg.sampleRate / 128.0) + 10;
+        //
+        // Con lo stadio FX acceso si aspetta un secondo in piu': il chorus ha una coda sua — il
+        // feedback a fondo corsa piu' il mezzo secondo di ringout — e confonderla con una voce
+        // appesa vorrebbe dire trasformare un comportamento voluto in un fallimento.
+        const int releaseBlocks = (int) std::ceil ((cfg.chorus ? 1.08 : 0.08) * cfg.sampleRate / 128.0) + 10;
         renderPeak (synth, releaseBlocks, *this);
         const auto tail = renderPeak (synth, 20, *this);
         expect (tail < 1.0e-4f, what + ": voce appesa dopo il release, picco " + juce::String (tail));
@@ -3366,6 +3402,15 @@ struct ModulationStressTests final : juce::UnitTest
             p.lfoFadeSeconds = rng.nextFloat() * 2.0f;
             p.bpm = 20.0f + rng.nextFloat() * 280.0f;
             p.bypass = rng.nextInt (64) == 0; // raro: serve che le voci suonino davvero
+
+            // Lo stadio FX entra ed esce mentre tutto il resto si muove: e' l'unico posto della
+            // suite dove la dissolvenza di bypass, il riempimento della linea e il ringout si
+            // incrociano con blocchi di lunghezza qualunque e con il bypass generale.
+            p.chorusOn = rng.nextInt (3) != 0;
+            p.chorusRateHz = 0.1f + rng.nextFloat() * 5.0f;
+            p.chorusDepth01 = rng.nextFloat();
+            p.chorusMix01 = rng.nextFloat();
+            p.chorusFeedback01 = rng.nextFloat();
 
             synth.setParams (p);
             synth.setMasterGainLinear (rng.nextFloat());
@@ -3518,6 +3563,74 @@ struct ModulationStressTests final : juce::UnitTest
 
             logMessage ("unison 8, detune 18 ct, 16 note: picco " + juce::String (peak) + " ("
                         + juce::String (juce::Decibels::gainToDecibels (peak), 2) + " dBFS)");
+        }
+
+        beginTest ("matrix pieno e stadio FX acceso: il margine al soft clipper con il chorus");
+        {
+            // La stessa passata di "matrix pieno e parametri in movimento", con in piu' il
+            // chorus a mix e feedback a fondo corsa. E' la misura che docs/architecture.md
+            // chiede a chiunque aggiunga uno stadio di guadagno dopo il filtro: quanto si
+            // muove il picco **presentato al clipper**, non quello che esce.
+            //
+            // Questo test **misura e riporta**. Ne' kVoiceHeadroomGain ne' kSoftClipThreshold
+            // sono stati toccati: la ritaratura congiunta del gain staging e' il lavoro che
+            // viene dopo il riverbero, e questi numeri sono il suo punto di partenza.
+            constexpr float scale = 0.2f; // tiene il picco d'uscita sotto la soglia del clipper
+
+            Config dry;
+            dry.masterGainScale = scale;
+
+            // I valori di fabbrica di chRate, chDepth, chMix e chFeedback: e' cio' che ogni
+            // preset suonera' senza che l'utente tocchi niente, quindi e' il caso su cui il
+            // contratto deve essere stretto.
+            Config factory = dry;
+            factory.chorus = true;
+            factory.chorusRateHz = 1.6f;
+            factory.chorusDepth01 = 0.4f;
+            factory.chorusMix01 = 0.3f;
+            factory.chorusFeedback01 = 0.0f;
+
+            Config fullMix = dry;
+            fullMix.chorus = true;
+            fullMix.chorusFeedback01 = 0.0f; // tutto il resto a fondo corsa
+
+            Config fullBoth = dry;
+            fullBoth.chorus = true;          // anche il feedback
+
+            const auto dryIn = (double) sweep (store, dry, 240, "senza FX, gain ridotto") / scale;
+            const auto factoryIn = (double) sweep (store, factory, 240, "chorus ai default") / scale;
+            const auto mixIn = (double) sweep (store, fullMix, 240, "chorus a mix 100 %, feedback 0") / scale;
+            const auto bothIn = (double) sweep (store, fullBoth, 240, "chorus a mix e feedback 100 %") / scale;
+
+            const auto report = [this, dryIn] (const char* what, double peak)
+            {
+                logMessage (juce::String ("matrix pieno, picco al soft clipper, ") + what + ": "
+                            + juce::String (peak, 3) + " ("
+                            + juce::String (juce::Decibels::gainToDecibels (peak), 2) + " dBFS), "
+                            + juce::String (juce::Decibels::gainToDecibels (peak / dryIn), 2)
+                            + " dB rispetto a senza FX");
+            };
+
+            report ("senza FX", dryIn);
+            report ("chorus ai valori di fabbrica", factoryIn);
+            report ("chorus a mix 100 %, feedback 0", mixIn);
+            report ("chorus a mix 100 %, feedback 100 %", bothIn);
+
+            // **Il contratto che conta.** Ai valori di fabbrica il chorus e' acceso su tutti e
+            // dodici i preset, quindi non gli e' concesso di spostare il margine: il mix e'
+            // equal-power e il feedback e' a zero, quindi il picco puo' solo restare dov'e'.
+            const auto factoryDb = juce::Decibels::gainToDecibels (factoryIn / dryIn);
+            expect (factoryDb < 1.0, "il chorus ai valori di fabbrica aggiunge " + juce::String (factoryDb, 2)
+                                         + " dB al picco presentato al clipper");
+
+            // Agli estremi il numero e' piu' alto e **si riporta, non si taglia**: questa e' la
+            // misura che la ritaratura congiunta del gain staging — dopo il riverbero — deve
+            // avere in mano. La soglia qui sotto e' solo una rete contro una regressione grossa;
+            // se comincia a mordere, il numero da rivedere e' dsp::Chorus::kMaxFeedback o
+            // kVoiceHeadroomGain, mai questa riga.
+            const auto worstDb = juce::Decibels::gainToDecibels (bothIn / dryIn);
+            expect (worstDb < 4.0, "il chorus al caso peggiore aggiunge " + juce::String (worstDb, 2)
+                                       + " dB al picco presentato al clipper");
         }
 
         beginTest ("fuzz a semi fissi: matrix casuale, parametri casuali, eventi casuali");

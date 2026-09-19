@@ -195,6 +195,27 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.pan = panFromRaw (rawFor (ParamSlot::pan));
     p.bypass = rawFor (ParamSlot::bypass) >= 0.5f;
 
+    // --- stadio FX ------------------------------------------------------------------------
+    // Fino a oggi questi quattro avevano "slot": false e il motore non li leggeva: il tab FX
+    // disegnava tre knob perfettamente funzionanti attaccati a niente, con l'interruttore
+    // acceso di default. Il quinto, chFeedback, e' nuovo e sta in **coda** a parameters.json
+    // apposta: l'ordine del file e' l'ordine con cui i parametri vengono esposti all'host,
+    // quindi inserirlo in mezzo avrebbe spostato l'indice di tutto cio' che lo segue e rotto
+    // le automazioni gia' salvate.
+    constexpr auto* specChRate = params::find ("chRate");
+    constexpr auto* specChDepth = params::find ("chDepth");
+    constexpr auto* specChMix = params::find ("chMix");
+    constexpr auto* specChFeedback = params::find ("chFeedback");
+    static_assert (specChRate != nullptr && specChDepth != nullptr && specChMix != nullptr
+                       && specChFeedback != nullptr,
+                   "i parametri del chorus non sono in ParameterTable.h");
+
+    p.chorusOn = rawFor (ParamSlot::fx1On) >= 0.5f;
+    p.chorusRateHz = params::denormalise (*specChRate, rawFor (ParamSlot::chRate));
+    p.chorusDepth01 = params::denormalise (*specChDepth, rawFor (ParamSlot::chDepth)) * 0.01f;
+    p.chorusMix01 = params::denormalise (*specChMix, rawFor (ParamSlot::chMix)) * 0.01f;
+    p.chorusFeedback01 = params::denormalise (*specChFeedback, rawFor (ParamSlot::chFeedback)) * 0.01f;
+
     // Le basi normalizzate dei target modulabili: nessuna conversione, e' il valore grezzo
     // dell'APVTS. La denormalizzazione avviene dopo la somma delle modulazioni, dentro
     // SynthVoice, con le stesse funzioni usate qui sopra.
