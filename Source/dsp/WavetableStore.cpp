@@ -104,7 +104,14 @@ std::unique_ptr<MipTable> buildMipTable (const BlobView& blob)
 
             bandLimited[0] = spectrum[0];
 
-            for (int bin = 1; bin < harmonics; ++bin)
+            // `bin <= harmonics`, non `<`: `harmonicsAtLevel` conta le armoniche da tenere, e
+            // l'ultima e' il bin `harmonics`. Con il confronto stretto il livello piu' alto
+            // (una sola armonica) non copiava nessun bin e usciva silenzio invece di una
+            // sinusoide. Il tetto a frameSize/2 lascia fuori il bin di Nyquist, che non ha
+            // gemello negativo e non e' una vera armonica.
+            const int lastBin = std::min (harmonics, blob.frameSize / 2 - 1);
+
+            for (int bin = 1; bin <= lastBin; ++bin)
             {
                 bandLimited[(size_t) bin] = spectrum[(size_t) bin];
                 bandLimited[(size_t) (blob.frameSize - bin)] = spectrum[(size_t) (blob.frameSize - bin)];

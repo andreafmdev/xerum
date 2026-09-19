@@ -17,6 +17,11 @@ public:
     void reset() noexcept;
 
     void start (int midiNote, float velocity) noexcept;
+
+    /** Ribattuta della nota gia' assegnata a questa voce: fa ripartire il solo inviluppo.
+        Fase dell'oscillatore e stato del filtro restano dove sono — vedi il commento
+        nell'implementazione: e' quello che tiene continuo il segnale. */
+    void retrigger (float velocity) noexcept;
     void stop() noexcept;
     void kill() noexcept;
 

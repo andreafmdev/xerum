@@ -47,8 +47,15 @@ SynthVoice* VoiceManager::stealVoice() noexcept
 
 void VoiceManager::noteOn (int midiNote, float velocity) noexcept
 {
+    // Nota ribattuta mentre suona ancora: si riparte sulla stessa voce invece di ucciderla e
+    // riprenderla da capo. kill() azzerava inviluppo, fase e filtro in un colpo, cioe' un
+    // gradino da ampiezza piena a zero fra due campioni: il clic che si sentiva a ogni nota
+    // ripetuta, anche legato.
     if (auto* existing = findVoiceForNote (midiNote))
-        existing->kill();
+    {
+        existing->retrigger (velocity);
+        return;
+    }
 
     SynthVoice* voice = findFreeVoice();
     if (voice == nullptr)

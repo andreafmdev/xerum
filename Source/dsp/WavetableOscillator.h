@@ -6,13 +6,38 @@
 
 namespace dsp
 {
-/** Il livello più corto le cui armoniche stanno tutte sotto Nyquist a questa frequenza. */
-int levelForFrequency (float frequencyHz, double sampleRate, int frameSize) noexcept;
+/**
+ * Livello **frazionario** della piramide da suonare a questa frequenza.
+ *
+ * Vale `t + 1`, dove `t = log2((frameSize / 2) / maxHarmonics)` e
+ * `maxHarmonics = sampleRate / (2 * frequencyHz)`: `ceil(t)` è il primo livello le cui
+ * armoniche stanno tutte sotto Nyquist, e questa funzione restituisce quel livello con
+ * il peso del crossfade verso il successivo già dentro la parte frazionaria. Chi la usa
+ * legge la parte intera come livello da suonare e la parte frazionaria come peso del
+ * livello sotto (più scuro):
+ *
+ *     lo = (int) livello;  mix = livello - lo;  campione = (1 - mix) * S(lo) + mix * S(lo + 1)
+ *
+ * Il risultato è sempre `>= t`, cioè non si legge mai un livello più brillante di quello
+ * sicuro: l'aliasing non può peggiorare. Ed è continuo nella frequenza, quindi il numero
+ * di armoniche che si sentono segue la legge 1/f senza scalini a ogni ottava — prima,
+ * scegliendo `ceil(t)` secco, la brillantezza restava congelata per un'ottava e poi
+ * crollava dell'11-18% di colpo (misurato sul centroide spettrale, nota per nota).
+ *
+ * Limitato a [0, MipTable::kMaxLevel]: sotto zero il livello 0 è già sovrabbondante,
+ * sopra il massimo non c'è niente di più scuro da mescolare.
+ */
+float levelForFrequency (float frequencyHz, double sampleRate, int frameSize) noexcept;
 
 /**
- * Oscillatore wavetable con doppia interpolazione: lineare fra campioni adiacenti
- * dentro il frame, lineare fra i due frame adiacenti alla posizione. È la seconda
- * che produce il morph: senza, muovere Position dà scatti.
+ * Oscillatore wavetable con tripla interpolazione: lineare fra campioni adiacenti dentro
+ * il frame, lineare fra i due frame adiacenti alla posizione, lineare fra i due livelli
+ * adiacenti della piramide. La seconda produce il morph: senza, muovere Position dà
+ * scatti. La terza rende continua la brillantezza lungo la tastiera: senza, il timbro
+ * resta congelato per un'ottava e poi crolla di colpo (vedi levelForFrequency).
+ *
+ * Costo: 4 letture di tavola per campione (2 frame × 2 livelli), nessuna allocazione e
+ * nessuna chiamata a libm — log2 vive in setFrequencyHz/setTable.
  */
 class WavetableOscillator
 {
@@ -39,7 +64,11 @@ private:
     float frequencyHz_ { 0.0f };
 
     const MipTable* table_ { nullptr };
-    int level_ { 0 };
+    // Coppia di livelli adiacenti e peso del crossfade: calcolati in updateLevel(), cioè
+    // fuori dal loop audio. getSample() non deve chiamare log2 per campione.
+    int levelLo_ { 0 };
+    int levelHi_ { 0 };
+    float levelMix_ { 0.0f };
     int frameLo_ { 0 };
     int frameHi_ { 0 };
     float frameMix_ { 0.0f };

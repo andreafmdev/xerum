@@ -95,6 +95,25 @@ void SynthVoice::start (int midiNote, float velocity) noexcept
     active_ = true;
 }
 
+void SynthVoice::retrigger (float velocity) noexcept
+{
+    velocity_ = velocity;
+
+    // Niente reset: ne' la fase dell'oscillatore ne' i due integratori dell'SVF vengono
+    // azzerati, e l'inviluppo riparte dal livello a cui e' arrivato (ADSREnvelope::noteOn
+    // non tocca level_). E' esattamente cio' che distingue una ribattuta da una nota nuova:
+    // azzerare qualcosa qui porterebbe l'ampiezza a zero fra due campioni adiacenti, un
+    // gradino di 0.24 a fondo scala misurato prima di questa funzione ("ribattere una nota
+    // che suona gia' non produce un gradino" in EngineTests).
+    //
+    // Nessuno degli smoothed value va risincronizzato: la voce sta gia' girando, quindi i loro
+    // valori correnti sono quelli giusti — al contrario di start(), che prende in carico uno
+    // slot del pool arrivato da un'altra nota.
+    const auto peak = 1.0f - velocityAmount_ * (1.0f - velocity);
+    envelope_.noteOn (peak);
+    active_ = true;
+}
+
 void SynthVoice::stop() noexcept
 {
     envelope_.noteOff();

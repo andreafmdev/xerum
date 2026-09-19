@@ -144,7 +144,8 @@ struct MipTableTests final : juce::UnitTest
             expectEquals (table->getFrameSize(), 2048);
             expectEquals (table->harmonicsAtLevel (0), 1024);
             expectEquals (table->harmonicsAtLevel (3), 128);
-            expectEquals (table->harmonicsAtLevel (dsp::MipTable::kMaxLevel), 16);
+            // Il livello piu' alto tiene una sola armonica: la fondamentale, cioe' una sinusoide.
+            expectEquals (table->harmonicsAtLevel (dsp::MipTable::kMaxLevel), 1);
         }
 
         beginTest ("il livello 0 conserva la forma d'onda originale");
@@ -219,8 +220,12 @@ struct MipTableTests final : juce::UnitTest
             const auto noteHz = (float) (sampleRate * (double) fundamentalBin / (double) numSamples);
 
             const auto level = dsp::levelForFrequency (noteHz, sampleRate, table->getFrameSize());
-            expectEquals (level, 4, "il test assume che questa nota scelga il livello 4 (64 armoniche)");
-            const auto keptHarmonics = table->harmonicsAtLevel (level);
+            expectWithinAbsoluteError (level, 4.781f, 0.002f,
+                    "il test assume che questa nota mescoli i livelli 4 (64 armoniche) e 5 (32)");
+            // Il crossfade sfuma verso il livello piu' scuro ma non puo' aggiungere niente
+            // sopra il piu' brillante dei due: l'ultima armonica possibile resta quella del
+            // livello (int) level, tutto il resto sarebbe alias.
+            const auto keptHarmonics = table->harmonicsAtLevel ((int) level);
 
             dsp::WavetableOscillator osc;
             osc.prepare (sampleRate);
@@ -262,12 +267,79 @@ struct MipTableTests final : juce::UnitTest
                                       + " dell'energia in banda");
         }
 
+        beginTest ("nessun alias udibile su tutta l'estensione della tastiera");
+        {
+            // Il test sopra copre una nota media. Questo copre l'estensione intera: la piramide
+            // deve avere abbastanza livelli perche' anche l'ultima ottava trovi un livello le cui
+            // armoniche stanno tutte sotto Nyquist. Se la piramide si ferma troppo presto,
+            // levelForFrequency restituisce l'ultimo livello disponibile e quel livello ripiega.
+            const auto bytes = makeHarmonicBlob (2048, 200);
+            const auto view = dsp::parseXwt (bytes.data(), bytes.size());
+            const auto table = dsp::buildMipTable (*view);
+            expect (table != nullptr);
+
+            constexpr double sampleRate = 44100.0;
+            constexpr int numSamples = 1 << 15;
+
+            for (int note = 36; note <= 120; note += 6)
+            {
+                const auto noteHz = 440.0f * std::pow (2.0f, ((float) note - 69.0f) / 12.0f);
+
+                dsp::WavetableOscillator osc;
+                osc.prepare (sampleRate);
+                osc.setTable (table.get());
+                osc.setFramePosition (0.0f);
+                osc.setFrequencyHz (noteHz);
+
+                std::vector<float> fftData ((size_t) numSamples * 2, 0.0f);
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    // Blackman-Harris a 4 termini: i sidelobi stanno a -92 dB, abbastanza in basso
+                    // da non coprire l'alias che si sta cercando.
+                    const double t = 2.0 * juce::MathConstants<double>::pi * i / (numSamples - 1);
+                    const double w = 0.35875 - 0.48829 * std::cos (t) + 0.14128 * std::cos (2 * t)
+                                   - 0.01168 * std::cos (3 * t);
+                    fftData[(size_t) i] = (float) (osc.getSample() * w);
+                }
+
+                juce::dsp::FFT fft (15);
+                fft.performFrequencyOnlyForwardTransform (fftData.data(), true);
+
+                const double binHz = sampleRate / numSamples;
+                std::vector<char> harmonic ((size_t) numSamples / 2, 0);
+                double inBand = 0.0;
+
+                for (int h = 1; h * noteHz < sampleRate * 0.5 - binHz * 6.0; ++h)
+                {
+                    const int centre = (int) std::lround (h * noteHz / binHz);
+                    for (int bin = centre - 5; bin <= centre + 5; ++bin)
+                        if (bin > 0 && bin < numSamples / 2)
+                        {
+                            harmonic[(size_t) bin] = 1;
+                            inBand += (double) fftData[(size_t) bin] * fftData[(size_t) bin];
+                        }
+                }
+
+                double outOfBand = 0.0;
+                const int firstBin = (int) (25.0 / binHz) + 1;
+                for (int bin = firstBin; bin < numSamples / 2; ++bin)
+                    if (! harmonic[(size_t) bin])
+                        outOfBand += (double) fftData[(size_t) bin] * fftData[(size_t) bin];
+
+                expect (inBand > 0.0, "la nota " + juce::String (note) + " deve produrre qualcosa");
+                const auto db = 10.0 * std::log10 (outOfBand / inBand);
+                expect (db < -60.0, "nota " + juce::String (note) + " (" + juce::String (noteHz, 1)
+                                        + " Hz): energia non armonica a " + juce::String (db, 1)
+                                        + " dB, deve stare sotto -60 dB");
+            }
+        }
+
         beginTest ("un frame troppo corto per tutti i livelli viene rifiutato, non crasha");
         {
-            // 64 campioni < 2^(kMaxLevel + 1) (128): al livello piu alto resterebbero
-            // (64 >> 6) / 2 == 0 armoniche, cioe' silenzio. Deve tornare nullptr, non una
-            // tavola con un livello muto.
-            for (uint32_t frameSize : { 32u, 64u })
+            // Sotto 2^(kMaxLevel + 1) == 2048 campioni, al livello piu alto resterebbero
+            // (frameSize >> kMaxLevel) / 2 == 0 armoniche, cioe' silenzio. Deve tornare
+            // nullptr, non una tavola con un livello muto.
+            for (uint32_t frameSize : { 32u, 64u, 128u, 1024u })
             {
                 const auto bytes = makeHarmonicBlob (frameSize, 1);
                 const auto view = dsp::parseXwt (bytes.data(), bytes.size());
@@ -278,9 +350,10 @@ struct MipTableTests final : juce::UnitTest
                                               + " campioni non puo riempire tutti i livelli");
             }
 
-            // 128 campioni invece bastano: un'armonica al livello piu alto.
+            // 2048 campioni invece bastano: un'armonica al livello piu alto. E' anche la
+            // lunghezza di tutte le tavole vere, quindi il limite non tocca l'uso reale.
             {
-                const auto bytes = makeHarmonicBlob (128, 1);
+                const auto bytes = makeHarmonicBlob (2048, 1);
                 const auto view = dsp::parseXwt (bytes.data(), bytes.size());
                 const auto table = dsp::buildMipTable (*view);
                 expect (table != nullptr);
@@ -347,14 +420,27 @@ struct OscillatorTests final : juce::UnitTest
     {
         beginTest ("il livello scelto non contiene armoniche sopra Nyquist");
         {
-            // A 44.1 kHz, un La4 (440 Hz) ammette ~50 armoniche → serve un livello
-            // da 128 campioni (64 armoniche) o più corto.
-            expectEquals (dsp::levelForFrequency (440.0f, 44100.0, 2048), 5);
-            // Un La1 (55 Hz) ammette ~400 armoniche → livello 2 (512 campioni, 256 armoniche).
-            expectEquals (dsp::levelForFrequency (55.0f, 44100.0, 2048), 2);
+            // La funzione restituisce un livello frazionario: la parte intera e' il primo
+            // livello sicuro (quello che il codice sceglieva prima), la frazione e' il peso
+            // del crossfade verso il livello successivo.
+            //
+            // A 44.1 kHz, un La4 (440 Hz) ammette ~50 armoniche → serve un livello che ne
+            // tenga 64 o meno, cioe' il 5.
+            const auto la4 = dsp::levelForFrequency (440.0f, 44100.0, 2048);
+            expectEquals ((int) la4, 5);
+            expectWithinAbsoluteError (la4, 5.353f, 0.002f);
+            // Un La1 (55 Hz) ammette ~400 armoniche → livello 2 (256 armoniche).
+            const auto la1 = dsp::levelForFrequency (55.0f, 44100.0, 2048);
+            expectEquals ((int) la1, 2);
+            expectWithinAbsoluteError (la1, 2.353f, 0.002f);
+            // Un'ottava sposta il livello di esattamente 1: e' questo che rende il
+            // crossfade continuo ai confini, dove la coppia di livelli cambia.
+            expectWithinAbsoluteError (la4 - la1, 3.0f, 1.0e-4f);
             // Frequenze assurde non devono uscire dai limiti.
-            expectEquals (dsp::levelForFrequency (0.0f, 44100.0, 2048), dsp::MipTable::kMaxLevel);
-            expectEquals (dsp::levelForFrequency (20000.0f, 44100.0, 2048), dsp::MipTable::kMaxLevel);
+            expectWithinAbsoluteError (dsp::levelForFrequency (0.0f, 44100.0, 2048),
+                    (float) dsp::MipTable::kMaxLevel, 0.0f);
+            expectWithinAbsoluteError (dsp::levelForFrequency (20000.0f, 44100.0, 2048),
+                    (float) dsp::MipTable::kMaxLevel, 0.0f);
         }
 
         beginTest ("senza tavola l'oscillatore tace invece di dereferenziare");
@@ -394,8 +480,8 @@ struct OscillatorTests final : juce::UnitTest
         beginTest ("la posizione fra due frame interpola invece di saltare");
         {
             // Due frame: costante -1 e costante +1 (l'interpolazione è leggibile a occhio).
-            // 128 e non 64: sotto 2^(kMaxLevel + 1) buildMipTable rifiuta il blob.
-            const uint32_t frames = 2, frameSize = 128;
+            // 2048 e non meno: sotto 2^(kMaxLevel + 1) buildMipTable rifiuta il blob.
+            const uint32_t frames = 2, frameSize = 2048;
             std::vector<char> bytes (12 + (size_t) frames * frameSize * sizeof (float));
             std::memcpy (bytes.data(), "XWT1", 4);
             std::memcpy (bytes.data() + 4, &frames, 4);
@@ -453,3 +539,206 @@ struct OscillatorTests final : juce::UnitTest
 };
 
 static OscillatorTests oscillatorTests;
+
+namespace
+{
+/**
+ * Blackman-Harris a 7 termini. Serve per misurare l'aliasing: con una Hann il pavimento
+ * di misura sta a -44 dB e copre tutto quello che si sta cercando; qui i sidelobi stanno
+ * sotto -180 dB, cioe' sotto il rumore numerico di una FFT in singola precisione.
+ */
+double blackmanHarris7 (int i, int n) noexcept
+{
+    static constexpr double coefficients[] = { 0.27105140069342, -0.43329793923448, 0.21812299954311,
+                                               -0.06592544638803, 0.01081174209837, -0.00077658482522,
+                                               0.00001388721735 };
+
+    const double t = 2.0 * juce::MathConstants<double>::pi * (double) i / (double) n;
+    double w = 0.0;
+
+    for (int k = 0; k < 7; ++k)
+        w += coefficients[(size_t) k] * std::cos ((double) k * t);
+
+    return w;
+}
+
+float midiNoteHz (int note) noexcept
+{
+    return 440.0f * std::pow (2.0f, ((float) note - 69.0f) / 12.0f);
+}
+
+/** Suona la nota e ne restituisce lo spettro di ampiezza (bin 0..numSamples/2). */
+std::vector<float> renderSpectrum (const dsp::MipTable& table, float noteHz, double sampleRate, int fftOrder)
+{
+    const int numSamples = 1 << fftOrder;
+
+    dsp::WavetableOscillator osc;
+    osc.prepare (sampleRate);
+    osc.setTable (&table);
+    osc.setFramePosition (0.0f);
+    osc.setFrequencyHz (noteHz);
+
+    std::vector<float> data ((size_t) numSamples * 2, 0.0f);
+    for (int i = 0; i < numSamples; ++i)
+        data[(size_t) i] = (float) ((double) osc.getSample() * blackmanHarris7 (i, numSamples));
+
+    juce::dsp::FFT fft (fftOrder);
+    fft.performFrequencyOnlyForwardTransform (data.data(), true);
+    return data;
+}
+
+/**
+ * Centroide spettrale pesato in energia, diviso la fondamentale: quante volte la
+ * fondamentale sta il "baricentro" del timbro. E' la misura della brillantezza che
+ * il crossfade fra livelli deve rendere continua lungo la tastiera.
+ */
+double centroidOverFundamental (const std::vector<float>& spectrum, int numSamples, double sampleRate, double fundamental)
+{
+    const double binHz = sampleRate / (double) numSamples;
+    double weighted = 0.0;
+    double total = 0.0;
+
+    for (int bin = 1; bin < numSamples / 2; ++bin)
+    {
+        const double power = (double) spectrum[(size_t) bin] * (double) spectrum[(size_t) bin];
+        weighted += power * (double) bin * binHz;
+        total += power;
+    }
+
+    return total > 0.0 ? weighted / total / fundamental : 0.0;
+}
+
+/** Energia non armonica / energia armonica, in dB. Esclude +-12 bin attorno a ogni armonica. */
+double aliasToHarmonicDb (const std::vector<float>& spectrum, int numSamples, double sampleRate, double fundamental)
+{
+    const double binHz = sampleRate / (double) numSamples;
+    const int half = numSamples / 2;
+
+    std::vector<char> harmonic ((size_t) half, 0);
+    double inBand = 0.0;
+
+    for (int h = 1; (double) h * fundamental < sampleRate * 0.5; ++h)
+    {
+        const int centre = (int) std::lround ((double) h * fundamental / binHz);
+
+        for (int bin = centre - 12; bin <= centre + 12; ++bin)
+            if (bin > 0 && bin < half && ! harmonic[(size_t) bin])
+            {
+                harmonic[(size_t) bin] = 1;
+                inBand += (double) spectrum[(size_t) bin] * (double) spectrum[(size_t) bin];
+            }
+    }
+
+    double outOfBand = 0.0;
+    for (int bin = 1; bin < half; ++bin)
+        if (! harmonic[(size_t) bin])
+            outOfBand += (double) spectrum[(size_t) bin] * (double) spectrum[(size_t) bin];
+
+    return 10.0 * std::log10 (outOfBand / juce::jmax (inBand, 1.0e-30));
+}
+} // namespace
+
+struct MipCrossfadeTests final : juce::UnitTest
+{
+    MipCrossfadeTests() : juce::UnitTest ("MipCrossfade", "dsp") {}
+
+    void runTest() override
+    {
+        constexpr double sampleRate = 48000.0;
+
+        beginTest ("la brillantezza cambia con continuita' da una nota all'altra");
+        {
+            // Rampa piena: 1024 armoniche a 1/h, cioe' tutto quello che un frame da 2048
+            // campioni puo' contenere. Serve ricca perche' cosi' il livello scelto conta
+            // davvero su tutta la tastiera, dalla nota 24 in su. Non si usa una tavola vera
+            // (.xwt): la misura deve dipendere dalla scelta del livello, non dai numeri
+            // esatti di un file che puo' essere rigenerato.
+            const auto bytes = makeHarmonicBlob (2048, 1024);
+            const auto view = dsp::parseXwt (bytes.data(), bytes.size());
+            expect (view.has_value());
+            const auto table = dsp::buildMipTable (*view);
+            expect (table != nullptr);
+
+            constexpr int fftOrder = 15;
+            constexpr int numSamples = 1 << fftOrder;
+
+            std::vector<double> centroid;
+            for (int note = 24; note <= 120; ++note)
+            {
+                const auto noteHz = midiNoteHz (note);
+                const auto spectrum = renderSpectrum (*table, noteHz, sampleRate, fftOrder);
+                centroid.push_back (centroidOverFundamental (spectrum, numSamples, sampleRate, (double) noteHz));
+            }
+
+            double worstStep = 0.0;
+            int worstNote = 0;
+
+            for (size_t i = 1; i < centroid.size(); ++i)
+            {
+                expect (centroid[i] > 0.0, "la nota deve produrre qualcosa");
+                const auto step = std::abs (centroid[i] / centroid[i - 1] - 1.0);
+
+                if (step > worstStep)
+                {
+                    worstStep = step;
+                    worstNote = 24 + (int) i;
+                }
+            }
+
+            // Con il livello intero la brillantezza restava congelata per un'ottava e poi
+            // crollava di colpo: gradini dall'8% al 18% del centroide diviso la fondamentale
+            // alle note 31, 43, 55, 67, 79, 91, 103, 115. Salendo di un semitono il suono non
+            // si schiariva, si spegneva — udibile come irregolarita' timbrica a ogni ottava.
+            logMessage ("centroide/fondamentale: " + juce::String (centroid.front(), 3) + " alla nota 24, "
+                        + juce::String (centroid.back(), 3) + " alla nota 120, gradino massimo "
+                        + juce::String (worstStep * 100.0, 2) + "% alla nota " + juce::String (worstNote));
+
+            expect (worstStep < 0.03, "gradino massimo del centroide " + juce::String (worstStep * 100.0, 2)
+                                          + "% fra le note " + juce::String (worstNote - 1) + " e "
+                                          + juce::String (worstNote) + ", deve stare sotto il 3%");
+        }
+
+        beginTest ("nessun alias sopra -70 dB su tutta la tastiera");
+        {
+            // Qui la rampa ha 128 armoniche, non 1024: sopra quella banda a dominare la misura
+            // non e' piu' l'aliasing della piramide ma la distorsione dell'interpolazione
+            // lineare fra campioni della tavola, che a 512 armoniche suonate arriva da sola a
+            // -55 dB e coprirebbe quello che questo test deve sorvegliare.
+            const auto bytes = makeHarmonicBlob (2048, 128);
+            const auto view = dsp::parseXwt (bytes.data(), bytes.size());
+            expect (view.has_value());
+            const auto table = dsp::buildMipTable (*view);
+            expect (table != nullptr);
+
+            constexpr int fftOrder = 16;
+            constexpr int numSamples = 1 << fftOrder;
+
+            double worst = -1000.0;
+            int worstNote = 0;
+
+            for (int note = 24; note <= 120; ++note)
+            {
+                const auto noteHz = midiNoteHz (note);
+                const auto spectrum = renderSpectrum (*table, noteHz, sampleRate, fftOrder);
+                const auto db = aliasToHarmonicDb (spectrum, numSamples, sampleRate, (double) noteHz);
+
+                if (db > worst)
+                {
+                    worst = db;
+                    worstNote = note;
+                }
+            }
+
+            logMessage ("alias peggiore " + juce::String (worst, 1) + " dB alla nota " + juce::String (worstNote));
+
+            // Il riferimento e' il livello intero, che misurato cosi' stava fra -72 e -123 dB:
+            // il crossfade non puo' peggiorarlo perche' non legge mai un livello piu' brillante
+            // di quello sicuro, ma e' esattamente la cosa che una formula sbagliata romperebbe
+            // per prima.
+            expect (worst < -70.0, "nota " + juce::String (worstNote) + ": energia non armonica a "
+                                       + juce::String (worst, 1) + " dB, deve stare sotto -70 dB");
+        }
+    }
+};
+
+static MipCrossfadeTests mipCrossfadeTests;
