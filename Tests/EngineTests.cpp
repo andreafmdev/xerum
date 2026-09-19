@@ -1341,3 +1341,501 @@ struct ModStateWiringTests final : juce::UnitTest
 };
 
 static ModStateWiringTests modStateWiringTests;
+
+/**
+ * Task 9: il mod matrix a pieno carico.
+ *
+ * Non e' un test di correttezza timbrica — con trentadue route addosso non esiste un valore
+ * "giusto" da confrontare. E' la rete di sicurezza real-time: quando ogni target e' tirato da
+ * piu' sorgenti insieme e i parametri si muovono sotto, ogni campione deve restare finito e
+ * dentro il fondo scala, e nessuna voce deve restare appesa.
+ *
+ * Piu' severo del test degli estremi (EngineRobustnessTests): li' i parametri sono fissi per
+ * l'intera variante, qui cambiano *fra un blocco e l'altro* mentre la modulazione e' attiva, e
+ * il contratto verificato non e' solo il picco ma ogni singolo campione.
+ */
+struct ModulationStressTests final : juce::UnitTest
+{
+    ModulationStressTests() : juce::UnitTest ("mod matrix a pieno carico", "engine") {}
+
+    /**
+     * Riempie lo snapshot fino al tetto di kMaxRoutes (32). Le prime 4 x 7 = 28 route sono
+     * tutte le combinazioni sorgente x target; le quattro che avanzano ricominciano da capo,
+     * quindi sono route *doppie* — stessa sorgente, stesso target, stesso segno. Non e'
+     * riempitivo: e' il caso che mette alla prova la somma e il clamp, non la sola capienza
+     * dell'array.
+     *
+     * I depth alternano +1 e -1 e il passo fra due sorgenti (7) e' dispari, quindi ogni target
+     * riceve due route positive e due negative da sorgenti diverse: le modulazioni si
+     * contendono il parametro invece di spingerlo tutte dalla stessa parte.
+     */
+    static engine::ModSnapshot fullSnapshot() noexcept
+    {
+        engine::ModSnapshot mods;
+
+        for (int i = 0; i < engine::ModSnapshot::kMaxRoutes; ++i)
+        {
+            const auto src = (engine::ModSource) ((i / engine::kNumModTargets)
+                                                  % (int) engine::ModSource::count);
+            mods.routes[i] = { src, i % engine::kNumModTargets, (i % 2 == 0) ? 1.0f : -1.0f };
+        }
+
+        mods.count = engine::ModSnapshot::kMaxRoutes;
+        return mods;
+    }
+
+    struct Config
+    {
+        double sampleRate { 48000.0 };
+        int numNotes { 16 };
+        bool lfoSync { false };
+        bool lfoRetrig { true };
+        dsp::StateVariableFilter::Type filterType { dsp::StateVariableFilter::Type::lowPass };
+        int filterStages { 2 };
+        bool republishEachBlock { false };
+    };
+
+    static size_t targetOf (params::ParamSlot slot) noexcept
+    {
+        return (size_t) engine::modTargetIndexFor (slot);
+    }
+
+    /**
+     * Una passata completa: matrix pieno, note tenute, parametri che si muovono a ogni blocco.
+     * Controlla ogni campione qui dentro (finito e |x| <= 1), scarica la coda dopo un
+     * all-notes-off e ritorna il picco.
+     */
+    float sweep (dsp::WavetableStore& store, const Config& cfg, int numBlocks, const juce::String& what)
+    {
+        engine::SynthEngine synth;
+
+        engine::EngineSpec spec;
+        spec.sampleRate = cfg.sampleRate;
+        spec.maximumBlockSize = 128;
+        spec.numChannels = 2;
+        synth.prepare (spec);
+        synth.setWavetable (store.active());
+        synth.setMods (fullSnapshot());
+
+        auto p = defaultParams();
+        p.filterOn = true;
+        p.filterType = cfg.filterType;
+        p.filterStages = cfg.filterStages;
+        p.keyTrack = 0.5f;
+        p.velocityAmount = 1.0f;
+        p.attackSeconds = 0.005f;
+        p.decaySeconds = 0.2f;
+        p.sustain = 0.9f;
+        p.releaseSeconds = 0.08f;
+        p.lfoRateRaw = 1.0f;     // il massimo della mappa: la sorgente lfo si muove a ogni blocco
+        p.lfoSync = cfg.lfoSync;
+        p.lfoRetrig = cfg.lfoRetrig;
+        p.lfoFadeSeconds = 0.0f;
+        p.bpm = 200.0f;          // sync a tempo alto: divisioni brevi, quindi LFO veloce
+        p.modBase.fill (0.5f);
+
+        juce::MidiBuffer midi;
+
+        for (int i = 0; i < cfg.numNotes; ++i)
+            midi.addEvent (juce::MidiMessage::noteOn (1, 24 + (i * 5) % 96, 0.3f + 0.7f * (float) (i % 3) * 0.5f), 0);
+
+        float peak = 0.0f;
+        int badBlock = -1;
+        int badSample = -1;
+        float badValue = 0.0f;
+
+        for (int b = 0; b < numBlocks; ++b)
+        {
+            // Triangolo 0..1 di periodo `period`. I periodi sono primi fra loro, cosi' le sette
+            // basi non tornano mai in fase e la passata attraversa molte combinazioni diverse.
+            const auto ramp = [b] (int period) noexcept
+            {
+                const auto phase = (float) (b % period) / (float) period;
+                return phase < 0.5f ? phase * 2.0f : 2.0f - phase * 2.0f;
+            };
+
+            // Gradino: 0 o 1, niente vie di mezzo. res e drive non passano da nessuno
+            // SmoothedValue, quindi il salto arriva intero al filtro e alla saturazione — che
+            // e' esattamente il caso da verificare, non da evitare.
+            const auto step = [b] (int period) noexcept { return ((b / period) % 2) == 0 ? 0.0f : 1.0f; };
+
+            p.modBase[targetOf (params::ParamSlot::cutoff)] = ramp (7);
+            p.modBase[targetOf (params::ParamSlot::wtpos)] = ramp (11);
+            p.modBase[targetOf (params::ParamSlot::level)] = 0.5f + 0.5f * ramp (13);
+            p.modBase[targetOf (params::ParamSlot::pan)] = ramp (17);
+            p.modBase[targetOf (params::ParamSlot::fine)] = ramp (19);
+            p.modBase[targetOf (params::ParamSlot::res)] = step (5);
+            p.modBase[targetOf (params::ParamSlot::drive)] = step (3);
+
+            // Gli stessi valori anche nei campi denormalizzati: se un target smettesse di
+            // passare dal percorso modulato (modMask_ spento) il test deve restare severo lo
+            // stesso, invece di ritrovarsi i default innocui di defaultParams().
+            p.cutoffHz = params::cutoffHzFromRaw (p.modBase[targetOf (params::ParamSlot::cutoff)]);
+            p.framePosition = params::framePositionFromRaw (p.modBase[targetOf (params::ParamSlot::wtpos)]);
+            p.level = params::levelGainFromRaw (p.modBase[targetOf (params::ParamSlot::level)]);
+            p.pan = params::panFromRaw (p.modBase[targetOf (params::ParamSlot::pan)]);
+            p.fineCents = params::fineCentsFromRaw (p.modBase[targetOf (params::ParamSlot::fine)]);
+            p.resonanceQ = params::resonanceQFromRaw (p.modBase[targetOf (params::ParamSlot::res)]);
+            p.driveGain = params::driveGainFromRaw (p.modBase[targetOf (params::ParamSlot::drive)]);
+
+            p.lfoShapeIndex = (b / 9) % 5; // tutte e cinque le forme, sample & hold compresa
+
+            synth.setParams (p);
+
+            // Anche il master gain si muove: il ramp fra previousMasterGain_ e masterGain_ e'
+            // l'ultimo stadio prima del soft clipper.
+            synth.setMasterGainLinear ((b % 2) == 0 ? 1.0f : 0.6f);
+
+            // Ripubblicare a ogni blocco fa girare l'anello di quattro slot: un giro completo
+            // ogni quattro blocchi, con il lettore che nel frattempo sta usando uno di essi.
+            if (cfg.republishEachBlock)
+                synth.setMods (fullSnapshot());
+
+            // Mod wheel a scatti: e' la quarta sorgente, e a differenza delle altre tre arriva
+            // da un evento MIDI a meta' buffer.
+            if ((b % 12) == 0)
+                midi.addEvent (juce::MidiMessage::controllerEvent (1, 1, (b % 24) == 0 ? 127 : 0), 64);
+
+            // Una nota che riparte a meta' blocco: costringe process() a spezzare il render in
+            // due fette, e applyModulation() a rigirare su una voce che sta gia' suonando.
+            if ((b % 16) == 8)
+            {
+                const int note = 24 + (b * 7) % 96;
+                midi.addEvent (juce::MidiMessage::noteOff (1, note), 0);
+                midi.addEvent (juce::MidiMessage::noteOn (1, note, 0.2f + 0.8f * ramp (3)), 100);
+            }
+
+            juce::AudioBuffer<float> buffer (2, 128);
+            buffer.clear();
+            synth.process (buffer, midi);
+            midi.clear();
+
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            {
+                const auto* data = buffer.getReadPointer (ch);
+
+                for (int i = 0; i < buffer.getNumSamples(); ++i)
+                {
+                    const auto value = data[i];
+
+                    // Una sola expect() alla fine invece di una per campione: un NaN che
+                    // dura mezzo secondo produrrebbe altrimenti migliaia di righe di log
+                    // identiche e nasconderebbe il primo punto in cui e' comparso.
+                    if (badBlock < 0 && (! std::isfinite (value) || std::abs (value) > 1.0f))
+                    {
+                        badBlock = b;
+                        badSample = i;
+                        badValue = value;
+                    }
+
+                    peak = juce::jmax (peak, std::abs (value));
+                }
+            }
+        }
+
+        expect (badBlock < 0,
+                what + ": campione fuori contratto al blocco " + juce::String (badBlock) + ", indice "
+                    + juce::String (badSample) + ", valore " + juce::String (badValue));
+
+        // Il test e' privo di valore se il motore stesse restituendo silenzio: qualunque
+        // soglia superiore la passerebbe.
+        expect (peak > 0.05f, what + ": uscita troppo bassa (" + juce::String (peak)
+                                  + "): la passata non sta verificando niente");
+
+        // Nessuna voce appesa, nemmeno con il matrix pieno: una route con depth negativo su
+        // `level` puo' portare il parametro a zero, ma e' l'inviluppo — non il livello — a
+        // decidere quando la voce si libera.
+        juce::MidiBuffer off;
+        off.addEvent (juce::MidiMessage::allNotesOff (1), 0);
+        {
+            juce::AudioBuffer<float> buffer (2, 128);
+            buffer.clear();
+            synth.process (buffer, off);
+        }
+
+        // release e' 80 ms: si scarta il decadimento (che sta ancora suonando) prima di
+        // misurare il silenzio vero. Il numero di blocchi segue il sample rate.
+        const int releaseBlocks = (int) std::ceil (0.08 * cfg.sampleRate / 128.0) + 10;
+        renderPeak (synth, releaseBlocks, *this);
+        const auto tail = renderPeak (synth, 20, *this);
+        expect (tail < 1.0e-4f, what + ": voce appesa dopo il release, picco " + juce::String (tail));
+
+        return peak;
+    }
+
+    /**
+     * Passata casuale ma riproducibile: matrix di lunghezza e contenuto qualunque, parametri
+     * ridisegnati a ogni blocco, blocchi di lunghezza variabile, eventi MIDI in posizioni
+     * arbitrarie dentro il buffer. Stesso contratto delle passate guidate — ogni campione
+     * finito e dentro il fondo scala — ma percorso in un modo che nessuno ha scelto a mano.
+     */
+    void fuzz (dsp::WavetableStore& store, int seed, int numBlocks)
+    {
+        juce::Random rng (seed);
+
+        engine::SynthEngine synth;
+        engine::EngineSpec spec;
+        spec.sampleRate = (double) juce::jmap (rng.nextFloat(), 44100.0f, 96000.0f);
+        spec.maximumBlockSize = 128;
+        spec.numChannels = 2;
+        synth.prepare (spec);
+        synth.setWavetable (store.active());
+
+        auto p = defaultParams();
+        float peak = 0.0f;
+        int badBlock = -1;
+        int badSample = -1;
+        float badValue = 0.0f;
+
+        for (int b = 0; b < numBlocks; ++b)
+        {
+            // Una ripubblicazione ogni quattro blocchi in media: abbastanza frequente da far
+            // girare l'anello, abbastanza rara da lasciare che uno snapshot resti in uso per
+            // piu' blocchi di fila.
+            if (rng.nextInt (4) == 0)
+            {
+                engine::ModSnapshot mods;
+                mods.count = rng.nextInt (engine::ModSnapshot::kMaxRoutes + 1);
+
+                for (int i = 0; i < mods.count; ++i)
+                    mods.routes[i] = { (engine::ModSource) rng.nextInt ((int) engine::ModSource::count),
+                                       rng.nextInt (engine::kNumModTargets),
+                                       rng.nextFloat() * 2.0f - 1.0f };
+
+                synth.setMods (mods);
+            }
+
+            for (auto& base : p.modBase)
+                base = rng.nextFloat();
+
+            p.cutoffHz = params::cutoffHzFromRaw (p.modBase[targetOf (params::ParamSlot::cutoff)]);
+            p.resonanceQ = params::resonanceQFromRaw (p.modBase[targetOf (params::ParamSlot::res)]);
+            p.framePosition = params::framePositionFromRaw (p.modBase[targetOf (params::ParamSlot::wtpos)]);
+            p.level = params::levelGainFromRaw (p.modBase[targetOf (params::ParamSlot::level)]);
+            p.pan = params::panFromRaw (p.modBase[targetOf (params::ParamSlot::pan)]);
+            p.fineCents = params::fineCentsFromRaw (p.modBase[targetOf (params::ParamSlot::fine)]);
+            p.driveGain = params::driveGainFromRaw (p.modBase[targetOf (params::ParamSlot::drive)]);
+
+            p.oscOn = rng.nextInt (16) != 0;
+            p.filterOn = rng.nextInt (8) != 0;
+            p.filterType = (dsp::StateVariableFilter::Type) rng.nextInt (3);
+            p.filterStages = 1 + rng.nextInt (2);
+            p.keyTrack = rng.nextFloat();
+            p.octave = rng.nextInt (7) - 3;
+            p.semitones = rng.nextInt (25) - 12;
+            p.attackSeconds = rng.nextFloat() * 0.05f;
+            p.decaySeconds = rng.nextFloat() * 0.3f;
+            p.sustain = rng.nextFloat();
+            p.releaseSeconds = 0.01f + rng.nextFloat() * 0.1f;
+            p.velocityAmount = rng.nextFloat();
+            p.lfoShapeIndex = rng.nextInt (5);
+            p.lfoRateRaw = rng.nextFloat();
+            p.lfoSync = rng.nextBool();
+            p.lfoRetrig = rng.nextBool();
+            p.lfoPhaseOffset01 = rng.nextFloat();
+            p.lfoFadeSeconds = rng.nextFloat() * 2.0f;
+            p.bpm = 20.0f + rng.nextFloat() * 280.0f;
+            p.bypass = rng.nextInt (64) == 0; // raro: serve che le voci suonino davvero
+
+            synth.setParams (p);
+            synth.setMasterGainLinear (rng.nextFloat());
+
+            // Blocchi di lunghezza variabile: l'host non ne garantisce una fissa, e con blocchi
+            // corti l'LFO e gli SmoothedValue avanzano di pochi campioni per volta.
+            const int numSamples = 1 + rng.nextInt (128);
+            juce::MidiBuffer midi;
+
+            for (int e = rng.nextInt (4); --e >= 0;)
+            {
+                const int pos = rng.nextInt (numSamples);
+                const int roll = rng.nextInt (10);
+
+                if (roll < 5)
+                    midi.addEvent (juce::MidiMessage::noteOn (1, 12 + rng.nextInt (108), rng.nextFloat()), pos);
+                else if (roll < 8)
+                    midi.addEvent (juce::MidiMessage::noteOff (1, 12 + rng.nextInt (108)), pos);
+                else
+                    midi.addEvent (juce::MidiMessage::controllerEvent (1, 1, rng.nextInt (128)), pos);
+            }
+
+            juce::AudioBuffer<float> buffer (2, numSamples);
+            buffer.clear();
+            synth.process (buffer, midi);
+
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            {
+                const auto* data = buffer.getReadPointer (ch);
+
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    const auto value = data[i];
+
+                    if (badBlock < 0 && (! std::isfinite (value) || std::abs (value) > 1.0f))
+                    {
+                        badBlock = b;
+                        badSample = i;
+                        badValue = value;
+                    }
+
+                    peak = juce::jmax (peak, std::abs (value));
+                }
+            }
+        }
+
+        const auto what = "fuzz seme " + juce::String (seed);
+        expect (badBlock < 0, what + ": campione fuori contratto al blocco " + juce::String (badBlock)
+                                  + ", indice " + juce::String (badSample) + ", valore " + juce::String (badValue));
+        expect (peak > 0.01f, what + ": uscita troppo bassa (" + juce::String (peak) + ")");
+    }
+
+    void runTest() override
+    {
+        dsp::WavetableStore store;
+        store.setActive (1);
+
+        beginTest ("matrix pieno e parametri in movimento: ogni campione resta nel contratto");
+        {
+            const auto peak = sweep (store, {}, 240, "passata lunga");
+
+            // La soglia del soft clipper e' 0.8. Se il picco restasse sotto, questo test non
+            // starebbe verificando il clipper ma solo che un segnale gia' piccolo resta
+            // piccolo: l'asserzione serve a impedire che diventi vacuo se un domani il gain
+            // staging cambia. Il picco misurato, 0.98, corrisponde a ~2.5 in ingresso al
+            // clipper (+8 dBFS): con `res` modulato a fondo corsa e' il picco risonante del
+            // filtro, quello da +29.7 dB sopra Butterworth, a portarcelo.
+            expect (peak > 0.8f, "picco " + juce::String (peak)
+                                     + ": il soft clipper non e' nemmeno entrato in funzione");
+
+            logMessage ("matrix pieno, 16 note, 240 blocchi: picco " + juce::String (peak) + " ("
+                        + juce::String (juce::Decibels::gainToDecibels (peak), 2) + " dBFS)");
+        }
+
+        beginTest ("matrix pieno nelle tre configurazioni di filtro e a tre sample rate");
+        {
+            // Il picco di risonanza dipende dal sample rate (il warping di tan()) e dal numero
+            // di stadi; il passa-alto e il passa-banda hanno un percorso diverso dentro l'SVF.
+            // Con `res` modulato a fondo corsa e' proprio qui che il soft clipper va verificato.
+            for (const auto rate : { 44100.0, 48000.0, 96000.0 })
+                for (const auto type : { dsp::StateVariableFilter::Type::lowPass,
+                                         dsp::StateVariableFilter::Type::highPass,
+                                         dsp::StateVariableFilter::Type::bandPass })
+                    for (const auto stages : { 1, 2 })
+                    {
+                        Config cfg;
+                        cfg.sampleRate = rate;
+                        cfg.filterType = type;
+                        cfg.filterStages = stages;
+
+                        const auto what = juce::String (rate, 0) + " Hz, tipo " + juce::String ((int) type)
+                                              + ", " + juce::String (stages) + " stadi";
+                        const auto peak = sweep (store, cfg, 96, what);
+                        logMessage (what + ": picco " + juce::String (peak));
+                    }
+        }
+
+        beginTest ("matrix pieno con LFO in sync e senza retrigger");
+        {
+            // Senza retrigger la sorgente `lfo` e' quella libera del motore, condivisa da tutte
+            // le voci: un percorso diverso da quello per voce, e va stressato anch'esso.
+            for (const auto sync : { false, true })
+                for (const auto retrig : { false, true })
+                {
+                    Config cfg;
+                    cfg.lfoSync = sync;
+                    cfg.lfoRetrig = retrig;
+                    sweep (store, cfg, 96,
+                           juce::String ("sync ") + (sync ? "on" : "off") + ", retrig "
+                               + (retrig ? "on" : "off"));
+                }
+        }
+
+        beginTest ("matrix pieno e voice stealing: ventiquattro note su un pool da sedici");
+        {
+            // Oltre il pool si ruba, e rubare chiama kill(): la voce riparte con start(), che
+            // rifa' applyModulation() da capo. Il gradino del furto e' un difetto noto
+            // (vedi docs/architecture.md), ma non deve mai diventare un campione fuori scala.
+            Config cfg;
+            cfg.numNotes = 24;
+            const auto peak = sweep (store, cfg, 180, "24 note");
+            logMessage ("24 note (8 rubate): picco " + juce::String (peak));
+        }
+
+        beginTest ("l'anello regge una ripubblicazione a ogni blocco");
+        {
+            Config cfg;
+            cfg.republishEachBlock = true;
+            sweep (store, cfg, 180, "ripubblicazione continua");
+        }
+
+        beginTest ("fuzz a semi fissi: matrix casuale, parametri casuali, eventi casuali");
+        {
+            // Le passate sopra percorrono traiettorie scelte a mano, quindi esplorano solo le
+            // combinazioni a cui ho pensato. Questa attraversa lo spazio in modo diverso a ogni
+            // seme: matrix di lunghezza qualunque, depth qualunque, basi che saltano di blocco
+            // in blocco, note che entrano ed escono. I semi sono fissi apposta — un test che
+            // fallisce una volta su venti non e' un test — ma il generatore e' stato fatto
+            // girare su duecento semi durante la scrittura, senza trovare un solo campione
+            // fuori dal contratto.
+            for (const auto seed : { 1, 7, 42, 1337, 90210 })
+                fuzz (store, seed, 400);
+        }
+
+        beginTest ("count a zero copre le route rimaste nello slot dell'anello");
+        {
+            // buildModSnapshot riscrive `count` ma non ripulisce le route oltre di esso, e gli
+            // slot dell'anello vengono riusati: se qualcuno leggesse routes[] senza fermarsi a
+            // `count`, una modulazione cancellata dalla UI continuerebbe a suonare. Qui
+            // l'anello viene riempito di snapshot pieni, poi svuotato, e l'uscita deve tornare
+            // identica campione per campione a quella di un motore che non ha mai visto una
+            // route.
+            const auto render = [&store] (bool fillRingFirst)
+            {
+                engine::SynthEngine synth; prepareEngine (synth, store);
+
+                if (fillRingFirst)
+                {
+                    // Cinque pubblicazioni: l'anello ha quattro slot, quindi ne riscrive uno.
+                    for (int i = 0; i < 5; ++i)
+                        synth.setMods (fullSnapshot());
+
+                    auto empty = fullSnapshot();
+                    empty.count = 0; // route ancora tutte li' dentro, ma invisibili
+                    synth.setMods (empty);
+                }
+
+                auto p = defaultParams();
+                p.filterOn = true;
+                p.modBase.fill (0.5f);
+                synth.setParams (p);
+                synth.setMasterGainLinear (0.8f);
+
+                juce::MidiBuffer m;
+                m.addEvent (juce::MidiMessage::noteOn (1, 60, 0.9f), 0);
+                juce::AudioBuffer<float> b (2, 128);
+                b.clear();
+                synth.process (b, m);
+
+                std::vector<float> out;
+                juce::MidiBuffer none;
+                for (int i = 0; i < 30; ++i)
+                {
+                    juce::AudioBuffer<float> buf (2, 128);
+                    buf.clear();
+                    synth.process (buf, none);
+                    const auto* d = buf.getReadPointer (0);
+                    out.insert (out.end(), d, d + 128);
+                }
+                return out;
+            };
+
+            const auto clean = render (false);
+            const auto emptied = render (true);
+
+            expectEquals ((int) emptied.size(), (int) clean.size());
+            for (size_t i = 0; i < clean.size(); ++i)
+                expectWithinAbsoluteError (emptied[i], clean[i], 0.0f);
+        }
+    }
+};
+
+static ModulationStressTests modulationStressTests;
