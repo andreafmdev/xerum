@@ -589,7 +589,13 @@ void SynthVoice::applyModulation() noexcept
     }
 
     const auto fineCents = value (params::ParamSlot::fine, params_.fineCents, &params::fineCentsFromRaw);
-    tuningSemitones_ = (float) (12 * params_.octave + params_.semitones) + fineCents * 0.01f;
+
+    // Il bend e' un addendo dell'offset in semitoni, come oct, semi e fine: entra dalla stessa
+    // porta, si compone con il glide per costruzione (il glide muove il numero di nota, questo
+    // muove l'offset, updatePitch() li somma) e con `pitchBend` a zero somma 0.0f, quindi chi
+    // non tocca la rotella ottiene gli stessi bit di prima.
+    const auto bendSemitones = params_.pitchBend * (float) params_.pitchBendRangeSemitones;
+    tuningSemitones_ = (float) (12 * params_.octave + params_.semitones) + fineCents * 0.01f + bendSemitones;
 
     // Il vibrato ha senso solo se l'intonazione segue la modulazione anche a nota gia' partita:
     // senza questo, una route su `fine` cambierebbe solo l'accordatura delle note successive.

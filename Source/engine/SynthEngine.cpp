@@ -198,6 +198,14 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
         return;
     }
 
+    if (message.isPitchWheel())
+    {
+        // -1..1 attorno a 8192, che e' il centro della corsa a 14 bit. Come modWheel_: campo del
+        // solo thread audio, letto una volta per blocco in process().
+        pitchBend_ = ((float) message.getPitchWheelValue() - 8192.0f) / 8192.0f;
+        return;
+    }
+
     if (message.isNoteOn())
     {
         voices_.noteOn (message.getNoteNumber(), message.getFloatVelocity());
@@ -582,6 +590,7 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
         params_.mods = published;
 
     params_.modWheel = modWheel_;
+    params_.pitchBend = pitchBend_;
 
     // Stesso trattamento delle mod, e per la stessa ragione: se il message thread non ha ancora
     // pubblicato niente si tiene il puntatore arrivato con setParams(), che e' nullptr in

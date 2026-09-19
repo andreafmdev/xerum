@@ -278,6 +278,7 @@ private:
 
     std::atomic<float> lfoLevel_ { 0.0f };
     float modWheel_ { 0.0f }; // CC 1, solo thread audio
+    float pitchBend_ { 0.0f }; // rotella di pitch, -1..1, solo thread audio
 
     // --- telemetria per il meter ---------------------------------------------------------
     // Sola lettura verso l'editor: niente qui dentro torna nel percorso del segnale. Gli
