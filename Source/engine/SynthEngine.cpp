@@ -130,6 +130,44 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
     }
 }
 
+/**
+ * Il ciclo di process() spezza il render sugli eventi MIDI; questo lo spezza ancora, in fette di
+ * al piu' kControlBlockSamples campioni. E' tutta la correzione: senza, la lunghezza delle fette
+ * — e quindi il tasso a cui SynthVoice::render() rivaluta applyModulation() e avanza l'LFO — la
+ * decideva l'host.
+ *
+ * Il costo non e' lineare nel numero di sotto-fette perche' non lo e' il lavoro che ognuna fa:
+ * applyModulation() denormalizza sette target (due con std::pow), updateCutoff() chiama
+ * std::exp2 e setCutoffHz() std::tan. Misurato in Release nel caso peggiore (16 voci, unison 8,
+ * una route lfo -> cutoff, blocco da 512 a 48 kHz) il prezzo di scendere da 128 a 32 campioni di
+ * fetta e' meno di mezzo punto percentuale del budget del blocco. La tabella sta nel commento di
+ * kControlBlockSamples.
+ *
+ * Nessuna allocazione, nessuna struttura dinamica: un intero di offset e un ciclo.
+ */
+void SynthEngine::renderControlSlices (float* left, float* right, int numSamples) noexcept
+{
+    for (int offset = 0; offset < numSamples; offset += kControlBlockSamples)
+    {
+        const auto slice = std::min (kControlBlockSamples, numSamples - offset);
+
+        // L'LFO libero avanza *qui dentro*, non una volta per blocco. Lasciarlo fuori sarebbe
+        // stato il modo piu' facile di correggere meta' del difetto: le voci avrebbero avuto il
+        // loro tasso fisso e l'LFO condiviso no, quindi con lfoRetrig falso — l'unico caso in cui
+        // qualcuno lo legge — il buffer dell'host sarebbe tornato a decidere il suono.
+        params_.globalLfoLevel = globalLfo_.advance (slice);
+
+        // E' l'unica via per far arrivare il livello nuovo alle voci: SynthVoice lo legge dalla
+        // sua copia di EngineParams. Ripeterla per sotto-fetta e' sicuro perche' ogni setter che
+        // tocca e' idempotente — updateUnison esce al primo confronto se i knob non si sono
+        // mossi, setNumStages azzera uno stadio solo quando ne accende uno, i coefficienti
+        // dell'inviluppo sono funzione pura dei secondi — quindi l'unica cosa che cambia fra una
+        // sotto-fetta e l'altra e' cio' che deve cambiare.
+        voices_.setParams (params_);
+        voices_.render (left + offset, right + offset, slice);
+    }
+}
+
 void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) noexcept
 {
     if (params_.bypass)
@@ -152,9 +190,10 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
     if (numSamples <= 0 || numChannels <= 0)
         return;
 
-    // L'LFO libero avanza una volta per blocco, note o non note: e' cio' che lo rende "libero".
-    // Con matrix vuoto non tocca niente — le voci leggono globalLfoLevel solo se una route
-    // punta a un target — quindi farlo girare sempre non cambia di un campione chi non lo usa.
+    // L'LFO libero gira anche senza note: e' cio' che lo rende "libero". Qui si accorda soltanto;
+    // ad avanzarlo e' renderControlSlices(), una sotto-fetta per volta. Con matrix vuoto non tocca
+    // niente — le voci leggono globalLfoLevel solo se una route punta a un target — quindi farlo
+    // girare sempre non cambia di un campione chi non lo usa.
     constexpr auto* specLrate = params::find ("lrate");
     static_assert (specLrate != nullptr, "lrate non e' in ParameterTable.h");
 
@@ -163,7 +202,6 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
     globalLfo_.setFrequencyHz (params_.lfoSync
                                    ? dsp::syncedRateHz (params_.lfoRateRaw, (double) params_.bpm)
                                    : params::denormalise (*specLrate, params_.lfoRateRaw));
-    const auto globalLevel = globalLfo_.advance (numSamples);
 
     // Se il message thread non ha ancora pubblicato niente si tiene il puntatore arrivato con
     // setParams(): e' nullptr in produzione (collectEngineParams non lo riempie) ed e' la via
@@ -172,16 +210,18 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
         params_.mods = published;
 
     params_.modWheel = modWheel_;
-    params_.globalLfoLevel = globalLevel;
 
-    // Prima del ciclo MIDI, non dopo: una nota che parte in questo blocco deve gia' vedere le
-    // modulazioni di questo blocco. Il mod wheel letto qui e' invece quello di fine blocco
-    // precedente, perche' un CC 1 a meta' buffer viene gestito nel ciclo qui sotto e avra'
-    // effetto dal blocco dopo — coerente con una modulazione a tasso di blocco.
+    // Il livello di fine blocco precedente, non ancora avanzato: dentro il ciclo lo rinfresca
+    // renderControlSlices() a ogni sotto-fetta.
+    params_.globalLfoLevel = globalLfo_.level();
+
+    // Prima del ciclo MIDI, non dopo: una nota che parte a campione zero chiama start(), che
+    // valuta subito la modulazione, e deve trovare i parametri di *questo* blocco gia' posati.
+    // Dentro il ciclo la chiamata si ripete per ogni sotto-fetta, ma quella prima non e'
+    // ridondante: la prima sotto-fetta puo' non esserci affatto, se il blocco si apre con un
+    // evento. Il mod wheel letto qui e' invece quello di fine blocco precedente, perche' un CC 1
+    // a meta' buffer viene gestito nel ciclo qui sotto e avra' effetto dal blocco dopo.
     voices_.setParams (params_);
-
-    lfoLevel_.store (params_.lfoRetrig ? voices_.getLfoLevel() : globalLevel,
-                     std::memory_order_relaxed);
 
     float* left = buffer.getWritePointer (0);
     float* right = numChannels > 1 ? buffer.getWritePointer (1) : left;
@@ -195,7 +235,7 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
 
         if (slice > 0)
         {
-            voices_.render (left + samplePos, right + samplePos, slice);
+            renderControlSlices (left + samplePos, right + samplePos, slice);
             samplePos = eventPos;
         }
 
@@ -203,7 +243,12 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
     }
 
     if (samplePos < numSamples)
-        voices_.render (left + samplePos, right + samplePos, numSamples - samplePos);
+        renderControlSlices (left + samplePos, right + samplePos, numSamples - samplePos);
+
+    // Dopo il render, non prima: adesso params_.globalLfoLevel e' il livello di fine blocco,
+    // quello che il meter dell'editor deve mostrare.
+    lfoLevel_.store (params_.lfoRetrig ? voices_.getLfoLevel() : params_.globalLfoLevel,
+                     std::memory_order_relaxed);
 
     // Rampato, non applicato di scatto: spec 6.4 elenca volume fra i cinque bersagli di
     // smoothing (cutoff, wtpos, level, volume, pan). Un salto a gain di blocco produrrebbe lo

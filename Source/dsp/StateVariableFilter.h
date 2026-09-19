@@ -12,11 +12,13 @@ namespace dsp
  * Gestione della risonanza (due scelte deliberate — vedi anche updateCoefficients):
  *  - in cascata a 24 dB la risonanza sta **solo sull'ultimo stadio**, il primo resta
  *    Butterworth. Mettendola su entrambi il picco andrebbe a Q², cioè +52 dB a Q 20;
- *  - l'ingresso viene attenuato di `(Qbutter / Q)^(1/8)`: limita il picco di 2.9 dB a
- *    Q 24 e costa 3.5 dB di banda passante allo stesso Q. E' il massimo che sta dentro il
- *    budget di 4 dB: alzare `res` deve far squillare il filtro, non abbassare il volume
- *    dello strumento, e una compensazione forte (prima era l'esponente 1/2) costava
- *    -14.7 dB a Q 24 — cioe' rendeva magro lo strumento invece di domarne il picco.
+ *  - il picco lo limita una **saturazione dentro l'anello**, sull'integratore del bandpass,
+ *    non piu' un'attenuazione dell'ingresso. L'attenuazione d'ingresso scambiava banda
+ *    passante contro picco 1:1 in dB — aritmetica, non taratura: con l'esponente 1/8 costava
+ *    3.8 dB di banda passante a Q 24 per togliere gli stessi 3.8 dB al picco, e con il vecchio
+ *    1/2 ne costava 14.7. Una nonlinearita' dipendente dal livello rompe quel cambio: misurato,
+ *    **zero perdita in banda passante a ogni Q** (0.02 dB nel caso peggiore) e **14.3 dB di
+ *    picco in meno a Q 24** (da +23.8 a +9.5 sopra il Butterworth, ingresso 0.3).
  */
 class StateVariableFilter
 {
@@ -53,7 +55,13 @@ private:
     struct Coefficients
     {
         float twoR { 1.414f };
-        float denominator { 1.0f };
+
+        /** Il **reciproco** di 1 + 2R·g + g², non il denominatore: e' costante per blocco,
+            quindi il loop audio lo moltiplica invece di dividerci (vedi updateCoefficients). */
+        float inverseDenominator { 1.0f };
+
+        /** Forza della saturazione dell'integratore, 0 = nessuna (vedi updateCoefficients). */
+        float saturation { 0.0f };
     };
 
     float processStage (Stage& stage, const Coefficients& c, float input) const noexcept;
@@ -66,7 +74,6 @@ private:
     int numStages_ { 1 };
 
     float g_ { 0.0f };
-    float inputGain_ { 1.0f };
     Coefficients butterworth_ {};
     Coefficients resonant_ {};
 

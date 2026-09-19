@@ -7,8 +7,9 @@ namespace dsp
  *
  * E' una scelta, non una semplificazione mancata. Cutoff e Position gia' si aggiornano una
  * volta per blocco perche' costano tan() e ricalcolo degli indici di frame; far girare l'LFO
- * per campione non renderebbe piu' fine la loro modulazione. A 48 kHz con blocchi da 128
- * campioni il tasso di aggiornamento e' 375 Hz, abbondante per un LFO che arriva a 20 Hz.
+ * per campione non renderebbe piu' fine la loro modulazione. Il render e' spezzato in sotto-fette di al piu' 32
+ * campioni (SynthEngine::kControlBlockSamples), quindi il tasso di aggiornamento e'
+ * 1500 Hz a 48 kHz qualunque buffer passi l'host, abbondante per un LFO che arriva a 20 Hz.
  * Il rovescio della medaglia: FM e AM audio-rate non sono esprimibili, e non sono un obiettivo.
  */
 class Lfo

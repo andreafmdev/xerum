@@ -363,8 +363,10 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
     // La modulazione si valuta qui e non in setParams() per una ragione sola: `env` e `vel`
     // sono sorgenti per voce e cambiano *dentro* il blocco (un note-on arriva a meta' buffer),
     // quindi vanno lette quando la voce sta per suonare, non quando il processore deposita i
-    // parametri. Resta un sistema a tasso di controllo, una valutazione per blocco (o per fetta
-    // fra due eventi MIDI): 375 Hz a 48 kHz con blocchi da 128, abbondante per un LFO che
+    // parametri. Resta un sistema a tasso di controllo, una valutazione per
+    // sotto-fetta: SynthEngine::process spezza il render in fette di al piu'
+    // kControlBlockSamples (32) campioni, quindi 1500 Hz a 48 kHz **garantiti**, non
+    // piu' dipendenti dal buffer che passa l'host, abbondante per un LFO che
     // arriva a 20 Hz, inadatto a FM e AM — che non sono un obiettivo.
     applyModulation();
     updateCutoff (false);
