@@ -99,4 +99,10 @@ void VoiceManager::setParams (const EngineParams& p) noexcept
     for (auto& voice : voices_)
         voice.setParams (p);
 }
+
+void VoiceManager::setGlobalLfoLevel (float level) noexcept
+{
+    for (auto& voice : voices_)
+        voice.setGlobalLfoLevel (level);
+}
 } // namespace engine

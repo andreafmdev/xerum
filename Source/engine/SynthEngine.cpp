@@ -143,13 +143,18 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
  * fetta e' meno di mezzo punto percentuale del budget del blocco. La tabella sta nel commento di
  * kControlBlockSamples.
  *
- * Nessuna allocazione, nessuna struttura dinamica: un intero di offset e un ciclo.
+ * Nessuna allocazione, nessuna struttura dinamica: due interi e un ciclo.
  */
-void SynthEngine::renderControlSlices (float* left, float* right, int numSamples) noexcept
+void SynthEngine::renderControlSlices (float* left, float* right, int numSamples, int gridPhase) noexcept
 {
-    for (int offset = 0; offset < numSamples; offset += kControlBlockSamples)
+    for (int offset = 0; offset < numSamples; )
     {
-        const auto slice = std::min (kControlBlockSamples, numSamples - offset);
+        // La griglia e' ancorata all'inizio del buffer, non al punto da cui si sta rendendo: la
+        // prima sotto-fetta dopo un evento MIDI si accorcia quanto basta a ritrovare il confine.
+        // Vedi il commento della dichiarazione: e' cio' che rende i confini di controllo gli
+        // stessi campioni assoluti qualunque buffer passi l'host, e non solo la loro frequenza.
+        const auto phase = (gridPhase + offset) % kControlBlockSamples;
+        const auto slice = std::min (kControlBlockSamples - phase, numSamples - offset);
 
         // L'LFO libero avanza *qui dentro*, non una volta per blocco. Lasciarlo fuori sarebbe
         // stato il modo piu' facile di correggere meta' del difetto: le voci avrebbero avuto il
@@ -157,14 +162,16 @@ void SynthEngine::renderControlSlices (float* left, float* right, int numSamples
         // qualcuno lo legge — il buffer dell'host sarebbe tornato a decidere il suono.
         params_.globalLfoLevel = globalLfo_.advance (slice);
 
-        // E' l'unica via per far arrivare il livello nuovo alle voci: SynthVoice lo legge dalla
-        // sua copia di EngineParams. Ripeterla per sotto-fetta e' sicuro perche' ogni setter che
-        // tocca e' idempotente — updateUnison esce al primo confronto se i knob non si sono
-        // mossi, setNumStages azzera uno stadio solo quando ne accende uno, i coefficienti
-        // dell'inviluppo sono funzione pura dei secondi — quindi l'unica cosa che cambia fra una
-        // sotto-fetta e l'altra e' cio' che deve cambiare.
-        voices_.setParams (params_);
+        // Il livello nuovo arriva alle voci da solo, non dentro una EngineParams ripubblicata.
+        // E' l'unico campo che cambia fra una sotto-fetta e l'altra: tutto il resto e' gia'
+        // posato da process(), una volta per blocco. Prima qui c'era voices_.setParams(params_),
+        // corretta (ogni setter che tocca e' idempotente) ma cara — sedici sotto-fette per
+        // sedici voci, e ogni chiamata ricalcola tre coefficienti d'inviluppo con exp() e
+        // riscorre la lista delle route per rifare la maschera. Era quasi tutto il costo delle
+        // sotto-fette: vedi il commento di VoiceManager::setGlobalLfoLevel.
+        voices_.setGlobalLfoLevel (params_.globalLfoLevel);
         voices_.render (left + offset, right + offset, slice);
+        offset += slice;
     }
 }
 
@@ -215,12 +222,12 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
     // renderControlSlices() a ogni sotto-fetta.
     params_.globalLfoLevel = globalLfo_.level();
 
-    // Prima del ciclo MIDI, non dopo: una nota che parte a campione zero chiama start(), che
-    // valuta subito la modulazione, e deve trovare i parametri di *questo* blocco gia' posati.
-    // Dentro il ciclo la chiamata si ripete per ogni sotto-fetta, ma quella prima non e'
-    // ridondante: la prima sotto-fetta puo' non esserci affatto, se il blocco si apre con un
-    // evento. Il mod wheel letto qui e' invece quello di fine blocco precedente, perche' un CC 1
-    // a meta' buffer viene gestito nel ciclo qui sotto e avra' effetto dal blocco dopo.
+    // L'unica pubblicazione dell'intera EngineParams del blocco, e sta prima del ciclo MIDI, non
+    // dopo: una nota che parte a campione zero chiama start(), che valuta subito la modulazione,
+    // e deve trovare i parametri di *questo* blocco gia' posati. Da qui in avanti le sotto-fette
+    // muovono il solo livello dell'LFO libero, con setGlobalLfoLevel. Il mod wheel letto qui e'
+    // quello di fine blocco precedente, perche' un CC 1 a meta' buffer viene gestito nel ciclo
+    // qui sotto e avra' effetto dal blocco dopo.
     voices_.setParams (params_);
 
     float* left = buffer.getWritePointer (0);
@@ -235,7 +242,7 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
 
         if (slice > 0)
         {
-            renderControlSlices (left + samplePos, right + samplePos, slice);
+            renderControlSlices (left + samplePos, right + samplePos, slice, samplePos);
             samplePos = eventPos;
         }
 
@@ -243,7 +250,7 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
     }
 
     if (samplePos < numSamples)
-        renderControlSlices (left + samplePos, right + samplePos, numSamples - samplePos);
+        renderControlSlices (left + samplePos, right + samplePos, numSamples - samplePos, samplePos);
 
     // Dopo il render, non prima: adesso params_.globalLfoLevel e' il livello di fine blocco,
     // quello che il meter dell'editor deve mostrare.

@@ -103,11 +103,22 @@ public:
 private:
     void handleMidiEvent (const juce::MidiMessage& message) noexcept;
 
-    /** Rende `numSamples` campioni spezzandoli in sotto-fette di al piu' kControlBlockSamples,
-        ciascuna con la propria valutazione della modulazione e il proprio avanzamento dell'LFO
-        libero. Il numero di sotto-fette e' ceil(numSamples / 32): limitato, noto, e senza una
-        sola struttura dinamica di mezzo. */
-    void renderControlSlices (float* left, float* right, int numSamples) noexcept;
+    /**
+     * Rende `numSamples` campioni spezzandoli in sotto-fette di al piu' kControlBlockSamples,
+     * ciascuna con la propria valutazione della modulazione e il proprio avanzamento dell'LFO
+     * libero. Il numero di sotto-fette e' al piu' ceil(numSamples / 32) + 1: limitato, noto, e
+     * senza una sola struttura dinamica di mezzo.
+     *
+     * `gridPhase` e' la posizione del primo campione **dentro il buffer dell'host**, e serve a
+     * tenere i confini di controllo su una griglia ancorata all'inizio del buffer invece che al
+     * punto in cui l'ultimo evento MIDI ha interrotto il render. Senza, un note-on a un campione
+     * qualunque sfasava la griglia di li' in avanti, e la sfasatura dipendeva da dove cominciava
+     * il blocco dell'host: due buffer diversi valutavano la modulazione a campioni diversi.
+     * Finche' lo smoother filtrava anche la modulazione la differenza restava all'uno per cento,
+     * ora che non la filtra piu' arriverebbe al tre. La prima sotto-fetta dopo un evento e'
+     * quindi piu' corta, quanto basta a rimettersi in griglia.
+     */
+    void renderControlSlices (float* left, float* right, int numSamples, int gridPhase) noexcept;
 
     VoiceManager voices_;
     EngineSpec spec_ {};

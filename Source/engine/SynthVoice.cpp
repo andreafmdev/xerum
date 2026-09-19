@@ -187,7 +187,8 @@ void SynthVoice::setWavetable (const dsp::MipTable* table) noexcept
         oscillator.setTable (table); // resetta la posizione di frame a 0 internamente
         // Rimette subito la posizione corrente: senza questo, il cambio tavola resterebbe
         // silenziosamente sul frame 0 fino alla prossima render(), udibile come un salto.
-        oscillator.setFramePosition (smoothedFramePosition_.getCurrentValue());
+        oscillator.setFramePosition (juce::jlimit (0.0f, 1.0f,
+                                                  smoothedFramePosition_.getCurrentValue() + framePositionMod_));
     }
 }
 
@@ -229,6 +230,16 @@ void SynthVoice::setParams (const EngineParams& p) noexcept
             if (target >= 0 && target < kNumModTargets)
                 modMask_ |= 1u << (unsigned) target;
         }
+
+    // La base denormalizzata del cutoff, una volta per blocco: vedi il commento del campo.
+    // Fuori dal ramo modulato non serve a nessuno, e calcolarla costerebbe uno std::pow per
+    // blocco e per voce a chi non ha nessuna route su cutoff.
+    {
+        const auto cutoffTarget = modTargetIndexFor (params::ParamSlot::cutoff);
+        modBaseCutoffHz_ = isModulated (cutoffTarget)
+                               ? params::cutoffHzFromRaw (p.modBase[(size_t) cutoffTarget])
+                               : 0.0f;
+    }
 
     globalLfoLevel_ = p.globalLfoLevel;
     lfoRetrig_ = p.lfoRetrig;
@@ -283,16 +294,67 @@ void SynthVoice::applyModulation() noexcept
         return isModulated (target) ? convert (modulated (target)) : unmodulated;
     };
 
-    baseCutoffHz_ = value (params::ParamSlot::cutoff, params_.cutoffHz, &params::cutoffHzFromRaw);
     driveGain_ = value (params::ParamSlot::drive, params_.driveGain, &params::driveGainFromRaw);
     const auto resonance = value (params::ParamSlot::res, params_.resonanceQ, &params::resonanceQFromRaw);
     filter_.setResonance (resonance);
     filterRight_.setResonance (resonance);
 
-    smoothedFramePosition_.setTargetValue (
-        value (params::ParamSlot::wtpos, params_.framePosition, &params::framePositionFromRaw));
-    smoothedLevel_.setTargetValue (value (params::ParamSlot::level, params_.level, &params::levelGainFromRaw));
-    smoothedPan_.setTargetValue (value (params::ParamSlot::pan, params_.pan, &params::panFromRaw));
+    // I quattro bersagli rampati si dividono in due: sullo smoother finisce la sola **base**, e
+    // la modulazione torna di qui come scostamento, da sommare a valle in render(). Vedi il
+    // commento degli smoother in SynthVoice.h: la rampa di 20 ms e' un polo a 8 Hz, e applicarla
+    // al totale attenuava di 8.6 dB una route a 20 Hz.
+    //
+    // Nota quale base finisce nello smoother quando il bersaglio e' modulato: `convert(modBase)`
+    // e non il campo denormalizzato di EngineParams. In produzione sono lo stesso numero
+    // (collectEngineParams li riempie dallo stesso grezzo), ma il percorso modulato ha sempre
+    // letto modBase, e continuare a leggerlo e' cio' che tiene lo scostamento e la base nella
+    // stessa scala anche quando un test costruisce a mano una EngineParams in cui i due campi
+    // non si corrispondono.
+    const auto rampedBase = [this] (params::ParamSlot slot, float unmodulated,
+                                    float (*convert) (float) noexcept,
+                                    juce::SmoothedValue<float>& smoother) noexcept
+    {
+        const auto target = modTargetIndexFor (slot);
+
+        if (! isModulated (target))
+        {
+            smoother.setTargetValue (unmodulated);
+            return 0.0f;
+        }
+
+        const auto base = convert (params_.modBase[(size_t) target]);
+        smoother.setTargetValue (base);
+        return convert (modulated (target)) - base;
+    };
+
+    framePositionMod_ = rampedBase (params::ParamSlot::wtpos, params_.framePosition,
+                                    &params::framePositionFromRaw, smoothedFramePosition_);
+    levelMod_ = rampedBase (params::ParamSlot::level, params_.level,
+                            &params::levelGainFromRaw, smoothedLevel_);
+    panMod_ = rampedBase (params::ParamSlot::pan, params_.pan, &params::panFromRaw, smoothedPan_);
+
+    // Cutoff a parte, e moltiplicativo: la mappa e' logaritmica, quindi la modulazione e' un
+    // rapporto di frequenza — la stessa profondita' vale 632 Hz a meta' corsa e 12 kHz vicino al
+    // fondo scala, e uno scostamento additivo salterebbe a ogni movimento della base. Il
+    // rapporto no: e' 1000^(scostamento normalizzato), indipendente da dove sta la base, quindi
+    // la rampa moltiplicata per una costante resta una rampa.
+    const auto cutoffTarget = modTargetIndexFor (params::ParamSlot::cutoff);
+
+    if (isModulated (cutoffTarget))
+    {
+        baseCutoffHz_ = modBaseCutoffHz_;
+        const auto modulatedHz = params::cutoffHzFromRaw (modulated (cutoffTarget));
+
+        // Il minimo della mappa e' 20 Hz, quindi il denominatore non e' mai zero; la guardia
+        // c'e' lo stesso perche' il costo e' un confronto e il prezzo di sbagliarsi un NaN che
+        // si propaga fino all'uscita.
+        cutoffModRatio_ = baseCutoffHz_ > 0.0f ? modulatedHz / baseCutoffHz_ : 1.0f;
+    }
+    else
+    {
+        baseCutoffHz_ = params_.cutoffHz;
+        cutoffModRatio_ = 1.0f;
+    }
 
     const auto fineCents = value (params::ParamSlot::fine, params_.fineCents, &params::fineCentsFromRaw);
     tuningSemitones_ = (float) (12 * params_.octave + params_.semitones) + fineCents * 0.01f;
@@ -373,11 +435,17 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
 
     // Cutoff e posizione si aggiornano una volta per blocco: ricalcolano tan() e gli
     // indici di frame, troppo costosi per girare per campione.
-    const auto cutoffNow = smoothedCutoff_.skip (numSamples);
+    //
+    // Rampa per la base, prodotto per la modulazione: `* 1.0f` e `+ 0.0f` sui bersagli senza
+    // route sono l'identita' esatta, quindi il percorso non modulato resta bit per bit quello
+    // di prima. Il cutoff che ne esce puo' uscire dal range della mappa mentre la base rampa;
+    // ci pensa StateVariableFilter, che limita comunque a [10 Hz, 0.49 x sr] prima del prewarp.
+    const auto cutoffNow = smoothedCutoff_.skip (numSamples) * cutoffModRatio_;
     filter_.setCutoffHz (cutoffNow);
     filterRight_.setCutoffHz (cutoffNow);
 
-    const auto positionNow = smoothedFramePosition_.skip (numSamples);
+    const auto positionNow = juce::jlimit (0.0f, 1.0f,
+                                           smoothedFramePosition_.skip (numSamples) + framePositionMod_);
     for (int i = 0; i < unisonVoices_; ++i)
         oscillators_[(size_t) i].setFramePosition (positionNow);
 
@@ -388,7 +456,7 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
     //
     // Con l'unison diventano N coppie invece di una — le copie si distribuiscono attorno al pan
     // della voce su kUnisonSpreadWidth — ma restano N calcoli *per blocco*, non per campione.
-    const auto panNow = smoothedPan_.skip (numSamples);
+    const auto panNow = smoothedPan_.skip (numSamples) + panMod_;
 
     for (int i = 0; i < unisonVoices_; ++i)
     {
@@ -401,6 +469,27 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
         unisonGainL_[(size_t) i] = std::cos (angle) * kVoiceHeadroomGain * unisonGain_;
         unisonGainR_[(size_t) i] = std::sin (angle) * kVoiceHeadroomGain * unisonGain_;
     }
+
+    // Level e' l'unico bersaglio rampato per campione, quindi la somma con la modulazione sta
+    // dentro il ciclo: una addizione, e nient'altro. Il limite a 0..1 si applica **allo
+    // scostamento**, qui, una volta per sotto-fetta invece che a ogni campione: dentro la fetta
+    // la rampa sta tutta fra il valore corrente e il bersaglio, quindi tenere lo scostamento
+    // dentro quel margine garantisce 0..1 su ogni campione.
+    //
+    // Il limite serve davvero, e non e' una precauzione di troppo: lo scostamento si ricalcola
+    // dalla base *nuova* mentre la rampa e' ancora sulla vecchia, e con un depth negativo
+    // profondo quella sfasatura porterebbe il prodotto sotto zero — cioe' invertirebbe la
+    // polarita' della voce invece di abbassarla. Sta qui e non in applyModulation() perche'
+    // start() risincronizza lo smoother *dopo* di quella: leggerlo prima darebbe un margine
+    // calcolato sul livello lasciato dalla nota precedente.
+    //
+    // Senza route lo scostamento e' zero, i due estremi stanno gia' in 0..1 (levelGainFromRaw
+    // clampa), quindi -lo <= 0 <= 1-hi: il limite lo lascia a zero e `+ 0.0f` e' l'identita'
+    // esatta.
+    const auto levelLow = juce::jmin (smoothedLevel_.getCurrentValue(), smoothedLevel_.getTargetValue());
+    const auto levelHigh = juce::jmax (smoothedLevel_.getCurrentValue(), smoothedLevel_.getTargetValue());
+    const auto levelMod = juce::jlimit (-levelLow, 1.0f - levelHigh, levelMod_);
+    const auto levelAt = [levelMod] (float base) noexcept { return base + levelMod; };
 
     if (unisonVoices_ == 1)
     {
@@ -422,7 +511,7 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
                 sample = filter_.processSample (sample);
 
             sample *= envelope_.getNextSample();
-            sample *= smoothedLevel_.getNextValue();
+            sample *= levelAt (smoothedLevel_.getNextValue());
 
             outL[i] += sample * gainL;
             outR[i] += sample * gainR;
@@ -459,7 +548,7 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
             // Inviluppo e livello sono per voce, non per copia: si leggono una volta sola e si
             // applicano ai due canali. getNextSample()/getNextValue() avanzano uno stato, non
             // sono funzioni pure — chiamarle due volte farebbe correre l'inviluppo al doppio.
-            const auto amplitude = envelope_.getNextSample() * smoothedLevel_.getNextValue();
+            const auto amplitude = envelope_.getNextSample() * levelAt (smoothedLevel_.getNextValue());
 
             outL[i] += left * amplitude;
             outR[i] += right * amplitude;

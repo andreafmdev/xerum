@@ -157,6 +157,19 @@ public:
     /** Il livello dell'LFO di questa voce: lo legge SynthEngine per il meter. */
     float getLfoLevel() const noexcept { return lfoRetrig_ ? lfo_.level() : globalLfoLevel_; }
 
+    /**
+     * Il livello dell'LFO libero, e nient'altro.
+     *
+     * E' l'unico campo di EngineParams che cambia *dentro* il blocco: SynthEngine lo rinfresca a
+     * ogni sotto-fetta di controllo. Farlo arrivare con setParams() vorrebbe dire ripubblicare
+     * tutta la struct — sedici sotto-fette per sedici voci, cioe' 256 chiamate per blocco,
+     * ognuna delle quali ricalcola tre coefficienti d'inviluppo con exp() e riscorre la lista
+     * delle route per rifare la maschera. Qui si scrive un float.
+     *
+     * Serve solo con lfoRetrig falso: con il retrigger acceso la voce legge il proprio LFO.
+     */
+    void setGlobalLfoLevel (float level) noexcept { globalLfoLevel_ = level; }
+
 private:
     void updateCutoff (bool snap) noexcept;
 
@@ -226,14 +239,58 @@ private:
     std::array<float, kMaxUnison> unisonGainL_ {};
     std::array<float, kMaxUnison> unisonGainR_ {};
 
-    // Rampe di 20 ms: evitano gradini udibili quando l'host automatizza un parametro
-    // a scatti fra un blocco e l'altro. Cutoff e Position restano costosi (tan(),
-    // ricalcolo degli indici di frame) e si aggiornano una sola volta per blocco;
-    // Level e Pan sono economici e si aggiornano campione per campione.
+    /**
+     * Rampe di 20 ms: evitano gradini udibili quando l'utente o l'host muovono un parametro a
+     * scatti fra un blocco e l'altro.
+     *
+     * Dentro ci finisce il valore **di base**, mai quello gia' modulato. Non e' un dettaglio
+     * d'implementazione: con il bersaglio riposato una volta per sotto-fetta la rampa ne
+     * recupera 32/960 per volta, che e' un passa-basso a un polo a 7.96 Hz. Applicato al totale,
+     * quel polo filtrava la modulazione insieme al knob — una route lfo -> cutoff usciva a -3 dB
+     * a 8 Hz e a -8.6 dB a 20, il massimo che l'LFO sa produrre. Stavamo filtrando la nostra
+     * stessa modulazione, che e' gia' continua per costruzione e non ha nessun gradino da
+     * smussare. La somma delle modulazioni entra quindi **dopo**, in render(): gli scostamenti
+     * qui sotto. E' la stessa separazione di Vital (SynthModule::createBaseModControl: lo
+     * smoother sul controllo, la somma delle mod collegata a valle).
+     *
+     * Cutoff e Position restano costosi (tan(), ricalcolo degli indici di frame) e si aggiornano
+     * una sola volta per sotto-fetta; Pan pure, perche' costa cos()/sin(); solo Level e' rampato
+     * per campione, perche' getNextValue() e' un'interpolazione lineare senza libm.
+     */
     juce::SmoothedValue<float> smoothedCutoff_;
     juce::SmoothedValue<float> smoothedFramePosition_;
     juce::SmoothedValue<float> smoothedLevel_;
     juce::SmoothedValue<float> smoothedPan_;
+
+    /**
+     * Cio' che la modulazione aggiunge al valore rampato, ricalcolato a ogni sotto-fetta di
+     * controllo e applicato **a valle** dello smoother. Zero (e uno, per il rapporto) quando
+     * nessuna route punta a quel bersaglio: il percorso non modulato resta bit per bit quello
+     * di prima, come per modMask_.
+     *
+     * Per cutoff e' un **rapporto** e non uno scostamento, e la ragione e' la mappa: `cutoff` e'
+     * Map::Log da 20 a 20000 Hz, cioe' 20 x 1000^x, quindi lo scostamento in hertz che una
+     * stessa profondita' produce dipende da dove sta la base — 632 Hz di modulazione a meta'
+     * corsa, 12 kHz vicino al fondo scala. Uno scostamento additivo *salterebbe* ogni volta che
+     * la base si muove, proprio mentre la rampa e' li' a impedire quel salto. Il rapporto
+     * invece non dipende dalla base (e' 1000^(delta normalizzato)): la rampa moltiplicata per
+     * una costante resta una rampa. Gli altri tre bersagli hanno mappe identita' (wtpos, level)
+     * o affini (pan), dove lo scostamento e' gia' indipendente dalla base e la somma basta.
+     *
+     * Il clamp a 0..1 resta **prima** della denormalizzazione e dopo la somma, dentro
+     * modulated(): e' il contratto con liveValue() di WebUI/src/synth/mod.ts, ed e' quel valore
+     * che l'anello del knob mostra.
+     */
+    float cutoffModRatio_ { 1.0f };
+
+    /** cutoffHzFromRaw(modBase[cutoff]), calcolato in setParams. La base non cambia dentro il
+        blocco, mentre applyModulation() gira una volta per sotto-fetta: senza questa cache la
+        mappa Log del cutoff pagherebbe **due** std::pow per sotto-fetta invece di uno — quello
+        della base e quello del totale — cioe' 256 pow in piu' per blocco su sedici voci. */
+    float modBaseCutoffHz_ { 0.0f };
+    float framePositionMod_ { 0.0f };
+    float levelMod_ { 0.0f };
+    float panMod_ { 0.0f };
 
     // --- modulazione ---
 
