@@ -2,7 +2,6 @@
 
 #include "parameters/ParamCollect.h"
 
-#include <algorithm>
 #include <cmath>
 
 namespace engine
@@ -40,21 +39,6 @@ float midiNoteToHz (int note, float offsetSemitones) noexcept
 {
     // std::pow gira solo a note-on, mai per campione: niente libm nel loop audio.
     return 440.0f * std::pow (2.0f, ((float) note + offsetSemitones - 69.0f) / 12.0f);
-}
-
-/**
- * Soft clipper polinomiale: guadagno unitario sul piccolo segnale, satura dolcemente e si
- * ferma a 1.0 quando l'ingresso raggiunge 1.5. Niente tanh() per campione.
- *
- * La versione precedente, `1.5 * (x - x^3/3)`, era unitaria a fondo scala ma aveva pendenza
- * **1.5 nell'origine**: applicava +3.5 dB a tutto il segnale anche a drive minimo. Insieme al
- * default di `drive` (che era 0.15, cioe' 3.6 dB) significava +7 dB non richiesti sulla catena.
- */
-float saturate (float x) noexcept
-{
-    // y = c - c^3/6.75 -> y'(0) = 1, y(1.5) = 1, y'(1.5) = 0.
-    const auto c = std::clamp (x, -1.5f, 1.5f);
-    return c - (c * c * c) / 6.75f;
 }
 } // namespace
 
