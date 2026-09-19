@@ -44,6 +44,22 @@ public:
      */
     void setPendingWavetable (const dsp::MipTable* table) noexcept;
 
+    /**
+     * Pubblica una nuova lista di assegnazioni. Chiamabile da qualunque thread: si copia lo
+     * snapshot in uno slot libero dell'anello e si pubblica solo il puntatore.
+     *
+     * Anello di quattro e non doppio buffer: le mod cambiano molto piu' spesso di una wavetable
+     * (l'utente trascina uno slider di depth), e con due soli slot il message thread potrebbe
+     * riscrivere quello che il thread audio sta leggendo. Con quattro dovrebbe pubblicare
+     * quattro volte dentro un singolo blocco audio per raggiungere il lettore: nella pratica
+     * impossibile, e comunque il danno sarebbe una modulazione sbagliata per un blocco, mai
+     * una lettura di memoria liberata — gli slot vivono quanto il motore.
+     */
+    void setMods (const engine::ModSnapshot& snapshot) noexcept;
+
+    /** Il livello corrente dell'LFO, per il meter dell'editor. */
+    float getLfoLevel() const noexcept { return lfoLevel_.load (std::memory_order_relaxed); }
+
 private:
     void handleMidiEvent (const juce::MidiMessage& message) noexcept;
 
@@ -53,5 +69,18 @@ private:
     float masterGain_ { 1.0f };
     float previousMasterGain_ { 1.0f }; // per rampare il gain fra un blocco e l'altro, vedi process()
     std::atomic<const dsp::MipTable*> pendingWavetable_ { nullptr };
+
+    // --- modulazione ---
+
+    /** L'LFO che gira anche senza note: e' cio' che rende "libera" la fase condivisa quando
+        lretrig e' falso. Avanza in process(), una volta per blocco. */
+    dsp::Lfo globalLfo_;
+
+    ModSnapshot modRing_[4] {};
+    std::atomic<int> modWriteSlot_ { 0 };
+    std::atomic<const ModSnapshot*> activeMods_ { nullptr };
+
+    std::atomic<float> lfoLevel_ { 0.0f };
+    float modWheel_ { 0.0f }; // CC 1, solo thread audio
 };
 } // namespace engine

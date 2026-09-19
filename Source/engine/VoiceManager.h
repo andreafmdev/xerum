@@ -31,6 +31,19 @@ public:
     /** Propaga i parametri del blocco a tutte le voci, attive o no. */
     void setParams (const EngineParams& p) noexcept;
 
+    /** Il livello dell'LFO della prima voce attiva, per il meter. Zero se non suona niente.
+        Non esiste una setGlobalLfoLevel simmetrica: il livello dell'LFO libero arriva alle
+        voci dentro EngineParams::globalLfoLevel, e un secondo canale per lo stesso dato
+        sarebbe solo una via in piu' da tenere sincronizzata. */
+    float getLfoLevel() const noexcept
+    {
+        for (const auto& voice : voices_)
+            if (voice.isActive())
+                return voice.getLfoLevel();
+
+        return 0.0f;
+    }
+
 private:
     SynthVoice* findFreeVoice() noexcept;
     SynthVoice* findVoiceForNote (int midiNote) noexcept;

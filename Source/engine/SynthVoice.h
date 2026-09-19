@@ -42,9 +42,6 @@ public:
     /** Applica i parametri del blocco. Nessun atomico, nessuna allocazione. */
     void setParams (const EngineParams& p) noexcept;
 
-    /** Livello dell'LFO libero del motore, usato quando lfoRetrig e' falso. Thread audio. */
-    void setGlobalLfoLevel (float level) noexcept { globalLfoLevel_ = level; }
-
     /** Il livello dell'LFO di questa voce: lo legge SynthEngine per il meter. */
     float getLfoLevel() const noexcept { return lfoRetrig_ ? lfo_.level() : globalLfoLevel_; }
 

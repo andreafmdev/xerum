@@ -1,5 +1,8 @@
 #include "engine/SynthEngine.h"
 
+#include "parameters/ParameterDenormalise.h"
+#include "parameters/ParameterTable.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -41,6 +44,7 @@ void SynthEngine::prepare (const EngineSpec& spec) noexcept
 {
     spec_ = spec;
     voices_.prepare (spec_.sampleRate);
+    globalLfo_.prepare (spec_.sampleRate);
 }
 
 void SynthEngine::reset() noexcept
@@ -69,8 +73,26 @@ void SynthEngine::setPendingWavetable (const dsp::MipTable* table) noexcept
     pendingWavetable_.store (table, std::memory_order_release);
 }
 
+void SynthEngine::setMods (const engine::ModSnapshot& snapshot) noexcept
+{
+    // fetch_add invece di uno scrittore singolo: setMods puo' arrivare dal message thread e,
+    // in futuro, da chi ricarica un preset. L'incremento atomico garantisce che due chiamate
+    // concorrenti scelgano slot diversi, quindi nessuna delle due riscrive l'altra a meta'.
+    const auto slot = modWriteSlot_.fetch_add (1, std::memory_order_relaxed) & 3;
+    modRing_[slot] = snapshot;
+    activeMods_.store (&modRing_[slot], std::memory_order_release);
+}
+
 void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
 {
+    if (message.isController() && message.getControllerNumber() == 1)
+    {
+        // Mod wheel: sorgente `mw` del matrix, 0..1. Prima degli altri rami perche' e' il caso
+        // piu' frequente fra i messaggi non di nota e non ha niente a che vedere con le voci.
+        modWheel_ = (float) message.getControllerValue() / 127.0f;
+        return;
+    }
+
     if (message.isNoteOn())
     {
         voices_.noteOn (message.getNoteNumber(), message.getFloatVelocity());
@@ -110,6 +132,37 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
 
     if (numSamples <= 0 || numChannels <= 0)
         return;
+
+    // L'LFO libero avanza una volta per blocco, note o non note: e' cio' che lo rende "libero".
+    // Con matrix vuoto non tocca niente — le voci leggono globalLfoLevel solo se una route
+    // punta a un target — quindi farlo girare sempre non cambia di un campione chi non lo usa.
+    constexpr auto* specLrate = params::find ("lrate");
+    static_assert (specLrate != nullptr, "lrate non e' in ParameterTable.h");
+
+    globalLfo_.setShape ((dsp::Lfo::Shape) juce::jlimit (0, 4, params_.lfoShapeIndex));
+    globalLfo_.setFadeSeconds (0.0f); // la dissolvenza e' per nota: non ha senso sull'LFO libero
+    globalLfo_.setFrequencyHz (params_.lfoSync
+                                   ? dsp::syncedRateHz (params_.lfoRateRaw, (double) params_.bpm)
+                                   : params::denormalise (*specLrate, params_.lfoRateRaw));
+    const auto globalLevel = globalLfo_.advance (numSamples);
+
+    // Se il message thread non ha ancora pubblicato niente si tiene il puntatore arrivato con
+    // setParams(): e' nullptr in produzione (collectEngineParams non lo riempie) ed e' la via
+    // con cui i test della voce iniettano uno snapshot senza passare da setMods().
+    if (const auto* published = activeMods_.load (std::memory_order_acquire); published != nullptr)
+        params_.mods = published;
+
+    params_.modWheel = modWheel_;
+    params_.globalLfoLevel = globalLevel;
+
+    // Prima del ciclo MIDI, non dopo: una nota che parte in questo blocco deve gia' vedere le
+    // modulazioni di questo blocco. Il mod wheel letto qui e' invece quello di fine blocco
+    // precedente, perche' un CC 1 a meta' buffer viene gestito nel ciclo qui sotto e avra'
+    // effetto dal blocco dopo — coerente con una modulazione a tasso di blocco.
+    voices_.setParams (params_);
+
+    lfoLevel_.store (params_.lfoRetrig ? voices_.getLfoLevel() : globalLevel,
+                     std::memory_order_relaxed);
 
     float* left = buffer.getWritePointer (0);
     float* right = numChannels > 1 ? buffer.getWritePointer (1) : left;

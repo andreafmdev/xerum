@@ -1161,3 +1161,108 @@ struct ModulationVoiceTests final : juce::UnitTest
 };
 
 static ModulationVoiceTests modulationVoiceTests;
+
+/**
+ * La modulazione vista dal motore: la pubblicazione lock-free dello snapshot, il mod wheel che
+ * arriva da CC 1 e l'LFO libero che avanza a ogni blocco anche quando non suona niente.
+ */
+struct ModulationEngineTests final : juce::UnitTest
+{
+    ModulationEngineTests() : juce::UnitTest ("modulazione nel motore", "engine") {}
+
+    void runTest() override
+    {
+        beginTest ("setMods pubblica le assegnazioni e process() le applica");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+            engine::SynthEngine synth; prepareEngine (synth, store);
+
+            auto p = defaultParams();
+            // Base a meta' corsa, cosi' la somma del depth ha spazio per salire: con il level
+            // di defaultParams() (1.0) il clamp mangerebbe tutta la modulazione.
+            p.level = 0.5f;
+            p.modBase[(size_t) engine::modTargetIndexFor (params::ParamSlot::level)] = 0.5f;
+            synth.setParams (p);
+            synth.setMasterGainLinear (1.0f);
+
+            juce::MidiBuffer m;
+            m.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            juce::AudioBuffer<float> b (2, 128);
+            b.clear();
+            synth.process (b, m);
+
+            const auto before = renderRms (synth, 20);
+
+            engine::ModSnapshot mods;
+            mods.count = 1;
+            mods.routes[0] = { engine::ModSource::vel,
+                               engine::modTargetIndexFor (params::ParamSlot::level), 0.5f };
+            synth.setMods (mods);
+
+            const auto after = renderRms (synth, 20);
+            expect (after > before * 1.1f, "la nuova assegnazione non e' arrivata alle voci");
+        }
+
+        beginTest ("il mod wheel arriva da CC 1 e vale 0..1");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+            engine::SynthEngine synth; prepareEngine (synth, store);
+
+            engine::ModSnapshot mods;
+            mods.count = 1;
+            mods.routes[0] = { engine::ModSource::mw,
+                               engine::modTargetIndexFor (params::ParamSlot::level), 0.5f };
+            synth.setMods (mods);
+
+            auto p = defaultParams();
+            p.modBase[(size_t) engine::modTargetIndexFor (params::ParamSlot::level)] = 0.4f;
+            synth.setParams (p);
+            synth.setMasterGainLinear (1.0f);
+
+            juce::MidiBuffer m;
+            m.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            juce::AudioBuffer<float> b (2, 128);
+            b.clear();
+            synth.process (b, m);
+
+            const auto closed = renderRms (synth, 30);
+
+            juce::MidiBuffer cc;
+            cc.addEvent (juce::MidiMessage::controllerEvent (1, 1, 127), 0);
+            juce::AudioBuffer<float> b2 (2, 128);
+            b2.clear();
+            synth.process (b2, cc);
+
+            const auto open = renderRms (synth, 30);
+            expect (open > closed * 1.1f, "il mod wheel non ha modulato niente");
+        }
+
+        beginTest ("l'LFO libero avanza anche senza note e finisce nel meter");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+            engine::SynthEngine synth; prepareEngine (synth, store);
+
+            auto p = defaultParams();
+            p.lfoRetrig = false;
+            p.lfoShapeIndex = 2;   // saw: parte da 1 e scende
+            p.lfoRateRaw = 1.0f;   // il massimo della mappa: 20 Hz
+            p.lfoSync = false;
+            synth.setParams (p);
+
+            const auto first = synth.getLfoLevel();
+
+            juce::MidiBuffer none;
+            for (int i = 0; i < 10; ++i)
+            {
+                juce::AudioBuffer<float> b (2, 128);
+                b.clear();
+                synth.process (b, none);
+            }
+
+            expect (! juce::approximatelyEqual (synth.getLfoLevel(), first), "l'LFO libero non e' avanzato");
+        }
+    }
+};
+
+static ModulationEngineTests modulationEngineTests;
+
