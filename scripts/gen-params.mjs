@@ -13,8 +13,61 @@ const LABEL = { hz: "Hz", time: "Time", pan: "Pan", signed: "Signed", "arp-rate"
 const cstr = (s) => (s == null ? "nullptr" : JSON.stringify(s));
 const f = (n) => `${Number(n)}f`.replace(/^(-?\d+)f$/, "$1.0f");
 
+/**
+ * Il dominio in cui vive `default` per ogni kind — che NON è lo stesso per tutti, ed è la
+ * ragione per cui questo controllo esiste. Per Kind::Float e Kind::Bool l'APVTS tiene il valore
+ * normalizzato 0..1 (ParameterMapping.h li crea con NormalisableRange {0,1}), quindi `default`
+ * è 0..1 e `map` descrive solo come si legge; per Kind::Int il parametro vive nel suo range
+ * naturale, quindi `default` sta in map.min..map.max; per Kind::Choice è l'indice dell'opzione.
+ * Confondere questi tre domini è esattamente il bug delle quattro ottave, in forma di dato.
+ */
+const chunk = (xs, n) => xs.reduce((acc, x, i) => (i % n === 0 ? acc.push([x]) : acc[acc.length - 1].push(x), acc), []);
+
+const defaultDomain = (p) => {
+  if (p.kind === "int") return [p.map.min, p.map.max];
+  if (p.kind === "choice") return [0, (p.options?.length ?? 1) - 1];
+  return [0, 1];
+};
+
+/**
+ * Convalida alla generazione ciò che altrimenti si scoprirebbe a runtime nel plugin: è l'assert
+ * che Vital tiene nel costruttore della sua tabella, spostato di qualche ora più in là.
+ */
+export function validate(ps) {
+  const seen = new Set();
+
+  for (const [i, p] of ps.entries()) {
+    const where = `parametro #${i} ("${p.id}")`;
+
+    if (typeof p.id !== "string" || p.id === "") throw new Error(`parametro #${i}: id mancante`);
+    if (seen.has(p.id)) throw new Error(`${where}: id duplicato`);
+    seen.add(p.id);
+
+    // Dichiarazione obbligatoria, non opzionale: chi aggiunge un parametro deve *decidere* se il
+    // motore lo legge. Senza questo campo lo slot non verrebbe generato e collectEngineParams
+    // leggerebbe un parametro che non esiste — in silenzio.
+    if (typeof p.slot !== "boolean")
+      throw new Error(`${where}: manca "slot" (true = ha uno slot params::ParamSlot letto da collectEngineParams, false = no)`);
+
+    if (p.kind === "int" && !p.map) throw new Error(`${where}: un kind "int" deve avere "map" (è il suo range naturale)`);
+    if (p.map && !(Number(p.map.min) < Number(p.map.max)))
+      throw new Error(`${where}: map.min (${p.map.min}) deve essere < map.max (${p.map.max})`);
+    if (p.kind === "choice" && (p.options?.length ?? 0) < 2)
+      throw new Error(`${where}: un kind "choice" deve avere almeno 2 opzioni`);
+
+    const def = typeof p.default === "boolean" ? (p.default ? 1 : 0) : p.default;
+    if (typeof def !== "number" || !Number.isFinite(def)) throw new Error(`${where}: default assente o non numerico`);
+
+    const [lo, hi] = defaultDomain(p);
+    if (def < lo || def > hi)
+      throw new Error(`${where}: default ${def} fuori da ${lo}..${hi} (dominio del kind "${p.kind}")`);
+  }
+}
+
 export function generate(json) {
   const ps = json.params;
+  validate(ps);
+  const slots = ps.filter((p) => p.slot);
   const header = [
     "// GENERATED da Source/parameters/parameters.json — non modificare a mano.",
     "// Rigenera con: node scripts/gen-params.mjs",
@@ -56,6 +109,46 @@ export function generate(json) {
     "    }",
     "    return nullptr;",
     "}",
+    "",
+    "// --- slot del motore -------------------------------------------------------------------",
+    "//",
+    "// Identifica un parametro grezzo senza passare per il suo nome: chi implementa l'accessore",
+    "// risolve `id -> puntatore` una volta sola alla costruzione (vedi PluginProcessor::paramSlots_,",
+    "// che cicla su kSlotIds), e qui dentro e' solo un indice di array.",
+    "//",
+    "// Ci sono soltanto i parametri con \"slot\": true in parameters.json, cioe' quelli che il motore",
+    "// legge una volta per blocco attraverso params::collectEngineParams. Gli altri o non sono",
+    "// ancora cablati, o viaggiano per conto loro (wtIndex e volume, vedi PluginProcessor).",
+    "//",
+    "// L'ordine e' quello di parameters.json, ma resta un dettaglio interno fra questo header e chi",
+    "// scrive l'accessore, non un ABI pubblico: nessuno stato salvato contiene un indice di slot.",
+    "// Non coincide con l'indice dentro kTable, perche' i parametri senza slot creano dei buchi:",
+    "// per passare dall'uno all'altro c'e' specForSlot().",
+    `inline constexpr int kNumSlots = ${slots.length};`,
+    "",
+    "enum class ParamSlot : int",
+    "{",
+    ...chunk(slots.map((p) => p.id), 8).map((row) => `    ${row.join(", ")},`),
+    "    count",
+    "};",
+    "",
+    "static_assert ((int) ParamSlot::count == kNumSlots, \"enum e conteggio devono coincidere\");",
+    "",
+    "/** L'id del parametro di ogni slot, nello stesso ordine dell'enum. */",
+    `inline constexpr const char* kSlotIds[kNumSlots] = {`,
+    ...chunk(slots.map((p) => cstr(p.id)), 8).map((row) => `    ${row.join(", ")},`),
+    "};",
+    "",
+    "/** L'indice dentro kTable di ogni slot: kTable[kSlotTableIndex[i]].id e' kSlotIds[i]. */",
+    "inline constexpr int kSlotTableIndex[kNumSlots] = {",
+    ...chunk(slots.map((p) => String(ps.indexOf(p))), 16).map((row) => `    ${row.join(", ")},`),
+    "};",
+    "",
+    "/** La spec del parametro dietro uno slot. constexpr: non costa niente a runtime. */",
+    "inline constexpr const Spec& specForSlot (ParamSlot s) noexcept",
+    "{",
+    "    return kTable[kSlotTableIndex[(int) s]];",
+    "}",
     "} // namespace params",
     "",
   ].join("\n");
@@ -70,6 +163,8 @@ export function generate(json) {
     'export type LabelKind = "hz" | "time" | "pan" | "signed" | "arp-rate";',
     "export interface ParamSpec {",
     "  id: ParamId; name: string; group: string; kind: ParamKind;",
+    "  /** true se il motore lo legge via params::ParamSlot (vedi ParameterTable.h). */",
+    "  slot: boolean;",
     "  map?: { type: MapType; min: number; max: number; offset?: number };",
     "  default: number | boolean; unit?: string; decimals?: number; labelKind?: LabelKind; bipolar?: boolean;",
     "  options?: { value: string; label: string }[];",

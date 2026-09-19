@@ -2,7 +2,6 @@
 
 #include "dsp/StateVariableFilter.h"
 #include "engine/EngineParams.h"
-#include "parameters/ParamSlot.h"
 #include "parameters/ParameterDenormalise.h"
 #include "parameters/ParameterTable.h"
 
@@ -147,21 +146,19 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.framePosition = framePositionFromRaw (rawFor (ParamSlot::wtpos));
 
     // `oct` e `semi` sono gli unici Kind::Int del progetto, e ParameterMapping.h li crea come
-    // juce::AudioParameterInt nel loro range naturale (-3..3 e -12..12). getRawParameterValue
-    // restituisce quindi gia' il valore reale: denormalizzarlo come se fosse 0..1 e' sbagliato
-    // due volte. Al default (0 e 0) dava -3 ottave e -12 semitoni, cioe' ogni nota quattro
-    // ottave sotto il tasto premuto; e siccome denormalise() clampa a 0..1, il knob poteva
-    // produrre *solo* i due estremi del range, mai un valore intermedio.
-    //
-    // I Kind::Float non hanno lo stesso problema perche' sono creati con NormalisableRange
-    // {0, 1}: per loro naturale e normalizzato coincidono. E' il motivo per cui il difetto
-    // riguardava questi due parametri e nessun altro.
-    //
-    // roundToInt e non un cast troncante: il valore arriva come float e gli arrotondamenti
-    // possono lasciarlo appena sotto l'intero vero (7.999998), dove un cast troncherebbe
-    // verso zero sbagliando di un semitono.
-    p.octave = juce::roundToInt (rawFor (ParamSlot::oct));
-    p.semitones = juce::roundToInt (rawFor (ParamSlot::semi));
+    // juce::AudioParameterInt nel loro range naturale (-3..3 e -12..12). La conversione da
+    // grezzo a naturale non e' scritta qui ma in params::naturalFromRaw, che sceglie in base al
+    // Kind: e' la stessa funzione che il ciclo di Tests/ParameterSeamTests.cpp confronta con i
+    // default dichiarati in parameters.json, parametro per parametro, sull'APVTS vero. Scriverla
+    // in linea qui vorrebbe dire riaverne due copie — ed e' su una copia divergente che e'
+    // vissuto per mesi il bug delle quattro ottave (vedi il commento di naturalFromRaw).
+    constexpr auto& specOct = specForSlot (ParamSlot::oct);
+    constexpr auto& specSemi = specForSlot (ParamSlot::semi);
+    static_assert (specOct.kind == Kind::Int && specSemi.kind == Kind::Int,
+                   "oct e semi devono restare Kind::Int: se diventassero Float la conversione qui sotto cambierebbe");
+
+    p.octave = juce::roundToInt (naturalFromRaw (specOct, rawFor (ParamSlot::oct)));
+    p.semitones = juce::roundToInt (naturalFromRaw (specSemi, rawFor (ParamSlot::semi)));
     p.fineCents = fineCentsFromRaw (rawFor (ParamSlot::fine));
     p.level = levelGainFromRaw (rawFor (ParamSlot::level));
     p.unisonVoices = unisonVoicesFromChoice (rawFor (ParamSlot::unison));

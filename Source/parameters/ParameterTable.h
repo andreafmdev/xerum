@@ -86,4 +86,51 @@ inline constexpr const Spec* find (const char* id) noexcept
     }
     return nullptr;
 }
+
+// --- slot del motore -------------------------------------------------------------------
+//
+// Identifica un parametro grezzo senza passare per il suo nome: chi implementa l'accessore
+// risolve `id -> puntatore` una volta sola alla costruzione (vedi PluginProcessor::paramSlots_,
+// che cicla su kSlotIds), e qui dentro e' solo un indice di array.
+//
+// Ci sono soltanto i parametri con "slot": true in parameters.json, cioe' quelli che il motore
+// legge una volta per blocco attraverso params::collectEngineParams. Gli altri o non sono
+// ancora cablati, o viaggiano per conto loro (wtIndex e volume, vedi PluginProcessor).
+//
+// L'ordine e' quello di parameters.json, ma resta un dettaglio interno fra questo header e chi
+// scrive l'accessore, non un ABI pubblico: nessuno stato salvato contiene un indice di slot.
+// Non coincide con l'indice dentro kTable, perche' i parametri senza slot creano dei buchi:
+// per passare dall'uno all'altro c'e' specForSlot().
+inline constexpr int kNumSlots = 28;
+
+enum class ParamSlot : int
+{
+    oscOn, unison, oct, semi, wtpos, detune, fine, level,
+    filtOn, ftype, slope, cutoff, res, drive, keytrk, pan,
+    bypass, att, dec, sus, rel, envVel, lshape, lsync,
+    lretrig, lrate, lphase, lfade,
+    count
+};
+
+static_assert ((int) ParamSlot::count == kNumSlots, "enum e conteggio devono coincidere");
+
+/** L'id del parametro di ogni slot, nello stesso ordine dell'enum. */
+inline constexpr const char* kSlotIds[kNumSlots] = {
+    "oscOn", "unison", "oct", "semi", "wtpos", "detune", "fine", "level",
+    "filtOn", "ftype", "slope", "cutoff", "res", "drive", "keytrk", "pan",
+    "bypass", "att", "dec", "sus", "rel", "envVel", "lshape", "lsync",
+    "lretrig", "lrate", "lphase", "lfade",
+};
+
+/** L'indice dentro kTable di ogni slot: kTable[kSlotTableIndex[i]].id e' kSlotIds[i]. */
+inline constexpr int kSlotTableIndex[kNumSlots] = {
+    0, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18,
+    21, 22, 23, 24, 25, 26, 28, 29, 30, 31, 32, 33,
+};
+
+/** La spec del parametro dietro uno slot. constexpr: non costa niente a runtime. */
+inline constexpr const Spec& specForSlot (ParamSlot s) noexcept
+{
+    return kTable[kSlotTableIndex[(int) s]];
+}
 } // namespace params

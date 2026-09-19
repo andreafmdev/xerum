@@ -16,40 +16,24 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
 {
     state::ensureChildren (apvts_.state);
 
-    // Risolti una volta sola qui: collectParams() indicizza paramSlots_ con params::ParamSlot,
-    // nessuna ricerca per nome sul thread audio.
-    paramSlots_[(size_t) params::ParamSlot::oscOn] = apvts_.getRawParameterValue ("oscOn");
-    paramSlots_[(size_t) params::ParamSlot::wtpos] = apvts_.getRawParameterValue ("wtpos");
-    paramSlots_[(size_t) params::ParamSlot::oct] = apvts_.getRawParameterValue ("oct");
-    paramSlots_[(size_t) params::ParamSlot::semi] = apvts_.getRawParameterValue ("semi");
-    paramSlots_[(size_t) params::ParamSlot::fine] = apvts_.getRawParameterValue ("fine");
-    paramSlots_[(size_t) params::ParamSlot::level] = apvts_.getRawParameterValue ("level");
-    paramSlots_[(size_t) params::ParamSlot::unison] = apvts_.getRawParameterValue ("unison");
-    paramSlots_[(size_t) params::ParamSlot::detune] = apvts_.getRawParameterValue ("detune");
-    paramSlots_[(size_t) params::ParamSlot::filtOn] = apvts_.getRawParameterValue ("filtOn");
-    paramSlots_[(size_t) params::ParamSlot::ftype] = apvts_.getRawParameterValue ("ftype");
-    paramSlots_[(size_t) params::ParamSlot::slope] = apvts_.getRawParameterValue ("slope");
-    paramSlots_[(size_t) params::ParamSlot::cutoff] = apvts_.getRawParameterValue ("cutoff");
-    paramSlots_[(size_t) params::ParamSlot::res] = apvts_.getRawParameterValue ("res");
-    paramSlots_[(size_t) params::ParamSlot::drive] = apvts_.getRawParameterValue ("drive");
-    paramSlots_[(size_t) params::ParamSlot::keytrk] = apvts_.getRawParameterValue ("keytrk");
-    paramSlots_[(size_t) params::ParamSlot::att] = apvts_.getRawParameterValue ("att");
-    paramSlots_[(size_t) params::ParamSlot::dec] = apvts_.getRawParameterValue ("dec");
-    paramSlots_[(size_t) params::ParamSlot::sus] = apvts_.getRawParameterValue ("sus");
-    paramSlots_[(size_t) params::ParamSlot::rel] = apvts_.getRawParameterValue ("rel");
-    paramSlots_[(size_t) params::ParamSlot::envVel] = apvts_.getRawParameterValue ("envVel");
-    paramSlots_[(size_t) params::ParamSlot::pan] = apvts_.getRawParameterValue ("pan");
-    paramSlots_[(size_t) params::ParamSlot::bypass] = apvts_.getRawParameterValue ("bypass");
+    // Risolti una volta sola qui, ciclando sulla tabella generata: collectParams() indicizza
+    // paramSlots_ con params::ParamSlot, nessuna ricerca per nome sul thread audio.
+    //
+    // Il ciclo ha sostituito 28 assegnazioni scritte a mano. Non era una questione di righe: era
+    // la seconda di tre copie della stessa mappatura id -> slot (le altre due erano ParamSlot.h
+    // e il RealAccessor di Tests/ParameterSeamTests.cpp), e con tre copie un errore in una sola
+    // produce un test verde su un cablaggio sbagliato. Ora l'enum e kSlotIds escono entrambi da
+    // parameters.json (scripts/gen-params.mjs), allineati per costruzione.
+    for (int i = 0; i < params::kNumSlots; ++i)
+    {
+        auto* raw = apvts_.getRawParameterValue (params::kSlotIds[i]);
 
-    // I sei dell'LFO: i parametri esistevano già in parameters.json, mancava solo chi li
-    // risolvesse. Senza queste righe collectParams() troverebbe puntatori nulli e l'LFO
-    // girerebbe con la forma, il rate e la fade di default, ignorando i knob del tab LFO.
-    paramSlots_[(size_t) params::ParamSlot::lshape] = apvts_.getRawParameterValue ("lshape");
-    paramSlots_[(size_t) params::ParamSlot::lrate] = apvts_.getRawParameterValue ("lrate");
-    paramSlots_[(size_t) params::ParamSlot::lsync] = apvts_.getRawParameterValue ("lsync");
-    paramSlots_[(size_t) params::ParamSlot::lphase] = apvts_.getRawParameterValue ("lphase");
-    paramSlots_[(size_t) params::ParamSlot::lfade] = apvts_.getRawParameterValue ("lfade");
-    paramSlots_[(size_t) params::ParamSlot::lretrig] = apvts_.getRawParameterValue ("lretrig");
+        // Strutturalmente impossibile: kSlotIds e il layout nascono dalla stessa tabella. Se
+        // succede e' un difetto del generatore, e va visto in debug invece che diventare un
+        // parametro muto a runtime (collectParams() ha comunque il suo fallback sui nullptr).
+        jassert (raw != nullptr);
+        paramSlots_[(size_t) i] = raw;
+    }
 
     // wtIndex e volume non passano da EngineParams/collectEngineParams: restano a parte.
     paramWtIndex_ = apvts_.getRawParameterValue ("wtIndex");
@@ -288,7 +272,13 @@ juce::AudioProcessorEditor* SerumStyleSynthAudioProcessor::createEditor()
 
 void SerumStyleSynthAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    if (auto xml = apvts_.copyState().createXml())
+    auto state = apvts_.copyState();
+
+    // La versione del *formato*, sulla radice: è il ramo da cui una migrazione futura può
+    // partire. Vedi state::kStateVersion e il suo changelog.
+    state::stampSchemaVersion (state);
+
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
 
@@ -300,7 +290,31 @@ void SerumStyleSynthAudioProcessor::setStateInformation (const void* data, int s
             // Siamo sul message thread: ricreare i figli mancanti e notificare è sicuro.
             JUCE_ASSERT_MESSAGE_THREAD
 
-            apvts_.replaceState (juce::ValueTree::fromXml (*xml));
+            const auto incoming = juce::ValueTree::fromXml (*xml);
+
+            // Il formato dello stato che stiamo leggendo. Oggi c'è un solo formato e non c'è
+            // niente da migrare, ma il numero va letto comunque: è il punto in cui la prima
+            // migrazione si innesterà, ed è l'unica ragione per cui è stato scritto.
+            // Uno stato senza l'attributo (tutto ciò che è stato salvato finora) vale 1.
+            const auto version = state::schemaVersionOf (incoming);
+
+            // Uno stato più nuovo del formato che conosciamo (progetto salvato da una versione
+            // successiva del plugin): lo si legge comunque per quel che si può, perché
+            // rifiutarlo butterebbe via il lavoro dell'utente senza dirglielo.
+            jassert (version <= state::kStateVersion);
+            juce::ignoreUnused (version);
+
+            // Prima di sostituire l'albero, ogni parametro torna al suo default.
+            //
+            // replaceState() non cicla sullo schema, cicla sui figli del file: un parametro
+            // assente dallo stato salvato — perché aggiunto dopo che l'utente ha salvato quel
+            // progetto — non riceve nessuna notifica e si tiene il valore corrente, cioè un
+            // pezzo del suono precedente. Azzerando prima, il verso dell'iterazione torna
+            // quello giusto (schema corrente, valori pescati dal file) e dà gratis le tre
+            // regole: aggiunto -> default, rimosso -> ignorato, nessun residuo.
+            params::resetToDefaults (apvts_);
+
+            apvts_.replaceState (incoming);
 
             // replaceState() sostituisce l'oggetto albero, non lo modifica: da qui in poi
             // l'ordine conta. Prima i figli non parametrici (uno stato salvato prima che MODS

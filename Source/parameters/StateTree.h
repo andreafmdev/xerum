@@ -8,10 +8,51 @@ namespace ids
 {
     inline const juce::Identifier MODS { "MODS" }, MOD { "MOD" }, src { "src" }, target { "target" }, depth { "depth" };
     inline const juce::Identifier ARP { "ARP" }, steps { "steps" }, version { "version" };
+
+    /** Sulla radice dello stato salvato, non dentro un figlio: vedi kStateVersion. */
+    inline const juce::Identifier schemaVersion { "schemaVersion" };
 }
 
 inline constexpr int kVersion = 1;
 inline constexpr int kArpSteps = 16;
+
+/**
+ * La versione del *formato* dello stato salvato, scritta sulla radice da
+ * SerumStyleSynthAudioProcessor::getStateInformation e riletta da setStateInformation.
+ *
+ * Non e' la versione del plugin e non e' state::kVersion, che descrive il solo figlio MODS: e'
+ * il numero da cui una migrazione futura puo' ramificare, e l'unico posto dove puo' stare e' la
+ * radice — dentro un figlio non serve a niente, perche' per leggerlo bisogna gia' sapere che
+ * quel figlio esiste e come si chiama. Uno stato salvato *senza* questo attributo (cioe' tutto
+ * quello che esiste oggi, scritto prima che questa costante esistesse) vale 1: vedi
+ * schemaVersionOf().
+ *
+ * CHANGELOG DEL FORMATO — una riga per revisione, in ordine. Serve a non dover ricostruire la
+ * storia dal git log alla terza migrazione, ed e' l'unica parte di questo lavoro che
+ * retroattivamente non si puo' fare.
+ *
+ *   1 — formato iniziale. Radice PARAMS con un figlio PARAM per parametro (APVTS), piu' i figli
+ *       non parametrici MODS (con la propria proprieta' `version`) e ARP. Nessun attributo
+ *       `schemaVersion` sulla radice: gli stati scritti prima di questa costante ricadono qui.
+ *   2 — (libero) la prossima revisione va descritta qui, con cosa cambia e cosa deve fare la
+ *       migrazione da 1.
+ */
+inline constexpr int kStateVersion = 1;
+
+/**
+ * La versione di formato di uno stato letto da disco. Assente = 1: uno stato scritto prima che
+ * l'attributo esistesse e' per definizione un formato 1, non uno stato da rifiutare.
+ */
+inline int schemaVersionOf (const juce::ValueTree& root)
+{
+    return root.hasProperty (ids::schemaVersion) ? (int) root[ids::schemaVersion] : 1;
+}
+
+/** Marca lo stato col formato corrente, subito prima di serializzarlo. */
+inline void stampSchemaVersion (juce::ValueTree& root)
+{
+    root.setProperty (ids::schemaVersion, kStateVersion, nullptr);
+}
 
 /** Crea MODS e ARP se mancano (stato nuovo o preset vecchio). */
 inline void ensureChildren (juce::ValueTree& root)

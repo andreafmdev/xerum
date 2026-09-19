@@ -105,12 +105,13 @@ private:
     engine::MeterFrame meters_;
     juce::ChangeBroadcaster stateReplaced_;
 
-    // Puntatore grezzo (0..1 dell'APVTS, letto solo con load() sul thread audio) per ognuno
-    // dei parametri che params::collectEngineParams() (ParamCollect.h) consuma, indicizzato
-    // da params::ParamSlot. Risolto una volta sola nel costruttore (vedi sotto): l'accessore
-    // passato a collectEngineParams e' quindi una singola lettura d'array, senza hashing ne'
-    // confronto di stringhe per blocco. wtIndex e volume restano puntatori a parte: non
-    // passano da EngineParams (vedi wavetableIndexFromParam()/processBlock()).
+    // Puntatore grezzo dell'APVTS (letto solo con load() sul thread audio) per ognuno dei
+    // parametri che params::collectEngineParams() (ParamCollect.h) consuma, indicizzato da
+    // params::ParamSlot. Risolto una volta sola nel costruttore ciclando su params::kSlotIds,
+    // che e' generato da parameters.json insieme all'enum: l'accessore passato a
+    // collectEngineParams e' quindi una singola lettura d'array, senza hashing ne' confronto di
+    // stringhe per blocco. wtIndex e volume restano puntatori a parte: non passano da
+    // EngineParams (vedi wavetableIndexFromParam()/processBlock()).
     std::array<std::atomic<float>*, (size_t) params::ParamSlot::count> paramSlots_ {};
     std::atomic<float>* paramWtIndex_ { nullptr };
     std::atomic<float>* paramVolume_ { nullptr };
