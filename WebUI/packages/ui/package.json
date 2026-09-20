@@ -14,7 +14,8 @@
   },
   "files": ["dist", "src/theme.css"],
   "scripts": {
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && pnpm check:cjs",
+    "check:cjs": "! grep -q 'expose the .require. function' dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
