@@ -7,6 +7,7 @@ import { domAnimation, LazyMotion } from "motion/react";
 import { FakeBackend } from "../../juce/fake-backend";
 import { ZERO_METERS } from "../../juce/backend";
 import { BridgeProvider } from "../../juce/provider";
+import { resetFirstBoot } from "./boot";
 import { H, SynthWindow } from "./SynthWindow";
 
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement["getContext"];
@@ -289,5 +290,31 @@ describe("PresetOverlay exit", () => {
     // Il nodo è ancora lì: sta uscendo. Prima smontava dentro lo stesso tick.
     expect(screen.queryByRole("dialog", { name: "Presets" })).toBeInTheDocument();
     await waitForElementToBeRemoved(() => screen.queryByRole("dialog", { name: "Presets" }));
+  });
+});
+
+// L'host JUCE ricrea l'editor a ogni apertura della finestra del plugin: la sequenza d'accensione
+// piena va suonata una volta sola per processo (vedi boot.ts), non a ogni montaggio del
+// componente. resetFirstBoot() riporta il flag modulo-level allo stato "non ancora consumato" tra
+// un test e l'altro, altrimenti un test che gira dopo un altro nello stesso file vedrebbe sempre
+// "again" per un flag già consumato altrove — un falso verde silenzioso.
+describe("SynthWindow boot sequence", () => {
+  it("plays the full opening once per process, then only fades", () => {
+    resetFirstBoot();
+    const { unmount } = render(
+      <BridgeProvider backend={new FakeBackend()}>
+        <SynthWindow variant="glass" initialTab="env" gutter={0} />
+      </BridgeProvider>,
+    );
+    expect(screen.getByTestId("chassis")).toHaveAttribute("data-boot", "first");
+    unmount();
+    // Un plugin ricrea l'editor a ogni apertura della finestra: la decima volta
+    // una sequenza da 600 ms è una tassa, non un effetto.
+    render(
+      <BridgeProvider backend={new FakeBackend()}>
+        <SynthWindow variant="glass" initialTab="env" gutter={0} />
+      </BridgeProvider>,
+    );
+    expect(screen.getByTestId("chassis")).toHaveAttribute("data-boot", "again");
   });
 });

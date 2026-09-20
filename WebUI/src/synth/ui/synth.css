@@ -600,3 +600,79 @@
   color: var(--tone);
   text-shadow: var(--tglow);
 }
+
+/* ------------------------------------------------------------------------------------------
+   ACCENSIONE (Task 14): l'host JUCE ricrea l'editor a ogni apertura della finestra del plugin.
+   Una sequenza da 600 ms e' un effetto la prima volta e una tassa la decima, quindi la piena
+   accensione (scala + dissolvenza) suona una sola volta per processo — vedi boot.ts — e ogni
+   montaggio successivo ha solo una dissolvenza piu' corta. */
+@keyframes sx-boot {
+  from { opacity: 0; scale: 0.985; }
+  to   { opacity: 1; scale: 1; }
+}
+
+@keyframes sx-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Niente `forwards`/`both`: lo chassis puo' finire l'accensione con bypass gia' attivo (opacity
+   0.9 via style inline, vedi SynthWindow.tsx), e un fill che tenesse l'opacity del keyframe (1)
+   sovrascriverebbe quello stato di riposo per sempre — lo stesso difetto di una keyframe che non
+   atterra sul riposo, qui sul fill-mode invece che sui valori. Senza fill, a fine animazione il
+   controllo torna alla cascata reale (1, o 0.9 se bypassato), e l'assenza di animation-delay fa
+   si' che non serva neanche `backwards` per evitare un flash iniziale. */
+.sx-chassis[data-boot="first"] {
+  animation: sx-boot var(--dur-scene) var(--ease-glass);
+}
+
+.sx-chassis[data-boot="again"] {
+  animation: sx-boot var(--dur-layer) var(--ease-glass);
+  animation-name: sx-fade-in; /* solo opacity: nessuna scala alla riapertura */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sx-chassis[data-boot] { animation: none; }
+}
+
+/* ------------------------------------------------------------------------------------------
+   CARICAMENTO PRESET (Task 14): un preset cambia ~40 parametri in un colpo solo — animare
+   quaranta knob sarebbe quaranta animazioni e un frame perso, quindi un solo colpo di luce
+   attraversa lo chassis invece.
+
+   Elemento dedicato (.sx-wipe, un div vero in SynthWindow.tsx), non lo pseudo-elemento ::after
+   dello chassis come nella bozza originale del piano: la variante glass possiede gia' quel
+   ::after per l'aurora (vedi ambient-loop-block qui sopra), stessa specificita' di un'eventuale
+   `.sx-chassis[data-wipe]::after` — lo stesso file che vince l'`animation` per ultimo in
+   cascata avrebbe azzerato l'aurora a 26 s per tutta la vita del componente. Il div dedicato
+   evita la collisione senza toccare l'aurora. */
+@keyframes sx-wipe {
+  from { opacity: 0.45; }
+  to   { opacity: 0; }
+}
+
+.sx-wipe {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  background: linear-gradient(100deg, transparent 30%, var(--color-osc) 50%, transparent 70%);
+  mix-blend-mode: screen;
+}
+
+/* Chiave sul nome del preset (data-wipe in SynthWindow.tsx): il selettore sotto guarda solo la
+   PRESENZA dell'attributo, non il suo valore, e l'attributo e' presente fin dal primo render
+   (il preset iniziale ha gia' un nome) e non viene mai rimosso. Verificato con un browser vero
+   (Chromium headless via CDP, non jsdom: qui `css: false` in vitest.config.ts non esegue CSS):
+   l'animazione parte una volta al mount e non riparte piu', ne' cambiando preset ne' ricaricando
+   lo stesso — vedi il report del task per i dettagli e perche' non l'ho corretto di mia
+   iniziativa. */
+.sx-wipe[data-wipe] {
+  animation: sx-wipe var(--dur-scene) var(--ease-exit);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sx-wipe[data-wipe] { animation: none; }
+}

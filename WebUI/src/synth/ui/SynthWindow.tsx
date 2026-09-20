@@ -5,6 +5,7 @@ import type { ModSource } from "../../juce/backend";
 import type { ParamId } from "../params.generated";
 import { useSynth, type TabId } from "../useSynth";
 import { BottomStrip } from "./BottomStrip";
+import { consumeFirstBoot } from "./boot";
 import { useMeterConductor } from "./conductor";
 import { Header } from "./Header";
 import { FilterPanel, MasterPanel, OscPanel } from "./Panels";
@@ -79,6 +80,11 @@ export type ScaleMode = "zoom" | "transform";
 /** Finestra del plugin/** Finestra del plugin: 900×680 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
 export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixedScale, gutter = 16 }: SynthWindowProps) {
   const s = useSynth(initialTab);
+  // L'host JUCE ricrea l'editor a ogni apertura della finestra: la sequenza piena va suonata
+  // una volta sola per processo (consumeFirstBoot in boot.ts), non a ogni montaggio — un
+  // useState con inizializzatore lazy chiama consumeFirstBoot() una sola volta, al primo
+  // render di QUESTA istanza, e il risultato resta fisso per tutta la sua vita.
+  const [boot] = useState<"first" | "again">(() => (consumeFirstBoot() ? "first" : "again"));
   // Unica istanza dello stato condiviso: i tab lo leggono dal contesto, così non
   // esistono copie che si aggiornano a turno con gli echo dell'host.
   const state = useBridgeState();
@@ -159,6 +165,7 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
         className="sx-chassis"
         data-variant={variant}
         data-attached={gutter === 0 ? "" : undefined}
+        data-boot={boot}
         style={{ ...(mode === "zoom" ? { zoom: sc } : { transform: `scale(${sc})` }), opacity: bypass.checked ? 0.9 : 1 }}
       >
         <SynthContext value={ctx}>
@@ -187,6 +194,13 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
             {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
           </AnimatePresence>
         </SynthContext>
+        {/* Il colpo di luce del caricamento preset: un elemento dedicato, non lo pseudo-elemento
+            ::after dello chassis, perche' la variante glass lo occupa gia' per l'aurora (vedi
+            synth.css). data-wipe porta il nome del preset caricato, ma il selettore CSS che lo
+            referenzia guarda solo la presenza dell'attributo, non il suo valore: l'animazione
+            NON riparte a un cambio di preset (ne' diverso ne' uguale), suona una volta sola al
+            mount — vedi la nota in synth.css e il report del task. */}
+        <div className="sx-wipe" data-wipe={s.preset.name} aria-hidden="true" />
       </div>
     </div>
   );
