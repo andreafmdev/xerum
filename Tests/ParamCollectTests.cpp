@@ -288,6 +288,41 @@ struct ParamConversionTests final : juce::UnitTest
             expectWithinAbsoluteError (p.envCurve, 0.5f, 1.0e-6f);
         }
 
+        beginTest ("i parametri del delay e l'ordine degli effetti arrivano in EngineParams");
+        {
+            const auto rawFor = [] (params::ParamSlot slot) noexcept
+            {
+                switch (slot)
+                {
+                    case params::ParamSlot::fx3On:      return 1.0f;
+                    case params::ParamSlot::dlTime:     return 0.5f;    // log 1..2000 ms -> sqrt(2000) = 44.7 ms
+                    case params::ParamSlot::dlSync:     return 0.0f;
+                    case params::ParamSlot::dlFeedback: return 0.5f;    // 45 %
+                    case params::ParamSlot::dlDamp:     return 0.25f;
+                    case params::ParamSlot::dlMix:      return 0.75f;
+                    case params::ParamSlot::dlPingPong: return 1.0f;
+                    case params::ParamSlot::fxOrder:    return 2.0f;    // choice: indice grezzo
+                    default:                            return 0.5f;
+                }
+            };
+            const auto p = params::collectEngineParams (rawFor);
+            expect (p.delayOn);
+            expectWithinAbsoluteError (p.delayTimeRaw, 0.5f, 1.0e-6f);
+            expect (! p.delaySync);
+            expectWithinAbsoluteError (p.delayFeedback01, 0.45f, 1.0e-6f);
+            expectWithinAbsoluteError (p.delayDamp01, 0.25f, 1.0e-6f);
+            expectWithinAbsoluteError (p.delayMix01, 0.75f, 1.0e-6f);
+            expect (p.delayPingPong);
+            expect (p.fxOrder == engine::FxOrder::chorusReverbDelay);
+
+            // Tempo libero: la mappa log del knob, in secondi.
+            expectWithinAbsoluteError (params::delayTimeSecondsFromRaw (0.5f, false, 120.0f), 0.04472f, 1.0e-4f);
+            // Sincronizzato: la stessa tabella dell'LFO (indice floor(raw*6)); 1/4 a 120 bpm = 0.5 s.
+            expectWithinAbsoluteError (params::delayTimeSecondsFromRaw (0.4f, true, 120.0f), 0.5f, 1.0e-6f);
+            // Una divisione piu' lunga della linea viene limitata a 2 s.
+            expectWithinAbsoluteError (params::delayTimeSecondsFromRaw (0.99f, true, 60.0f), 2.0f, 1.0e-6f);
+        }
+
         beginTest ("i parametri dell'LFO arrivano grezzi in EngineParams");
         {
             const auto rawFor = [] (params::ParamSlot slot) noexcept

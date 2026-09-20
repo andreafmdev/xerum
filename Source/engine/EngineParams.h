@@ -23,6 +23,9 @@ namespace engine
  */
 enum class VoiceMode { poly = 0, mono = 1, legato = 2 };
 
+/** L'ordine dei tre effetti, nello stesso ordine delle opzioni di `fxOrder`. */
+enum class FxOrder { chorusDelayReverb = 0, delayChorusReverb = 1, chorusReverbDelay = 2 };
+
 /**
  * I parametri già denormalizzati, riempiti una volta per blocco dal processore.
  * Le voci leggono questa struct: nessun atomico e nessuna mappatura per campione.
@@ -133,6 +136,23 @@ struct EngineParams
     float reverbDamp01 { 0.4f };           // 0..1 -> kDampingMaxHz..kDampingMinHz, logaritmica
     float reverbPredelaySeconds { 0.02f }; // 0..dsp::PlateReverb::kMaxPredelaySeconds
     float reverbMix01 { 0.0f };            // 0..1, proporzione di bagnato con regola sin3dB
+
+    /**
+     * Il delay stereo, terzo effetto del rack. `delayOn` e' falso anche in parameters.json: il
+     * delay e' opt-in per patch, e un progetto salvato prima di lui suona identico.
+     * `delayTimeSeconds` lo riempie SynthEngine::process, una volta per blocco, da
+     * `delayTimeRaw`/`delaySync`/`bpm` (params::delayTimeSecondsFromRaw): la divisione
+     * sincronizzata dipende dal tempo dell'host, che collectEngineParams non conosce.
+     */
+    bool delayOn { false };
+    float delayTimeRaw { 0.78f };          // grezzo 0..1 del knob (log 1..2000 ms, o divisione se sync)
+    bool delaySync { false };
+    float delayTimeSeconds { 0.375f };     // riempito per blocco
+    float delayFeedback01 { 0.0f };        // 0..1 di dsp::StereoDelay::kMaxFeedback
+    float delayDamp01 { 0.5f };            // 0..1 -> kDampMaxHz..kDampMinHz, logaritmica
+    float delayMix01 { 0.0f };
+    bool delayPingPong { false };
+    FxOrder fxOrder { FxOrder::chorusDelayReverb };
 
     // --- modulazione ---
 

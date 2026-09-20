@@ -2,6 +2,7 @@
 
 #include "dsp/Lfo.h"
 #include "dsp/StateVariableFilter.h"
+#include "dsp/StereoDelay.h"
 #include "dsp/WavetableStore.h"
 #include "engine/EngineParams.h"
 #include "parameters/ParameterDenormalise.h"
@@ -116,6 +117,31 @@ inline float lfoRateHzFromRaw (float raw, bool sync, float bpm) noexcept
     constexpr auto* spec = params::find ("lrate");
     static_assert (spec != nullptr, "lrate non e' in ParameterTable.h");
     return sync ? (float) dsp::syncedRateHz (raw, (double) bpm) : params::denormalise (*spec, raw);
+}
+
+/** `fxOrder` e' un AudioParameterChoice: il grezzo e' l'indice, nell'ordine di engine::FxOrder. */
+inline engine::FxOrder fxOrderFromChoice (float rawIndex) noexcept
+{
+    switch ((int) rawIndex)
+    {
+        case 1:  return engine::FxOrder::delayChorusReverb;
+        case 2:  return engine::FxOrder::chorusReverbDelay;
+        default: return engine::FxOrder::chorusDelayReverb;
+    }
+}
+
+/**
+ * Il tempo del delay in secondi: la mappa log del knob, oppure — con `sync` — la stessa
+ * tabella di divisioni dell'LFO (dsp::syncedRateHz, 1/16..2 battute) al tempo dell'host,
+ * limitata alla linea (dsp::StereoDelay::kMaxDelaySeconds). Una tabella sola per LFO e delay.
+ */
+inline float delayTimeSecondsFromRaw (float raw, bool sync, float bpm) noexcept
+{
+    constexpr auto* spec = params::find ("dlTime");
+    static_assert (spec != nullptr, "dlTime non e' in ParameterTable.h");
+    const auto seconds = sync ? 1.0f / juce::jmax (1.0e-3f, dsp::syncedRateHz (raw, (double) bpm))
+                              : params::denormalise (*spec, raw) * 0.001f;
+    return juce::jlimit (0.0f, dsp::StereoDelay::kMaxDelaySeconds, seconds);
 }
 
 /** detune 0..100 -> cent. Non e' un target modulabile: nessuna base in modBase. */
@@ -342,6 +368,23 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.reverbMix01 = params::denormalise (*specRvMix, rawFor (ParamSlot::rvMix)) * 0.01f;
     p.reverbDecay01 = params::denormalise (*specRvDecay, rawFor (ParamSlot::rvDecay)) * 0.01f;
     p.reverbPredelaySeconds = params::denormalise (*specRvPredelay, rawFor (ParamSlot::rvPredelay)) * 0.001f;
+
+    // Il delay, terzo effetto: percentuali divise per cento come per gli altri; il tempo in
+    // secondi lo calcola SynthEngine::process, che conosce il bpm (delayTimeSecondsFromRaw).
+    constexpr auto* specDlFeedback = params::find ("dlFeedback");
+    constexpr auto* specDlDamp = params::find ("dlDamp");
+    constexpr auto* specDlMix = params::find ("dlMix");
+    static_assert (specDlFeedback != nullptr && specDlDamp != nullptr && specDlMix != nullptr,
+                   "i parametri del delay non sono in ParameterTable.h");
+
+    p.delayOn = rawFor (ParamSlot::fx3On) >= 0.5f;
+    p.delayTimeRaw = params::clamp01 (rawFor (ParamSlot::dlTime));
+    p.delaySync = rawFor (ParamSlot::dlSync) >= 0.5f;
+    p.delayFeedback01 = params::denormalise (*specDlFeedback, rawFor (ParamSlot::dlFeedback)) * 0.01f;
+    p.delayDamp01 = params::denormalise (*specDlDamp, rawFor (ParamSlot::dlDamp)) * 0.01f;
+    p.delayMix01 = params::denormalise (*specDlMix, rawFor (ParamSlot::dlMix)) * 0.01f;
+    p.delayPingPong = rawFor (ParamSlot::dlPingPong) >= 0.5f;
+    p.fxOrder = fxOrderFromChoice (rawFor (ParamSlot::fxOrder));
 
     // --- arpeggiatore ---------------------------------------------------------------------
     // Fino a oggi questi sei avevano "slot": false e il motore non li leggeva: il tab Arp

@@ -13,7 +13,7 @@
  * tasto premuto.
  *
  * Questo file costruisce il layout vero, legge i puntatori veri e verifica la conversione. Non
- * su otto parametri scelti a mano ma su tutti e 56, ciclando su params::kTable: i controlli
+ * su otto parametri scelti a mano ma su tutti e 64, ciclando su params::kTable: i controlli
  * generali stanno nei tre cicli in fondo ("ogni parametro...", "andata e ritorno...",
  * "l'APVTS vero restituisce..."), quelli scritti a mano sopra restano perche' nominano il
  * sintomo — un test che dice "lo strumento non traspone" si legge, uno che dice
@@ -224,7 +224,7 @@ struct ParameterSeamTests final : juce::UnitTest
             expect (params::collectEngineParams (raw).filterOn);
         }
 
-        // --- da qui in giu': cicli su tutti e 56 i parametri, non su otto scelti a mano -----
+        // --- da qui in giu': cicli su tutti e 64 i parametri, non su otto scelti a mano -----
 
         beginTest ("ogni slot e' cablato sul parametro giusto");
         {
@@ -405,7 +405,7 @@ struct StateSeamTests final : juce::UnitTest
                                        "res non era nel file: deve tornare al suo default, non restare a 0.1");
         }
 
-        beginTest ("resetToDefaults riporta tutti e 56 i parametri al default dichiarato");
+        beginTest ("resetToDefaults riporta tutti e 64 i parametri al default dichiarato");
         {
             DummyProcessor p;
 

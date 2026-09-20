@@ -23,6 +23,7 @@ inline constexpr const char* const kOptions_slope[] = { "12", "24" };
 inline constexpr const char* const kOptions_voiceMode[] = { "Poly", "Mono", "Legato" };
 inline constexpr const char* const kOptions_lshape[] = { "Sine", "Tri", "Saw", "Square", "S&H" };
 inline constexpr const char* const kOptions_arpMode[] = { "Up", "Down", "UpDn", "Rand" };
+inline constexpr const char* const kOptions_fxOrder[] = { "Cho→Dly→Rev", "Dly→Cho→Rev", "Cho→Rev→Dly" };
 inline constexpr const char* const kOptionValues_wtIndex[] = { "basic", "saws", "grit", "vocal", "bells", "pwm" };
 inline constexpr const char* const kOptionValues_unison[] = { "1", "2", "4", "8" };
 inline constexpr const char* const kOptionValues_ftype[] = { "LP", "HP", "BP" };
@@ -30,8 +31,9 @@ inline constexpr const char* const kOptionValues_slope[] = { "12", "24" };
 inline constexpr const char* const kOptionValues_voiceMode[] = { "Poly", "Mono", "Legato" };
 inline constexpr const char* const kOptionValues_lshape[] = { "Sine", "Tri", "Saw", "Square", "S&H" };
 inline constexpr const char* const kOptionValues_arpMode[] = { "Up", "Down", "UpDn", "Rand" };
+inline constexpr const char* const kOptionValues_fxOrder[] = { "cdr", "dcr", "crd" };
 
-inline constexpr int kNumParams = 56;
+inline constexpr int kNumParams = 64;
 inline constexpr Spec kTable[kNumParams] = {
     { "oscOn", "Oscillator on", "osc", Kind::Bool, Map::None, 0.0f, 1.0f, 0.0f, 1.0f, nullptr, 0, Label::None, nullptr, 0 },
     { "wtIndex", "Wavetable", "osc", Kind::Choice, Map::None, 0.0f, 1.0f, 0.0f, 0.0f, nullptr, 0, Label::None, kOptions_wtIndex, 6 },
@@ -89,6 +91,14 @@ inline constexpr Spec kTable[kNumParams] = {
     { "chFeedback", "Feedback", "fx1", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.0f, "%", 0, Label::None, nullptr, 0 },
     { "rvPredelay", "Predelay", "fx2", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.2f, "ms", 0, Label::None, nullptr, 0 },
     { "rvDecay", "Decay", "fx2", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.5f, "%", 0, Label::None, nullptr, 0 },
+    { "fx3On", "Delay on", "fx3", Kind::Bool, Map::None, 0.0f, 1.0f, 0.0f, 0.0f, nullptr, 0, Label::None, nullptr, 0 },
+    { "dlTime", "Time", "fx3", Kind::Float, Map::Log, 1.0f, 2000.0f, 0.0f, 0.78f, nullptr, 0, Label::Time, nullptr, 0 },
+    { "dlSync", "Sync", "fx3", Kind::Bool, Map::None, 0.0f, 1.0f, 0.0f, 0.0f, nullptr, 0, Label::None, nullptr, 0 },
+    { "dlFeedback", "Feedback", "fx3", Kind::Float, Map::Linear, 0.0f, 90.0f, 0.0f, 0.39f, "%", 0, Label::None, nullptr, 0 },
+    { "dlDamp", "Damp", "fx3", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.5f, "%", 0, Label::None, nullptr, 0 },
+    { "dlMix", "Mix", "fx3", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.25f, "%", 0, Label::None, nullptr, 0 },
+    { "dlPingPong", "Ping-pong", "fx3", Kind::Bool, Map::None, 0.0f, 1.0f, 0.0f, 0.0f, nullptr, 0, Label::None, nullptr, 0 },
+    { "fxOrder", "FX order", "master", Kind::Choice, Map::None, 0.0f, 1.0f, 0.0f, 0.0f, nullptr, 0, Label::None, kOptions_fxOrder, 3 },
 };
 
 inline constexpr const Spec* find (const char* id) noexcept
@@ -116,7 +126,7 @@ inline constexpr const Spec* find (const char* id) noexcept
 // scrive l'accessore, non un ABI pubblico: nessuno stato salvato contiene un indice di slot.
 // Non coincide con l'indice dentro kTable, perche' i parametri senza slot creano dei buchi:
 // per passare dall'uno all'altro c'e' specForSlot().
-inline constexpr int kNumSlots = 54;
+inline constexpr int kNumSlots = 62;
 
 enum class ParamSlot : int
 {
@@ -126,7 +136,8 @@ enum class ParamSlot : int
     rel, envVel, envCurve, lshape, lsync, lretrig, lrate, lphase,
     lfade, fx1On, chRate, chDepth, chMix, fx2On, rvSize, rvDamp,
     rvMix, arpOn, arpMode, arpRate, arpGate, arpOct, arpSwing, att2,
-    dec2, sus2, rel2, chFeedback, rvPredelay, rvDecay,
+    dec2, sus2, rel2, chFeedback, rvPredelay, rvDecay, fx3On, dlTime,
+    dlSync, dlFeedback, dlDamp, dlMix, dlPingPong, fxOrder,
     count
 };
 
@@ -140,7 +151,8 @@ inline constexpr const char* kSlotIds[kNumSlots] = {
     "rel", "envVel", "envCurve", "lshape", "lsync", "lretrig", "lrate", "lphase",
     "lfade", "fx1On", "chRate", "chDepth", "chMix", "fx2On", "rvSize", "rvDamp",
     "rvMix", "arpOn", "arpMode", "arpRate", "arpGate", "arpOct", "arpSwing", "att2",
-    "dec2", "sus2", "rel2", "chFeedback", "rvPredelay", "rvDecay",
+    "dec2", "sus2", "rel2", "chFeedback", "rvPredelay", "rvDecay", "fx3On", "dlTime",
+    "dlSync", "dlFeedback", "dlDamp", "dlMix", "dlPingPong", "fxOrder",
 };
 
 /** L'indice dentro kTable di ogni slot: kTable[kSlotTableIndex[i]].id e' kSlotIds[i]. */
@@ -148,7 +160,7 @@ inline constexpr int kSlotTableIndex[kNumSlots] = {
     0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
     17, 18, 19, 20, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
     34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
-    50, 51, 52, 53, 54, 55,
+    50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
 };
 
 // --- target del mod matrix -----------------------------------------------------------
