@@ -38,7 +38,9 @@
     0 30px 60px rgb(0 0 0 / 0.75),
     0 8px 16px rgb(0 0 0 / 0.55);
   transform-origin: center;
-  transition: opacity 150ms;
+  /* 200ms (il token layer) invece di 150 a mano: un fade di ingresso leggermente più
+     lento è impercettibile, e la durata resta nel vocabolario. */
+  transition: opacity var(--dur-layer);
 
   /* Effetti opzionali: attivi solo in `glow`. */
   --glow: none;
@@ -110,7 +112,10 @@
   --glow: drop-shadow(0 0 3px color-mix(in oklch, var(--tone) 80%, transparent));
 }
 
-/* Il motion segue il materiale. `soft`, `deep` e `glow` restano sui default della libreria. */
+/* Il motion segue il materiale. `soft`, `deep` e `glow` restano sui default della libreria.
+   Questo è l'unico punto dove i millisecondi si scrivono a mano: check-motion.mjs esenta
+   solo le righe tra questi due marker, non l'intero file. */
+/* motion-token-block:start */
 .sx-chassis[data-variant="glass"] {
   --ease-snap: var(--ease-glass);
   --dur-state: 140ms;
@@ -120,6 +125,7 @@
   --dur-layer: 160ms;
   --dur-state: 100ms;
 }
+/* motion-token-block:end */
 
 /* Knob come nel design: cappuccio grande (lg 64, md 42, sm 30 px di disco dentro una scatola
    di +16), niente scala di tacche. La scatola si allarga con i token di spacing; il disco con
@@ -235,11 +241,14 @@
     radial-gradient(circle at 75% 70%, #c36cffb0, transparent 34%),
     radial-gradient(circle at 60% 20%, #6f9cff90, transparent 30%),
     radial-gradient(circle at 30% 80%, #e26fd680, transparent 30%);
-  animation: sx-aurora 26s ease-in-out infinite alternate;
+  /* Loop ambientale di sfondo, non un token di motion interattivo: la durata resta una
+     custom property locale invece di un valore scritto dentro `animation`. */
+  --aurora-dur: 26s;
+  animation: sx-aurora var(--aurora-dur) ease-in-out infinite alternate;
   opacity: 0.55;
 }
 .sx-chassis[data-variant="glass"]::after {
-  animation-duration: 37s;
+  --aurora-dur: 37s;
   animation-direction: alternate-reverse;
   transform: rotate(180deg);
   opacity: 0.35;
