@@ -95,10 +95,11 @@ export async function createJuceBackend(): Promise<Backend> {
   const handles = new Map<ParamId, ParamHandle>();
   const call = (name: string) => juce.getNativeFunction(name);
 
-  // removeEventListener del bundle upstream è un no-op: registrando un
-  // listener per ogni subscribe i callback si accumulerebbero ad ogni remount.
-  // Ne registriamo uno solo per evento e distribuiamo a un Set locale, così la
-  // funzione di unsubscribe restituita rimuove davvero il callback.
+  // addEventListener upstream ritorna un handle [eventId, id] che serve a
+  // removeEventListener per rimuovere quel preciso listener: se registrassimo
+  // un listener per ogni subscribe dovremmo tenerci tutti quegli handle in giro.
+  // Più semplice registrarne uno solo per evento e distribuire a un Set locale,
+  // così la funzione di unsubscribe restituita agisce solo sul Set.
   const fanOut = <T>(event: string) => {
     const subs = new Set<(p: T) => void>();
     // Sicuro: fanOut e' chiamata solo qui dentro createJuceBackend(), quindi dopo hasJuce().

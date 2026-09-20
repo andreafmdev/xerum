@@ -3,7 +3,7 @@ import { ZERO_METERS } from "./backend";
 
 type Listener = (p: unknown) => void;
 
-// Il modulo vendor legge window.__JUCE__ al momento dell'import: lo stub va
+// @juce-framework/webview legge window.__JUCE__ al momento dell'import: lo stub va
 // installato prima di ogni import dinamico, e i moduli vanno resettati.
 function installJuceStub() {
   const listeners = new Map<string, Listener[]>();
