@@ -121,28 +121,6 @@ XerumAudioProcessorEditor::XerumAudioProcessorEditor (
                                  widthForScale (kMaxScale), heightForWidth (widthForScale (kMaxScale)));
     setSize (kChassisWidth, heightForWidth (kChassisWidth));
 
-   #if JUCE_DEBUG
-    // Dev aid: XERUM_SNAPSHOT=/path/out.png writes a snapshot of the JUCE-painted editor
-    // ~2 s after opening. The WebView is a native view and renders blank, and now it's the
-    // whole editor, so the snapshot comes out blank in full.
-    if (const auto snapshotPath = juce::SystemStats::getEnvironmentVariable ("XERUM_SNAPSHOT", {});
-        snapshotPath.isNotEmpty())
-    {
-        juce::Timer::callAfterDelay (2000, [safeThis = juce::Component::SafePointer (this), snapshotPath]
-        {
-            if (safeThis == nullptr)
-                return;
-
-            const auto image = safeThis->createComponentSnapshot (safeThis->getLocalBounds(), true, 2.0f);
-            juce::File (snapshotPath).deleteFile();
-            juce::FileOutputStream out { juce::File (snapshotPath) };
-
-            if (out.openedOk())
-                juce::PNGImageFormat().writeImageToStream (image, out);
-        });
-    }
-   #endif
-
     if (bridge::webAssets::embedded())
     {
         webView_.goToURL (withGutterParam (juce::WebBrowserComponent::getResourceProviderRoot()));

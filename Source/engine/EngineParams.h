@@ -179,6 +179,9 @@ struct EngineParams
 
     int lfoShapeIndex { 0 };
     float lfoRateRaw { 0.0f };       // grezzo: diventa Hz o divisione a seconda di lfoSync
+    /** `lfoRateRaw` gia' convertito in Hz (params::lfoRateHzFromRaw), una volta per blocco in
+        SynthEngine::process: le voci leggono questo e non rifanno la conversione. */
+    float lfoRateHz { 1.0f };
     bool lfoSync { false };
     float lfoPhaseOffset01 { 0.0f };
     float lfoFadeSeconds { 0.0f };

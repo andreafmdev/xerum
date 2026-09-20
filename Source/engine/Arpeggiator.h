@@ -1,7 +1,6 @@
 #pragma once
 
 #include <juce_audio_basics/juce_audio_basics.h>
-#include <juce_data_structures/juce_data_structures.h>
 
 #include <cstdint>
 
@@ -34,13 +33,8 @@ struct ArpSnapshot
     float steps[kArpSteps] {};
 };
 
-/**
- * Traduce il nodo ARP del ValueTree in uno snapshot. Message thread: qui si tokenizza una
- * stringa e si alloca. `out` viene riscritto per intero, anche quando il nodo e' assente o la
- * stringa e' piu' corta di kArpSteps (gli step mancanti restano a zero, come fa gia'
- * state::toVar verso la WebUI).
- */
-void buildArpSnapshot (const juce::ValueTree& arpNode, ArpSnapshot& out);
+// Chi riempie uno snapshot a partire dal ValueTree e' state::buildArpSnapshot
+// (Source/state/StateToEngine.h): il motore non conosce il formato dello stato salvato.
 
 /**
  * Quanti quarti dura un passo, per ognuna delle **quattro** divisioni di `arpRate`.

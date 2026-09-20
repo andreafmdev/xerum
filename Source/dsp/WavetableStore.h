@@ -21,6 +21,14 @@ std::unique_ptr<MipTable> buildMipTable (const BlobView& blob);
  * thread ne costruisce un'altra, e nessuno gli toglie la memoria da sotto.
  * Costo massimo ≈ 1 MB per tavola.
  */
+/**
+ * I file .xwt incorporati, nell'ordine delle opzioni di `wtIndex` in parameters.json: l'indice
+ * del choice e' l'indice qui dentro. Un riordino nel JSON senza lo stesso riordino qui cambierebbe
+ * tavola in silenzio: lo static_assert in engine/ParamCollect.h confronta le due liste a tempo
+ * di compilazione, nome per nome (`value` + ".xwt").
+ */
+inline constexpr const char* const kWavetableFiles[] = { "basic.xwt", "saws.xwt", "grit.xwt", "vocal.xwt", "bells.xwt", "pwm.xwt" };
+
 class WavetableStore
 {
 public:

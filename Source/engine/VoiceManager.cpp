@@ -393,7 +393,7 @@ void VoiceManager::setSustainPedal (bool down) noexcept
 
 void VoiceManager::releaseSustainedNotes() noexcept
 {
-    if (sustainedLo_ == 0 && sustainedHi_ == 0)
+    if (sustained_.empty())
         return;
 
     // Si raccoglie **prima** di agire: ogni noteOff() qui sotto riscrive `held_`, e scorrere una

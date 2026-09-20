@@ -55,11 +55,11 @@ set(XERUM_CORE_SOURCES
     Source/dsp/WavetableOscillator.cpp
     Source/dsp/WavetableStore.cpp
     Source/engine/Arpeggiator.cpp
-    Source/engine/ModMatrix.cpp
     Source/engine/SynthEngine.cpp
     Source/engine/SynthVoice.cpp
     Source/engine/VoiceManager.cpp
     Source/parameters/ParameterLayout.cpp
+    Source/state/StateToEngine.cpp
 )
 list(TRANSFORM XERUM_CORE_SOURCES PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/)
 target_sources(XerumCore INTERFACE ${XERUM_CORE_SOURCES})
@@ -139,7 +139,18 @@ target_sources(XerumTests
         Tests/main.cpp
         Tests/WavetableTests.cpp
         Tests/EnvelopeFilterTests.cpp
-        Tests/EngineTests.cpp
+        Tests/EngineParamsTests.cpp
+        Tests/VoiceStealingTests.cpp
+        Tests/SaturationTests.cpp
+        Tests/ParamCollectTests.cpp
+        Tests/ModulationTests.cpp
+        Tests/UnisonTests.cpp
+        Tests/ModulationStressTests.cpp
+        Tests/ControlRateTests.cpp
+        Tests/ModulationDepthTests.cpp
+        Tests/PresetGainStagingTests.cpp
+        Tests/StateTreeTests.cpp
+        Tests/NoteMaskTests.cpp
         Tests/PresetValueTests.cpp
         Tests/ParameterSeamTests.cpp
         Tests/ModMatrixTests.cpp

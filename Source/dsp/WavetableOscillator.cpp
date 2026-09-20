@@ -1,5 +1,7 @@
 #include "dsp/WavetableOscillator.h"
 
+#include <juce_core/juce_core.h>
+
 #include <cmath>
 
 namespace dsp

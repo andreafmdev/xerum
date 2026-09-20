@@ -1,6 +1,8 @@
 #include "dsp/Chorus.h"
 #include "dsp/WavetableStore.h"
 #include "engine/EngineParams.h"
+#include "EngineHarness.h"
+
 #include "engine/SynthEngine.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -11,95 +13,15 @@
 
 namespace
 {
-constexpr double kSampleRate = 48000.0;
-constexpr int kBlock = 128;
+using harness::baseParams;
+using harness::correlation;
+using harness::kBlock;
+using harness::kSampleRate;
+using harness::prepareEngine;
+using harness::Rendered;
+using harness::renderHeldNote;
+using harness::rms;
 
-/** Gli stessi parametri di partenza di Tests/EngineTests.cpp: attacco e rilascio brevi, filtro
-    spalancato, niente pan ne' drive. Duplicati e non condivisi perche' l'anonimo di quel file
-    non e' raggiungibile da qui, e un header di soli helper per due funzioni non si paga. */
-engine::EngineParams baseParams()
-{
-    engine::EngineParams p;
-    p.oscOn = true;
-    p.level = 1.0f;
-    p.filterOn = false;
-    p.cutoffHz = 8000.0f;
-    p.attackSeconds = 0.001f;
-    p.decaySeconds = 0.01f;
-    p.sustain = 1.0f;
-    p.releaseSeconds = 0.05f;
-    p.pan = 0.0f;
-    return p;
-}
-
-void prepareEngine (engine::SynthEngine& synth, dsp::WavetableStore& store)
-{
-    engine::EngineSpec spec;
-    spec.sampleRate = kSampleRate;
-    spec.maximumBlockSize = kBlock;
-    spec.numChannels = 2;
-    synth.prepare (spec);
-    synth.setWavetable (store.active());
-}
-
-/** Rende `numBlocks` blocchi con una nota tenuta e restituisce i due canali interi. */
-struct Rendered
-{
-    std::vector<float> left, right;
-};
-
-Rendered renderHeldNote (const engine::EngineParams& params, dsp::WavetableStore& store, int numBlocks,
-                         float masterGain = 0.8f, int note = 60)
-{
-    engine::SynthEngine synth;
-    prepareEngine (synth, store);
-    synth.setParams (params);
-    synth.setMasterGainLinear (masterGain);
-
-    juce::MidiBuffer midi;
-    midi.addEvent (juce::MidiMessage::noteOn (1, note, 0.9f), 0);
-
-    Rendered out;
-
-    for (int b = 0; b < numBlocks; ++b)
-    {
-        juce::AudioBuffer<float> buffer (2, kBlock);
-        buffer.clear();
-        synth.process (buffer, midi);
-        midi.clear();
-
-        const auto* l = buffer.getReadPointer (0);
-        const auto* r = buffer.getReadPointer (1);
-        out.left.insert (out.left.end(), l, l + kBlock);
-        out.right.insert (out.right.end(), r, r + kBlock);
-    }
-
-    return out;
-}
-
-double correlation (const std::vector<float>& a, const std::vector<float>& b)
-{
-    double ab = 0.0, aa = 0.0, bb = 0.0;
-
-    for (size_t i = 0; i < a.size(); ++i)
-    {
-        ab += (double) a[i] * (double) b[i];
-        aa += (double) a[i] * (double) a[i];
-        bb += (double) b[i] * (double) b[i];
-    }
-
-    return (aa > 0.0 && bb > 0.0) ? ab / std::sqrt (aa * bb) : 0.0;
-}
-
-double rms (const std::vector<float>& x)
-{
-    double sum = 0.0;
-
-    for (const auto v : x)
-        sum += (double) v * (double) v;
-
-    return x.empty() ? 0.0 : std::sqrt (sum / (double) x.size());
-}
 
 /**
  * Il picco **presentato al soft clipper**, misurato con il metodo del gain ridotto.

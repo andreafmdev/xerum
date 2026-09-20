@@ -5,10 +5,8 @@
 #include "engine/MeterFrame.h"
 #include "engine/ModMatrix.h"
 #include "engine/SynthEngine.h"
-#include "parameters/ParamCollect.h"
 #include "parameters/ParameterLayout.h"
 #include "parameters/ParameterTable.h"
-#include "parameters/StateTree.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -58,7 +56,7 @@ public:
      * Tests/ReverbTests.cpp lega questa riga alla formula, cosi' cambiare kMaxDecay o
      * kMaxSizeRatio senza tornare qui rompe la suite invece che l'export dell'utente.
      */
-    double getTailLengthSeconds() const override { return 11.0; }
+    double getTailLengthSeconds() const override { return engine::SynthEngine::kDeclaredTailSeconds; }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }

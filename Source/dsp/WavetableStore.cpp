@@ -24,9 +24,6 @@ int fftOrderFor (int frameSize) noexcept
     return order;
 }
 
-/** I file .xwt nell'ordine delle opzioni di `wtIndex` in parameters.json. */
-const char* const kTableFiles[] = { "basic.xwt", "saws.xwt", "grit.xwt", "vocal.xwt", "bells.xwt", "pwm.xwt" };
-
 /**
  * `juce_add_binary_data` genera i blob come `unsigned char[]` senza alignas:
  * l'indirizzo non è garantito multiplo di 4, e `parseXwt` rifiuta (giustamente)
@@ -131,7 +128,7 @@ std::unique_ptr<MipTable> buildMipTable (const BlobView& blob)
 
 WavetableStore::WavetableStore()
 {
-    tables_.resize (std::size (kTableFiles));
+    tables_.resize (std::size (kWavetableFiles));
 }
 
 void WavetableStore::setActive (int index)
@@ -142,7 +139,7 @@ void WavetableStore::setActive (int index)
     if (tables_[(size_t) index] == nullptr)
     {
         std::vector<float> storage;
-        const auto blob = lookupBlob (kTableFiles[index], storage);
+        const auto blob = lookupBlob (kWavetableFiles[index], storage);
 
         if (! blob.has_value())
             return; // blob assente o corrotto: si resta sulla tavola precedente

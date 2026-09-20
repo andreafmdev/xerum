@@ -19,11 +19,11 @@
  * sintomo — un test che dice "lo strumento non traspone" si legge, uno che dice
  * "kTable[3] != 0" no.
  */
-#include "parameters/ParamCollect.h"
+#include "engine/ParamCollect.h"
 #include "parameters/ParameterLayout.h"
 #include "parameters/ParameterTable.h"
 #include "parameters/PresetValue.h"
-#include "parameters/StateTree.h"
+#include "state/StateTree.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>

@@ -2,6 +2,7 @@
 
 #include "dsp/MipTable.h"
 #include "engine/EngineParams.h"
+#include "engine/NoteMask.h"
 #include "engine/SynthVoice.h"
 
 #include <array>
@@ -74,12 +75,6 @@ public:
      * mandano le pedaliere continue a ogni passo della corsa — non deve rilasciare niente.
      */
     void setSustainPedal (bool down) noexcept;
-
-    /** Se il pedale risulta giu'. Per i test e per chi decide se accendere il bit del keybed. */
-    bool isSustainPedalDown() const noexcept { return sustainPedal_; }
-
-    /** Se il note-off di quella nota sia stato differito dal pedale. Per i test. */
-    bool isNoteSustained (int midiNote) const noexcept { return sustainedBit (midiNote); }
 
     void render (float* outL, float* outR, int numSamples) noexcept;
 
@@ -240,32 +235,10 @@ private:
     /** Riapplica i note-off che il pedale teneva fermi, dal piu' vecchio al piu' recente. */
     void releaseSustainedNotes() noexcept;
 
-    /** Lettura e scrittura di un bit di `sustained_`. Una nota fuori da 0..127 non ha un bit e
-        le due funzioni non fanno niente: e' anche cio' che tiene lo spostamento definito. */
-    bool sustainedBit (int midiNote) const noexcept
-    {
-        if (midiNote < 0 || midiNote > 127)
-            return false;
-
-        const auto word = midiNote < 64 ? sustainedLo_ : sustainedHi_;
-        return (word & (1ull << (midiNote % 64))) != 0;
-    }
-
-    void setSustainedBit (int midiNote, bool on) noexcept
-    {
-        if (midiNote < 0 || midiNote > 127)
-            return;
-
-        auto& word = midiNote < 64 ? sustainedLo_ : sustainedHi_;
-        const auto bit = 1ull << (midiNote % 64);
-        word = on ? (word | bit) : (word & ~bit);
-    }
-
-    void clearSustainedBits() noexcept
-    {
-        sustainedLo_ = 0;
-        sustainedHi_ = 0;
-    }
+    /** Lettura e scrittura di un bit di `sustained_` (vedi engine::NoteMask). */
+    bool sustainedBit (int midiNote) const noexcept { return sustained_.test (midiNote); }
+    void setSustainedBit (int midiNote, bool on) noexcept { sustained_.set (midiNote, on); }
+    void clearSustainedBits() noexcept { sustained_.clear(); }
 
     /**
      * Se la nota che sta per partire debba scivolare da `lastStartedNote_` o cominciare alla
@@ -392,15 +365,12 @@ private:
     bool sustainPedal_ { false };
 
     /**
-     * Le note il cui note-off e' stato differito dal pedale: un bit per nota MIDI, 0..63 in
-     * `sustainedLo_` e 64..127 in `sustainedHi_`.
+     * Le note il cui note-off e' stato differito dal pedale, un bit per nota MIDI.
      *
-     * Due parole di bit e non una lista: l'insieme e' senza ordine per costruzione — l'ordine in
-     * cui i note-off vanno riapplicati non e' quello in cui sono arrivati, e' quello di `held_`
-     * (vedi releaseSustainedNotes()) — e una maschera costa un confronto per nota invece di una
-     * scansione. Niente atomico: ci scrive e ci legge solo il thread audio.
+     * Una maschera e non una lista: l'insieme e' senza ordine per costruzione — l'ordine in cui i
+     * note-off vanno riapplicati non e' quello in cui sono arrivati, e' quello di `held_` (vedi
+     * releaseSustainedNotes()). Niente atomico: ci scrive e ci legge solo il thread audio.
      */
-    unsigned long long sustainedLo_ { 0 };
-    unsigned long long sustainedHi_ { 0 };
+    NoteMask sustained_;
 };
 } // namespace engine

@@ -2,8 +2,6 @@
 
 #include "parameters/ParameterTable.h"
 
-#include <juce_data_structures/juce_data_structures.h>
-
 #include <cstddef>
 #include <iterator>
 
@@ -141,10 +139,6 @@ struct ModSnapshot
     int count { 0 };
 };
 
-/**
- * Traduce il nodo MODS del ValueTree in uno snapshot. Message thread: qui si confrontano
- * stringhe, si scartano target e sorgenti sconosciute e si limita il depth. `out` viene
- * riscritto per intero, anche quando il nodo e' vuoto.
- */
-void buildModSnapshot (const juce::ValueTree& modsNode, ModSnapshot& out);
+// Chi riempie uno snapshot a partire dal ValueTree e' state::buildModSnapshot
+// (Source/state/StateToEngine.h): il motore non conosce il formato dello stato salvato.
 } // namespace engine

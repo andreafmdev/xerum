@@ -1,5 +1,6 @@
 #include "engine/SynthEngine.h"
 
+#include "engine/ParamCollect.h"
 #include "parameters/ParameterDenormalise.h"
 #include "parameters/ParameterTable.h"
 
@@ -203,13 +204,12 @@ void SynthEngine::setSustainPedal (bool down) noexcept
 
     // Il piede si e' alzato: i tasti che teneva lui si spengono sul keybed adesso, insieme alle
     // voci che VoiceManager sta rilasciando nella riga qui sopra.
-    activeNotesLo_.store (activeNotesLo_.load (std::memory_order_relaxed) & ~sustainedNotesLo_,
+    activeNotesLo_.store (activeNotesLo_.load (std::memory_order_relaxed) & ~sustainedNotes_.lo,
                           std::memory_order_relaxed);
-    activeNotesHi_.store (activeNotesHi_.load (std::memory_order_relaxed) & ~sustainedNotesHi_,
+    activeNotesHi_.store (activeNotesHi_.load (std::memory_order_relaxed) & ~sustainedNotes_.hi,
                           std::memory_order_relaxed);
 
-    sustainedNotesLo_ = 0;
-    sustainedNotesHi_ = 0;
+    sustainedNotes_.clear();
 }
 
 void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
@@ -246,8 +246,7 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
     const auto setNoteBit = [this] (int note, bool on) noexcept
     {
         auto& slot = note < 64 ? activeNotesLo_ : activeNotesHi_;
-        auto& sustained = note < 64 ? sustainedNotesLo_ : sustainedNotesHi_;
-        const auto bit = juce::uint64 (1) << (note % 64);
+        const auto bit = noteBit (note);
 
         // A pedale giu' un tasto lasciato non si spegne: la nota si sente ancora. Il bit resta
         // acceso e passa fra i differiti, e sara' setSustainPedal() a spegnerlo quando il piede
@@ -257,7 +256,7 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
         const auto current = slot.load (std::memory_order_relaxed);
         slot.store (on || deferred ? (current | bit) : (current & ~bit), std::memory_order_relaxed);
 
-        sustained = deferred ? (sustained | bit) : (sustained & ~bit);
+        sustainedNotes_.set (note, deferred);
     };
 
     // Il panico (all-notes-off e all-sound-off) azzera il mask per intero: gemella di
@@ -266,8 +265,7 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
     {
         activeNotesLo_.store (0, std::memory_order_relaxed);
         activeNotesHi_.store (0, std::memory_order_relaxed);
-        sustainedNotesLo_ = 0;
-        sustainedNotesHi_ = 0;
+        sustainedNotes_.clear();
     };
 
     if (message.isNoteOn())
@@ -645,14 +643,13 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
     // ad avanzarlo e' renderControlSlices(), una sotto-fetta per volta. Con matrix vuoto non tocca
     // niente — le voci leggono globalLfoLevel solo se una route punta a un target — quindi farlo
     // girare sempre non cambia di un campione chi non lo usa.
-    constexpr auto* specLrate = params::find ("lrate");
-    static_assert (specLrate != nullptr, "lrate non e' in ParameterTable.h");
+    // Una conversione sola per blocco, letta poi da tutte le voci: prima ogni voce rifaceva lo
+    // stesso std::pow dentro il proprio setParams().
+    params_.lfoRateHz = params::lfoRateHzFromRaw (params_.lfoRateRaw, params_.lfoSync, params_.bpm);
 
     globalLfo_.setShape ((dsp::Lfo::Shape) juce::jlimit (0, 4, params_.lfoShapeIndex));
     globalLfo_.setFadeSeconds (0.0f); // la dissolvenza e' per nota: non ha senso sull'LFO libero
-    globalLfo_.setFrequencyHz (params_.lfoSync
-                                   ? dsp::syncedRateHz (params_.lfoRateRaw, (double) params_.bpm)
-                                   : params::denormalise (*specLrate, params_.lfoRateRaw));
+    globalLfo_.setFrequencyHz (params_.lfoRateHz);
 
     // Se il message thread non ha ancora pubblicato niente si tiene il puntatore arrivato con
     // setParams(): e' nullptr in produzione (collectEngineParams non lo riempie) ed e' la via

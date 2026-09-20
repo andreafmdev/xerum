@@ -1,14 +1,23 @@
 #include "dsp/ADSREnvelope.h"
+#include "dsp/Constants.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 
 namespace dsp
 {
 namespace
 {
-/** Soglia di spegnimento: -80 dB. Sotto, la coda è inudibile e la voce va liberata. */
-constexpr float kSilence = 1.0e-4f;
+/** Soglia di spegnimento: dsp::kSilenceFloor, -80 dB. Sotto, la coda è inudibile e la voce va liberata. */
+constexpr float kSilence = kSilenceFloor;
+
+/** Uguaglianza bit a bit: un parametro che arriva identico non deve rifare gli `exp`. */
+inline bool sameFloat (float a, float b) noexcept
+{
+    return std::bit_cast<std::uint32_t> (a) == std::bit_cast<std::uint32_t> (b);
+}
 
 /** Quante costanti di tempo servono per considerare finito ogni stadio. */
 constexpr float kAttackTau = 4.605170f;   // 1 - e^-4.605170 ≈ 0.99
@@ -38,13 +47,27 @@ void ADSREnvelope::reset() noexcept
 
 void ADSREnvelope::setAttackSeconds (float seconds) noexcept
 {
-    attackSeconds_ = std::max (0.0f, seconds);
+    // I setter arrivano una volta per voce per blocco, quasi sempre con lo stesso valore: senza
+    // questo ritorno ogni voce rifaceva tre std::exp per inviluppo a knob fermi.
+    const auto clamped = std::max (0.0f, seconds);
+
+    if (sameFloat (clamped, attackSeconds_))
+        return;
+
+    attackSeconds_ = clamped;
     updateCoefficients();
 }
 
 void ADSREnvelope::setDecaySeconds (float seconds) noexcept
 {
-    decaySeconds_ = std::max (0.0f, seconds);
+    // I setter arrivano una volta per voce per blocco, quasi sempre con lo stesso valore: senza
+    // questo ritorno ogni voce rifaceva tre std::exp per inviluppo a knob fermi.
+    const auto clamped = std::max (0.0f, seconds);
+
+    if (sameFloat (clamped, decaySeconds_))
+        return;
+
+    decaySeconds_ = clamped;
     updateCoefficients();
 }
 
@@ -55,7 +78,14 @@ void ADSREnvelope::setSustainLevel (float level) noexcept
 
 void ADSREnvelope::setReleaseSeconds (float seconds) noexcept
 {
-    releaseSeconds_ = std::max (0.0f, seconds);
+    // I setter arrivano una volta per voce per blocco, quasi sempre con lo stesso valore: senza
+    // questo ritorno ogni voce rifaceva tre std::exp per inviluppo a knob fermi.
+    const auto clamped = std::max (0.0f, seconds);
+
+    if (sameFloat (clamped, releaseSeconds_))
+        return;
+
+    releaseSeconds_ = clamped;
     updateCoefficients();
 }
 

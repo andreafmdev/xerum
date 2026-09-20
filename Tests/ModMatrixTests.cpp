@@ -1,5 +1,6 @@
 #include "engine/ModMatrix.h"
-#include "parameters/StateTree.h"
+#include "state/StateToEngine.h"
+#include "state/StateTree.h"
 
 #include <juce_core/juce_core.h>
 #include <juce_data_structures/juce_data_structures.h>
@@ -36,7 +37,7 @@ struct ModMatrixTests final : juce::UnitTest
         beginTest ("una route valida finisce nello snapshot con il target risolto");
         {
             engine::ModSnapshot snap;
-            engine::buildModSnapshot (makeMods ({ { "env", "cutoff", 0.75 } }), snap);
+            state::buildModSnapshot (makeMods ({ { "env", "cutoff", 0.75 } }), snap);
 
             expectEquals (snap.count, 1);
             expect (snap.routes[0].src == engine::ModSource::env);
@@ -49,7 +50,7 @@ struct ModMatrixTests final : juce::UnitTest
         {
             engine::ModSnapshot snap;
             // `att` e' un parametro vero ma non e' fra i sette target modulabili.
-            engine::buildModSnapshot (makeMods ({ { "lfo", "att", 1.0 },
+            state::buildModSnapshot (makeMods ({ { "lfo", "att", 1.0 },
                                                   { "lfo", "wtpos", 0.5 } }), snap);
 
             expectEquals (snap.count, 1);
@@ -60,7 +61,7 @@ struct ModMatrixTests final : juce::UnitTest
         beginTest ("env2 e' una sorgente distinta da env, non un prefisso");
         {
             engine::ModSnapshot snap;
-            engine::buildModSnapshot (makeMods ({ { "env", "cutoff", 0.5 },
+            state::buildModSnapshot (makeMods ({ { "env", "cutoff", 0.5 },
                                                   { "env2", "res", 0.25 } }), snap);
 
             expectEquals (snap.count, 2);
@@ -73,7 +74,7 @@ struct ModMatrixTests final : juce::UnitTest
         beginTest ("una sorgente sconosciuta viene scartata");
         {
             engine::ModSnapshot snap;
-            engine::buildModSnapshot (makeMods ({ { "aftertouch", "cutoff", 1.0 } }), snap);
+            state::buildModSnapshot (makeMods ({ { "aftertouch", "cutoff", 1.0 } }), snap);
             expectEquals (snap.count, 0);
         }
 
@@ -84,14 +85,14 @@ struct ModMatrixTests final : juce::UnitTest
                 many.emplace_back ("lfo", "cutoff", 0.1);
 
             engine::ModSnapshot snap;
-            engine::buildModSnapshot (makeMods (many), snap);
+            state::buildModSnapshot (makeMods (many), snap);
             expectEquals (snap.count, engine::ModSnapshot::kMaxRoutes);
         }
 
         beginTest ("depth fuori scala viene limitato a -1..1");
         {
             engine::ModSnapshot snap;
-            engine::buildModSnapshot (makeMods ({ { "vel", "level", 4.2 },
+            state::buildModSnapshot (makeMods ({ { "vel", "level", 4.2 },
                                                   { "vel", "pan", -9.0 } }), snap);
 
             expectEquals (snap.count, 2);
@@ -103,7 +104,7 @@ struct ModMatrixTests final : juce::UnitTest
         {
             engine::ModSnapshot snap;
             snap.count = 7; // sporco di proposito: buildModSnapshot deve azzerarlo
-            engine::buildModSnapshot (makeMods ({}), snap);
+            state::buildModSnapshot (makeMods ({}), snap);
             expectEquals (snap.count, 0);
         }
     }

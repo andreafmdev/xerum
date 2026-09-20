@@ -1,6 +1,8 @@
 #include "plugin/PluginProcessor.h"
 #include "plugin/PluginEditor.h"
-#include "parameters/ParamCollect.h"
+#include "engine/ParamCollect.h"
+#include "state/StateToEngine.h"
+#include "state/StateTree.h"
 
 namespace
 {
@@ -69,14 +71,14 @@ void XerumAudioProcessor::listenToState (juce::ValueTree root)
 void XerumAudioProcessor::rebuildModSnapshot()
 {
     engine::ModSnapshot snapshot;
-    engine::buildModSnapshot (apvts_.state.getChildWithName (state::ids::MODS), snapshot);
+    state::buildModSnapshot (apvts_.state.getChildWithName (state::ids::MODS), snapshot);
     engine_->setMods (snapshot);
 }
 
 void XerumAudioProcessor::rebuildArpSnapshot()
 {
     engine::ArpSnapshot snapshot;
-    engine::buildArpSnapshot (apvts_.state.getChildWithName (state::ids::ARP), snapshot);
+    state::buildArpSnapshot (apvts_.state.getChildWithName (state::ids::ARP), snapshot);
     engine_->setArpSteps (snapshot);
 }
 

@@ -1,6 +1,6 @@
 #include "engine/SynthVoice.h"
 
-#include "parameters/ParamCollect.h"
+#include "engine/ParamCollect.h"
 
 #include <cmath>
 
@@ -450,13 +450,10 @@ void SynthVoice::setParams (const EngineParams& p) noexcept
     lfoRetrig_ = p.lfoRetrig;
     lfoPhaseOffset01_ = p.lfoPhaseOffset01;
 
-    constexpr auto* specLrate = params::find ("lrate");
-    static_assert (specLrate != nullptr, "lrate non e' in ParameterTable.h");
-
     lfo_.setShape ((dsp::Lfo::Shape) juce::jlimit (0, 4, p.lfoShapeIndex));
     lfo_.setFadeSeconds (p.lfoFadeSeconds);
-    lfo_.setFrequencyHz (p.lfoSync ? dsp::syncedRateHz (p.lfoRateRaw, (double) p.bpm)
-                                   : params::denormalise (*specLrate, p.lfoRateRaw));
+    // Gia' in Hz: la conversione (uno std::pow) la fa SynthEngine una volta per blocco.
+    lfo_.setFrequencyHz (p.lfoRateHz);
 }
 
 float SynthVoice::modulated (int targetIndex) const noexcept
@@ -524,7 +521,7 @@ void SynthVoice::applyModulation() noexcept
     // decibel di corsa la differenza fra una rampa lineare in gain e una lineare in dB vale
     // meno di 0.03 dB sul risultato, cioe' niente, e il ramo resta senza libm come il resto.
     driveMix_ = driveGain_ > 1.0f
-                   ? juce::jmin (1.0f, (driveGain_ - 1.0f) / (kDriveFadeGain - 1.0f))
+                   ? juce::jmin (1.0f, (driveGain_ - 1.0f) / (dsp::kDriveFadeGain - 1.0f))
                    : 0.0f;
 
     const auto resonance = value (params::ParamSlot::res, params_.resonanceQ, &params::resonanceQFromRaw);
@@ -755,9 +752,9 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
             // (l'identita' bit per bit di prima), oltre kDriveFadeGain si satura e basta, e in
             // mezzo si miscela. Il ramo centrale esiste solo su due decibel di corsa.
             if (driveMix_ >= 1.0f)
-                sample = saturate (sample * driveGain_);
+                sample = dsp::saturate (sample * driveGain_);
             else if (driveMix_ > 0.0f)
-                sample += driveMix_ * (saturate (sample * driveGain_) - sample);
+                sample += driveMix_ * (dsp::saturate (sample * driveGain_) - sample);
 
             if (filterOn_)
                 sample = filter_.processSample (sample);
@@ -791,9 +788,9 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
                 // Gli stessi tre rami del percorso a unison 1, con la stessa miscela: una copia
                 // dell'unison deve saturare come saturerebbe la voce da sola.
                 if (driveMix_ >= 1.0f)
-                    sample = saturate (sample * driveGain_);
+                    sample = dsp::saturate (sample * driveGain_);
                 else if (driveMix_ > 0.0f)
-                    sample += driveMix_ * (saturate (sample * driveGain_) - sample);
+                    sample += driveMix_ * (dsp::saturate (sample * driveGain_) - sample);
 
                 left += sample * unisonGainL_[(size_t) u];
                 right += sample * unisonGainR_[(size_t) u];

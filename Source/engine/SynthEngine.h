@@ -2,7 +2,9 @@
 
 #include "dsp/Chorus.h"
 #include "dsp/PlateReverb.h"
+#include "dsp/Constants.h"
 #include "engine/Arpeggiator.h"
+#include "engine/NoteMask.h"
 #include "engine/EngineParams.h"
 #include "engine/VoiceManager.h"
 
@@ -62,7 +64,7 @@ public:
      * buffer dell'host allineano gli eventi MIDI a questa griglia, ed e' l'unico modo che hanno
      * di dire perche' si aspettano un'uguaglianza esatta e non approssimata.
      */
-    static constexpr int kControlBlockSamples = 32;
+    static constexpr int kControlBlockSamples = dsp::kControlRateSamples;
 
     void prepare (const EngineSpec& spec) noexcept;
     void reset() noexcept;
@@ -323,8 +325,7 @@ private:
      * questa quando un tasto della UI si spegne. Tenerle separate e' cio' che permette al keybed
      * di mostrare quello che si sente davvero senza che la UI sappia niente del pool di voci.
      */
-    juce::uint64 sustainedNotesLo_ { 0 };
-    juce::uint64 sustainedNotesHi_ { 0 };
+    NoteMask sustainedNotes_;
 
     // --- telemetria per il meter ---------------------------------------------------------
     // Sola lettura verso l'editor: niente qui dentro torna nel percorso del segnale. Gli
@@ -356,6 +357,12 @@ public:
      */
     static constexpr double kFxCrossfadeSeconds = 0.012;
 
+    /** Quanto il plugin dichiara all'host come coda (getTailLengthSeconds): copre la coda
+        peggiore di riverbero piu' chorus. ReverbTests verifica che la formula ci stia dentro. */
+    static constexpr double kDeclaredTailSeconds = 11.0;
+
+
+private:
     /**
      * Silenzio in ingresso oltre il quale lo stadio smette di girare, quando c'e' solo il
      * chorus. Con il riverbero acceso comanda la sua coda: vedi ringoutSamples().
@@ -366,7 +373,6 @@ public:
         risoluzione del float a livelli musicali, e ben sotto la coda di qualunque voce. */
     static constexpr float kFxSilenceFloor = 1.0e-7f;
 
-private:
     dsp::Chorus chorus_;
     dsp::PlateReverb reverb_;
 

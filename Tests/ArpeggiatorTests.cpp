@@ -5,7 +5,8 @@
 #include "engine/VoiceManager.h"
 #include "parameters/ParameterMapping.h"
 #include "parameters/ParameterTable.h"
-#include "parameters/StateTree.h"
+#include "state/StateToEngine.h"
+#include "state/StateTree.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
@@ -523,7 +524,7 @@ struct ArpeggiatorPatternTests final : juce::UnitTest
             state::ensureChildren (root);
 
             engine::ArpSnapshot snapshot;
-            engine::buildArpSnapshot (root.getChildWithName (state::ids::ARP), snapshot);
+            state::buildArpSnapshot (root.getChildWithName (state::ids::ARP), snapshot);
 
             // Il default di state::ensureChildren, letto passo per passo.
             const float expected[] = { 0.8f, 0.0f, 0.6f, 0.9f, 0.0f, 0.7f, 0.0f, 0.5f,
@@ -535,7 +536,7 @@ struct ArpeggiatorPatternTests final : juce::UnitTest
             // Una stringa piu' corta: il resto resta a zero, non eredita dallo snapshot di prima.
             auto arpNode = root.getChildWithName (state::ids::ARP);
             arpNode.setProperty (state::ids::steps, "1,1", nullptr);
-            engine::buildArpSnapshot (arpNode, snapshot);
+            state::buildArpSnapshot (arpNode, snapshot);
 
             expectWithinAbsoluteError (snapshot.steps[0], 1.0f, 1.0e-6f);
             expectWithinAbsoluteError (snapshot.steps[1], 1.0f, 1.0e-6f);
@@ -545,14 +546,14 @@ struct ArpeggiatorPatternTests final : juce::UnitTest
 
             // Valori fuori scala (preset scritto a mano, UI futura): limitati, non creduti.
             arpNode.setProperty (state::ids::steps, "5,-3,0.5", nullptr);
-            engine::buildArpSnapshot (arpNode, snapshot);
+            state::buildArpSnapshot (arpNode, snapshot);
 
             expectWithinAbsoluteError (snapshot.steps[0], 1.0f, 1.0e-6f);
             expectWithinAbsoluteError (snapshot.steps[1], 0.0f, 1.0e-6f);
             expectWithinAbsoluteError (snapshot.steps[2], 0.5f, 1.0e-6f);
 
             // Nodo assente: sequenza tutta a zero invece di una lettura di memoria a caso.
-            engine::buildArpSnapshot ({}, snapshot);
+            state::buildArpSnapshot ({}, snapshot);
 
             for (int i = 0; i < engine::kArpSteps; ++i)
                 expectWithinAbsoluteError (snapshot.steps[(size_t) i], 0.0f, 1.0e-6f);

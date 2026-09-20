@@ -89,6 +89,10 @@ export function generate(json) {
     "",
     ...ps.filter((p) => p.options).map((p) =>
       `inline constexpr const char* const kOptions_${p.id}[] = { ${p.options.map((o) => cstr(o.label)).join(", ")} };`),
+    // I `value` accanto alle label: sono gli id stabili delle opzioni (la WebUI li salva, il C++
+    // ci lega i file delle wavetable), le label sono solo testo.
+    ...ps.filter((p) => p.options).map((p) =>
+      `inline constexpr const char* const kOptionValues_${p.id}[] = { ${p.options.map((o) => cstr(o.value)).join(", ")} };`),
     "",
     `inline constexpr int kNumParams = ${ps.length};`,
     "inline constexpr Spec kTable[kNumParams] = {",

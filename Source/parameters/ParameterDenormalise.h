@@ -11,6 +11,10 @@ namespace params
 {
 inline float clamp01 (float v) noexcept { return juce::jlimit (0.0f, 1.0f, v); }
 
+/** L'indice 0..3 della divisione di `arpRate` per un grezzo 0..1: floor(v * 4) limitato a 3.
+    Una formula sola per l'etichetta (ParameterMapping.h) e per il motore (engine::arpBeatsPerStep). */
+inline int arpDivisionIndex (float raw) noexcept { return juce::jmin (3, (int) std::floor (clamp01 (raw) * 4.0f)); }
+
 /**
  * Valore reale dal normalizzato 0..1. Stesse formule di WebUI/src/synth/mapping.ts.
  *
@@ -91,11 +95,5 @@ inline float naturalFromRaw (const Spec& s, float raw) noexcept
 inline float rawFromNatural (const Spec& s, float natural) noexcept
 {
     return s.kind == Kind::Float ? normalise (s, natural) : natural;
-}
-
-/** Il default di parameters.json letto in unita' naturali, qualunque sia il Kind. */
-inline float naturalDefault (const Spec& s) noexcept
-{
-    return naturalFromRaw (s, s.def);
 }
 } // namespace params

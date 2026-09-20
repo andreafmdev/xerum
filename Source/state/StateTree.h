@@ -13,14 +13,16 @@ namespace ids
     inline const juce::Identifier schemaVersion { "schemaVersion" };
 }
 
-inline constexpr int kVersion = 1;
+/** La versione del payload MODS/ARP scambiato con la WebUI (proprieta' `version` del figlio MODS
+    e campo `version` di toVar). Non e' kStateVersion: vedi sotto. */
+inline constexpr int kModsPayloadVersion = 1;
 inline constexpr int kArpSteps = 16;
 
 /**
  * La versione del *formato* dello stato salvato, scritta sulla radice da
  * XerumAudioProcessor::getStateInformation e riletta da setStateInformation.
  *
- * Non e' la versione del plugin e non e' state::kVersion, che descrive il solo figlio MODS: e'
+ * Non e' la versione del plugin e non e' kModsPayloadVersion, che descrive il solo figlio MODS: e'
  * il numero da cui una migrazione futura puo' ramificare, e l'unico posto dove puo' stare e' la
  * radice — dentro un figlio non serve a niente, perche' per leggerlo bisogna gia' sapere che
  * quel figlio esiste e come si chiama. Uno stato salvato *senza* questo attributo (cioe' tutto
@@ -60,7 +62,7 @@ inline void ensureChildren (juce::ValueTree& root)
     if (! root.getChildWithName (ids::MODS).isValid())
     {
         juce::ValueTree mods { ids::MODS };
-        mods.setProperty (ids::version, kVersion, nullptr);
+        mods.setProperty (ids::version, kModsPayloadVersion, nullptr);
         root.appendChild (mods, nullptr);
     }
 
@@ -76,7 +78,7 @@ inline void ensureChildren (juce::ValueTree& root)
 inline juce::var toVar (const juce::ValueTree& root, const juce::String& origin)
 {
     auto* obj = new juce::DynamicObject();
-    obj->setProperty ("version", kVersion);
+    obj->setProperty ("version", kModsPayloadVersion);
     obj->setProperty ("origin", origin);
 
     juce::Array<juce::var> mods;

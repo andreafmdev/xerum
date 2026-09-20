@@ -34,7 +34,7 @@ inline juce::String formatValue (const Spec& s, float v)
         case Label::Time:    return real >= 1000.0f ? juce::String (real / 1000.0f, 2) + " s" : juce::String (juce::roundToInt (real)) + " ms";
         case Label::Pan:     { const int c = juce::roundToInt (real); return c == 0 ? "C" : c < 0 ? juce::String (-c) + " L" : juce::String (c) + " R"; }
         case Label::Signed:  return signedInt (juce::roundToInt (real));
-        case Label::ArpRate: { static const char* divs[] = { "1/32", "1/16", "1/8", "1/4" }; return divs[juce::jmin (3, (int) std::floor (clamp01 (v) * 4.0f))]; }
+        case Label::ArpRate: { static const char* divs[] = { "1/32", "1/16", "1/8", "1/4" }; return divs[arpDivisionIndex (v)]; }
         case Label::None:    break;
     }
     if (std::isinf (real)) return "-inf";

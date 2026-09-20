@@ -23,6 +23,13 @@ inline constexpr const char* const kOptions_slope[] = { "12", "24" };
 inline constexpr const char* const kOptions_voiceMode[] = { "Poly", "Mono", "Legato" };
 inline constexpr const char* const kOptions_lshape[] = { "Sine", "Tri", "Saw", "Square", "S&H" };
 inline constexpr const char* const kOptions_arpMode[] = { "Up", "Down", "UpDn", "Rand" };
+inline constexpr const char* const kOptionValues_wtIndex[] = { "basic", "saws", "grit", "vocal", "bells", "pwm" };
+inline constexpr const char* const kOptionValues_unison[] = { "1", "2", "4", "8" };
+inline constexpr const char* const kOptionValues_ftype[] = { "LP", "HP", "BP" };
+inline constexpr const char* const kOptionValues_slope[] = { "12", "24" };
+inline constexpr const char* const kOptionValues_voiceMode[] = { "Poly", "Mono", "Legato" };
+inline constexpr const char* const kOptionValues_lshape[] = { "Sine", "Tri", "Saw", "Square", "S&H" };
+inline constexpr const char* const kOptionValues_arpMode[] = { "Up", "Down", "UpDn", "Rand" };
 
 inline constexpr int kNumParams = 56;
 inline constexpr Spec kTable[kNumParams] = {

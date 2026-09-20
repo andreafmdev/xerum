@@ -1,6 +1,8 @@
 #pragma once
 
+#include "dsp/Lfo.h"
 #include "dsp/StateVariableFilter.h"
+#include "dsp/WavetableStore.h"
 #include "engine/EngineParams.h"
 #include "parameters/ParameterDenormalise.h"
 #include "parameters/ParameterTable.h"
@@ -9,9 +11,38 @@
 #include <juce_core/juce_core.h>
 
 #include <cmath>
+#include <iterator>
 
 namespace params
 {
+namespace detail
+{
+/** `value` + ".xwt" == `file`, carattere per carattere. */
+constexpr bool sameTableFile (const char* value, const char* file) noexcept
+{
+    while (*value != 0 && *value == *file) { ++value; ++file; }
+    if (*value != 0) return false;
+    const char* ext = ".xwt";
+    while (*ext != 0 && *ext == *file) { ++ext; ++file; }
+    return *ext == 0 && *file == 0;
+}
+
+/** Il primo indice in cui il file incorporato non e' l'opzione di `wtIndex`, -1 se nessuno. */
+constexpr int firstMismatchedTable() noexcept
+{
+    for (int i = 0; i < (int) std::size (dsp::kWavetableFiles); ++i)
+        if (! sameTableFile (kOptionValues_wtIndex[i], dsp::kWavetableFiles[i]))
+            return i;
+
+    return -1;
+}
+} // namespace detail
+
+static_assert (std::size (dsp::kWavetableFiles) == std::size (kOptionValues_wtIndex),
+               "dsp::kWavetableFiles e le opzioni di wtIndex in parameters.json devono avere lo stesso numero di voci");
+static_assert (detail::firstMismatchedTable() < 0,
+               "dsp::kWavetableFiles[i] non e' l'opzione i di wtIndex: un riordino in parameters.json cambierebbe tavola in silenzio");
+
 /** `ftype` è un AudioParameterChoice: il valore grezzo è già l'indice 0/1/2. */
 inline dsp::StateVariableFilter::Type filterTypeFromChoice (float rawIndex) noexcept
 {
@@ -76,6 +107,15 @@ inline engine::ArpMode arpModeFromChoice (float rawIndex) noexcept
         case 3:  return engine::ArpMode::random;
         default: return engine::ArpMode::up;
     }
+}
+
+/** `lrate`: Hz liberi dalla mappa, o la divisione sincronizzata al tempo dell'host. Va chiamata
+    una volta per blocco (SynthEngine::process), non una per voce: e' uno std::pow. */
+inline float lfoRateHzFromRaw (float raw, bool sync, float bpm) noexcept
+{
+    constexpr auto* spec = params::find ("lrate");
+    static_assert (spec != nullptr, "lrate non e' in ParameterTable.h");
+    return sync ? (float) dsp::syncedRateHz (raw, (double) bpm) : params::denormalise (*spec, raw);
 }
 
 /** detune 0..100 -> cent. Non e' un target modulabile: nessuna base in modBase. */

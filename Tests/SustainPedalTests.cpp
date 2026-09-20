@@ -1,3 +1,5 @@
+#include "EngineHarness.h"
+
 #include "dsp/WavetableStore.h"
 #include "engine/Arpeggiator.h"
 #include "engine/EngineParams.h"
@@ -17,7 +19,7 @@
 namespace
 {
 constexpr double kSampleRate = 48000.0;
-
+using Pool = harness::VoicePool;
 /** Il patch piu' semplice che sappia suonare, con un release lungo abbastanza da poter
     distinguere "in release" da "spenta" senza correre. */
 engine::EngineParams plainPatch()
@@ -42,43 +44,7 @@ engine::EngineParams plainPatch()
     return p;
 }
 
-/** Un pool di voci pronto a suonare, reso a sotto-fette come fa SynthEngine. */
-struct Pool
-{
-    engine::VoiceManager voices;
-    juce::AudioBuffer<float> scratch { 2, engine::SynthEngine::kControlBlockSamples };
 
-    Pool (const engine::EngineParams& p, dsp::WavetableStore& store)
-    {
-        voices.prepare (kSampleRate);
-        voices.setWavetable (store.active());
-        voices.setParams (p);
-    }
-
-    void render (int numSamples)
-    {
-        for (int done = 0; done < numSamples; )
-        {
-            const auto slice = std::min (engine::SynthEngine::kControlBlockSamples, numSamples - done);
-            scratch.clear();
-            voices.render (scratch.getWritePointer (0), scratch.getWritePointer (1), slice);
-            done += slice;
-        }
-    }
-
-    const engine::SynthVoice* voiceFor (int midiNote) const
-    {
-        for (int i = 0; i < engine::VoiceManager::poolSize; ++i)
-        {
-            const auto& voice = voices.getVoice (i);
-
-            if (voice.isActive() && ! voice.isFading() && voice.getMidiNote() == midiNote)
-                return &voice;
-        }
-
-        return nullptr;
-    }
-};
 /** Un arpeggiatore che gira: rate fisso, gate a meta', niente swing, transport fermo. */
 engine::ArpConfig arpConfig()
 {

@@ -1,10 +1,12 @@
+#include "EngineHarness.h"
+
 #include "dsp/WavetableStore.h"
 #include "engine/EngineParams.h"
 #include "engine/ModMatrix.h"
 #include "engine/SynthEngine.h"
 #include "engine/SynthVoice.h"
 #include "engine/VoiceManager.h"
-#include "parameters/ParamCollect.h"
+#include "engine/ParamCollect.h"
 #include "parameters/ParameterTable.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -18,6 +20,8 @@
 
 namespace
 {
+using harness::plainPatch;
+using Pool = harness::VoicePool;
 constexpr double kSampleRate = 48000.0;
 
 /** La frequenza di un numero di nota, ricalcolata qui invece che chiesta al motore: se il test
@@ -65,30 +69,6 @@ engine::EngineParams glidePatch()
     return p;
 }
 
-/** Il patch piu' semplice che sappia suonare: una copia sola, niente filtro, sustain pieno.
-    Tutto cio' che questi test misurano e' l'intonazione e il livello dell'inviluppo, e ogni
-    stadio in piu' e' solo un modo di confondere la misura. */
-engine::EngineParams plainPatch()
-{
-    engine::EngineParams p;
-    p.oscOn = true;
-    p.framePosition = 0.0f;
-    p.level = 1.0f;
-    p.unisonVoices = 1;
-    p.detuneCents = 0.0f;
-    p.filterOn = false;
-    p.cutoffHz = 20000.0f;
-    p.resonanceQ = 0.707f;
-    p.driveGain = 1.0f;
-    p.keyTrack = 0.0f;
-    p.attackSeconds = 0.001f;
-    p.decaySeconds = 0.001f;
-    p.sustain = 1.0f;
-    p.releaseSeconds = 0.2f;
-    p.velocityAmount = 0.0f;
-    p.pan = 0.0f;
-    return p;
-}
 
 /** FNV-1a sui bit dei campioni: due render identici danno lo stesso numero, uno diverso di un
     solo ulp su un solo campione no. */
@@ -165,73 +145,6 @@ std::uint64_t referenceChecksum (const engine::EngineParams& params, dsp::Waveta
     return checksum.value;
 }
 
-/** Un pool di voci pronto a suonare. */
-struct Pool
-{
-    engine::VoiceManager voices;
-    juce::AudioBuffer<float> scratch { 2, engine::SynthEngine::kControlBlockSamples };
-
-    Pool (const engine::EngineParams& p, dsp::WavetableStore& store)
-    {
-        voices.prepare (kSampleRate);
-        voices.setWavetable (store.active());
-        voices.setParams (p);
-    }
-
-    /**
-     * Rende `numSamples` campioni **in sotto-fette da kControlBlockSamples**, come fa
-     * SynthEngine::renderControlSlices.
-     *
-     * Non e' un dettaglio del test: il glide avanza una volta per sotto-fetta, quindi renderne
-     * 4800 in un colpo solo o in centocinquanta fette e' la differenza fra misurare il tasso di
-     * controllo vero e misurarne uno inventato qui dentro.
-     */
-    void render (int numSamples)
-    {
-        for (int done = 0; done < numSamples; )
-        {
-            const auto slice = std::min (engine::SynthEngine::kControlBlockSamples, numSamples - done);
-            scratch.clear();
-            voices.render (scratch.getWritePointer (0), scratch.getWritePointer (1), slice);
-            done += slice;
-        }
-    }
-
-    /** La voce che sta suonando una certa nota, o nullptr. */
-    const engine::SynthVoice* voiceFor (int midiNote) const
-    {
-        for (int i = 0; i < engine::VoiceManager::poolSize; ++i)
-        {
-            const auto& voice = voices.getVoice (i);
-
-            if (voice.isActive() && ! voice.isFading() && voice.getMidiNote() == midiNote)
-                return &voice;
-        }
-
-        return nullptr;
-    }
-
-    /** La prima voce che occupa un posto nella polifonia, o nullptr. */
-    const engine::SynthVoice* sounding() const
-    {
-        for (int i = 0; i < engine::VoiceManager::poolSize; ++i)
-            if (voices.getVoice (i).isActive() && ! voices.getVoice (i).isFading())
-                return &voices.getVoice (i);
-
-        return nullptr;
-    }
-
-    int countFading() const
-    {
-        int count = 0;
-
-        for (int i = 0; i < engine::VoiceManager::poolSize; ++i)
-            if (voices.getVoice (i).isFading())
-                ++count;
-
-        return count;
-    }
-};
 
 /** Accessor finto per collectEngineParams: slot -> valore grezzo. */
 struct FakeRaw

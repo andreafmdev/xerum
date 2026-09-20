@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dsp/Constants.h"
+
 #include <juce_dsp/juce_dsp.h>
 
 #include <array>
@@ -70,7 +72,7 @@ namespace dsp
  *
  * ## Feedback
  *
- * Il bagnato di ogni canale rientra nella linea attraverso `engine::saturateCurve`, il Pade di
+ * Il bagnato di ogni canale rientra nella linea attraverso `dsp::saturateCurve`, il Pade di
  * tanh gia' usato dal drive del filtro. Non e' un vezzo: senza una nonlinearita' in mezzo, con
  * feedback e mix alti il chorus da solo si mangerebbe il margine al soft clipper d'uscita. Con
  * la saturazione il contributo di ritorno e' **limitato per costruzione** a kMaxFeedback,
@@ -161,7 +163,7 @@ public:
     void process (float* left, float* right, int numSamples) noexcept;
 
     /** La lunghezza massima di una fetta di modulazione, in campioni. */
-    static constexpr int kModulationSliceSamples = 32;
+    static constexpr int kModulationSliceSamples = kControlRateSamples;
 
 private:
     void processSlice (float* left, float* right, int numSamples) noexcept;

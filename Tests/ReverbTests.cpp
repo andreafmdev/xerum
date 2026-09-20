@@ -2,6 +2,8 @@
 #include "dsp/PlateReverb.h"
 #include "dsp/WavetableStore.h"
 #include "engine/EngineParams.h"
+#include "EngineHarness.h"
+
 #include "engine/SynthEngine.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -55,24 +57,13 @@ void operator delete[] (void* memory, std::size_t) noexcept { std::free (memory)
 
 namespace
 {
-constexpr double kSampleRate = 48000.0;
-constexpr int kBlock = 128;
-
-/** Gli stessi parametri di partenza di Tests/ChorusTests.cpp e Tests/EngineTests.cpp. */
-engine::EngineParams baseParams()
-{
-    engine::EngineParams p;
-    p.oscOn = true;
-    p.level = 1.0f;
-    p.filterOn = false;
-    p.cutoffHz = 8000.0f;
-    p.attackSeconds = 0.001f;
-    p.decaySeconds = 0.01f;
-    p.sustain = 1.0f;
-    p.releaseSeconds = 0.05f;
-    p.pan = 0.0f;
-    return p;
-}
+using harness::baseParams;
+using harness::kBlock;
+using harness::kSampleRate;
+using harness::prepareEngine;
+using harness::Rendered;
+using harness::renderHeldNote;
+using harness::rms;
 
 /** I default di parameters.json per il riverbero, in unita' di dsp::PlateReverb. */
 engine::EngineParams reverbDefaults()
@@ -87,59 +78,6 @@ engine::EngineParams reverbDefaults()
     return p;
 }
 
-void prepareEngine (engine::SynthEngine& synth, dsp::WavetableStore& store, int numChannels = 2)
-{
-    engine::EngineSpec spec;
-    spec.sampleRate = kSampleRate;
-    spec.maximumBlockSize = kBlock;
-    spec.numChannels = numChannels;
-    synth.prepare (spec);
-    synth.setWavetable (store.active());
-}
-
-struct Rendered
-{
-    std::vector<float> left, right;
-};
-
-Rendered renderHeldNote (const engine::EngineParams& params, dsp::WavetableStore& store, int numBlocks,
-                         float masterGain = 0.8f, int note = 60)
-{
-    engine::SynthEngine synth;
-    prepareEngine (synth, store);
-    synth.setParams (params);
-    synth.setMasterGainLinear (masterGain);
-
-    juce::MidiBuffer midi;
-    midi.addEvent (juce::MidiMessage::noteOn (1, note, 0.9f), 0);
-
-    Rendered out;
-
-    for (int b = 0; b < numBlocks; ++b)
-    {
-        juce::AudioBuffer<float> buffer (2, kBlock);
-        buffer.clear();
-        synth.process (buffer, midi);
-        midi.clear();
-
-        const auto* l = buffer.getReadPointer (0);
-        const auto* r = buffer.getReadPointer (1);
-        out.left.insert (out.left.end(), l, l + kBlock);
-        out.right.insert (out.right.end(), r, r + kBlock);
-    }
-
-    return out;
-}
-
-double rms (const std::vector<float>& x, size_t from = 0)
-{
-    double sum = 0.0;
-
-    for (size_t i = from; i < x.size(); ++i)
-        sum += (double) x[i] * (double) x[i];
-
-    return x.size() > from ? std::sqrt (sum / (double) (x.size() - from)) : 0.0;
-}
 
 /** La risposta all'impulso del canale sinistro, `numSamples` campioni, riverbero da solo. */
 std::vector<float> impulseResponse (float size01, float decay01, float damp01, float predelaySeconds,
@@ -528,11 +466,9 @@ struct PlateReverbTests final : juce::UnitTest
 
         beginTest ("il valore dichiarato all'host copre la coda peggiore");
         {
-            // getTailLengthSeconds() in Source/plugin/PluginProcessor.h dichiara 9.0 s, e il
-            // numero viene da qui. PluginProcessor non e' compilato in questa suite (tira dentro
-            // juce_audio_processors e mezzo plugin), quindi il legame e' questa riga: cambiare
-            // kMaxDecay o kMaxSizeRatio senza tornare a quel file rompe il test invece
-            // dell'export dell'utente.
+            // getTailLengthSeconds() in Source/plugin/PluginProcessor.h ritorna
+            // engine::SynthEngine::kDeclaredTailSeconds, la stessa costante letta qui: cambiare
+            // kMaxDecay o kMaxSizeRatio senza alzarla rompe il test invece dell'export dell'utente.
             const auto reverbTail = (double) dsp::PlateReverb::tailSecondsAtExtremes();
 
             // La coda del chorus, che sta in serie **prima**: a feedback pieno il suo contenuto
@@ -545,9 +481,9 @@ struct PlateReverbTests final : juce::UnitTest
                         + juce::String (chorusTail, 3) + " s, totale "
                         + juce::String (reverbTail + chorusTail, 3) + " s");
 
-            expect (reverbTail + chorusTail <= 11.0,
+            expect (reverbTail + chorusTail <= engine::SynthEngine::kDeclaredTailSeconds,
                     "la coda peggiore e' " + juce::String (reverbTail + chorusTail, 3)
-                        + " s: getTailLengthSeconds() dichiara 11.0 e sta mentendo");
+                        + " s: getTailLengthSeconds() dichiara " + juce::String (engine::SynthEngine::kDeclaredTailSeconds, 1) + " e sta mentendo");
         }
     }
 };

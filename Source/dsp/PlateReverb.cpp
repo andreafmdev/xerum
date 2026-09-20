@@ -23,13 +23,6 @@ constexpr double kDattorroSampleRate = 29761.0;
 /** Il `kMaxSize` di Gin: a sizeRatio 1 i ritardi del tank valgono il doppio di quelli del paper. */
 constexpr float kMaxSize = 2.0f;
 
-/** Un polo singolo di emivita `halfLife`: dopo quel tempo la distanza dal bersaglio si dimezza. */
-float smoothingCoefficient (float halfLifeSeconds, double sampleRate) noexcept
-{
-    const auto halfLifeSamples = (float) (halfLifeSeconds * sampleRate);
-    return 1.0f - std::exp2 (-1.0f / juce::jmax (1.0f, halfLifeSamples));
-}
-
 /** ln(1e-3): la caduta di 60 dB, in neper. */
 constexpr float kMinus60dB = 6.90775528f;
 } // namespace
@@ -164,8 +157,8 @@ void PlateReverb::prepare (double sampleRate)
     leftTaps_ = { 266.0f * r, 2974.0f * r, 1913.0f * r, 1996.0f * r, 1990.0f * r, 187.0f * r, 1066.0f * r };
     rightTaps_ = { 353.0f * r, 3627.0f * r, 1228.0f * r, 2673.0f * r, 2111.0f * r, 335.0f * r, 121.0f * r };
 
-    sizeCoeff_ = smoothingCoefficient (kSizeSmoothingHalfLifeSeconds, sampleRate_);
-    smoothingCoeff_ = smoothingCoefficient (kSmoothingHalfLifeSeconds, sampleRate_);
+    sizeCoeff_ = halfLifeCoefficient (kSizeSmoothingHalfLifeSeconds, sampleRate_);
+    smoothingCoeff_ = halfLifeCoefficient (kSmoothingHalfLifeSeconds, sampleRate_);
 
     reset();
 }
@@ -237,12 +230,10 @@ float PlateReverb::tailSecondsAtExtremes() noexcept
 
 void PlateReverb::process (float* left, float* right, int numSamples) noexcept
 {
-    for (int offset = 0; offset < numSamples;)
+    forEachSlice (numSamples, kModulationSliceSamples, [&] (int offset, int slice)
     {
-        const auto slice = std::min (kModulationSliceSamples, numSamples - offset);
         processSlice (left + offset, right != nullptr ? right + offset : nullptr, slice);
-        offset += slice;
-    }
+    });
 }
 
 void PlateReverb::processSlice (float* left, float* right, int numSamples) noexcept

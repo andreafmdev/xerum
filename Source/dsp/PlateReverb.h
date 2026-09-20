@@ -38,6 +38,8 @@
 
 #pragma once
 
+#include "dsp/Constants.h"
+
 #include <juce_core/juce_core.h>
 
 #include <array>
@@ -203,7 +205,7 @@ public:
     static constexpr float kWetGain = 0.58f;
 
     /** La lunghezza massima di una fetta di modulazione, in campioni. Come il chorus. */
-    static constexpr int kModulationSliceSamples = 32;
+    static constexpr int kModulationSliceSamples = kControlRateSamples;
 
     /**
      * Emivita dei poli che inseguono i parametri di posizione — `sizeRatio` e il predelay.

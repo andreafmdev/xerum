@@ -1,6 +1,7 @@
 #include "dsp/Chorus.h"
 
-#include "engine/SynthVoice.h" // engine::saturateCurve
+#include "dsp/Constants.h"
+#include "dsp/Saturation.h"
 
 #include <algorithm>
 #include <cmath>
@@ -79,8 +80,7 @@ void Chorus::prepare (double sampleRate, int maximumBlockSize, int numChannels)
 
     // Polo singolo di emivita kDelaySmoothingHalfLifeSeconds: dopo h secondi la distanza dal
     // bersaglio si e' dimezzata. Il coefficiente per campione e' 1 - 2^(-1/(h*fs)).
-    const auto halfLifeSamples = (float) (kDelaySmoothingHalfLifeSeconds * sampleRate_);
-    smoothingCoeff_ = 1.0f - std::exp2 (-1.0f / juce::jmax (1.0f, halfLifeSamples));
+    smoothingCoeff_ = halfLifeCoefficient (kDelaySmoothingHalfLifeSeconds, sampleRate_);
 
     reset();
 }
@@ -102,12 +102,10 @@ void Chorus::setParameters (float rateHz, float depth01, float feedback01) noexc
 
 void Chorus::process (float* left, float* right, int numSamples) noexcept
 {
-    for (int offset = 0; offset < numSamples;)
+    forEachSlice (numSamples, kModulationSliceSamples, [&] (int offset, int slice)
     {
-        const auto slice = std::min (kModulationSliceSamples, numSamples - offset);
         processSlice (left + offset, right != nullptr ? right + offset : nullptr, slice);
-        offset += slice;
-    }
+    });
 }
 
 void Chorus::processSlice (float* left, float* right, int numSamples) noexcept
@@ -176,7 +174,7 @@ void Chorus::processSlice (float* left, float* right, int numSamples) noexcept
             // limitato per costruzione, non per taratura del guadagno. A feedback zero il ramo
             // e' esattamente zero e non tocca un solo campione.
             const auto feedback = feedbackGain_ > 0.0f
-                                      ? feedbackGain_ * engine::saturateCurve (wet[ch])
+                                      ? feedbackGain_ * saturateCurve (wet[ch])
                                       : 0.0f;
 
             line_.pushSample (ch, dry[ch] + feedback);

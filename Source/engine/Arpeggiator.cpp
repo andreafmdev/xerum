@@ -1,5 +1,5 @@
 #include "engine/Arpeggiator.h"
-#include "parameters/StateTree.h"
+#include "parameters/ParameterDenormalise.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,8 +13,8 @@ namespace
  * Quanti quarti dura un passo, per le quattro divisioni di `arpRate`.
  *
  * L'ordine e' quello di ARP_DIVS in WebUI/src/synth/mapping.ts e di Label::ArpRate in
- * Source/parameters/ParameterMapping.h — "1/32", "1/16", "1/8", "1/4" — e la scelta dell'indice
- * usa la stessa formula delle due (floor(v * 4), limitato a 3), cosi' il knob non puo' mostrare
+ * Source/parameters/ParameterMapping.h — "1/32", "1/16", "1/8", "1/4" — e l'indice lo sceglie
+ * params::arpDivisionIndex, la stessa funzione dell'etichetta, cosi' il knob non puo' mostrare
  * una divisione e suonarne un'altra.
  */
 constexpr double kBeatsPerStep[] = { 0.125, 0.25, 0.5, 1.0 };
@@ -53,29 +53,7 @@ std::int64_t floorDiv2 (std::int64_t n) noexcept
 
 double arpBeatsPerStep (float raw) noexcept
 {
-    const auto clamped = std::clamp (raw, 0.0f, 1.0f);
-    const auto index = std::min (3, (int) std::floor ((double) clamped * 4.0));
-
-    return kBeatsPerStep[index];
-}
-
-void buildArpSnapshot (const juce::ValueTree& arpNode, ArpSnapshot& out)
-{
-    // Riscrittura totale, non un diff: `out` e' uno slot riusato dell'anello, e quello che resta
-    // della sequenza precedente non deve poter riaffiorare da sotto una sequenza piu' corta.
-    for (auto& s : out.steps)
-        s = 0.0f;
-
-    const auto tokens = juce::StringArray::fromTokens (arpNode[state::ids::steps].toString(), ",", "");
-
-    for (int i = 0; i < std::min (kArpSteps, tokens.size()); ++i)
-    {
-        // Il livello arriva dalla UI e finisce nello stato persistito: un preset scritto a mano o
-        // una versione futura della UI potrebbero mandarne uno fuori scala. Limitarlo qui evita
-        // che il thread audio debba fidarsi di un dato che non controlla — stesso criterio del
-        // depth in engine::buildModSnapshot.
-        out.steps[i] = juce::jlimit (0.0f, 1.0f, (float) tokens[i].getDoubleValue());
-    }
+    return kBeatsPerStep[params::arpDivisionIndex (raw)];
 }
 
 void Arpeggiator::prepare (double sampleRate) noexcept
