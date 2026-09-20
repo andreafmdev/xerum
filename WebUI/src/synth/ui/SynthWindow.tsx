@@ -27,12 +27,23 @@ export type SynthWindowProps = {
 };
 
 const W = 900;
-// 708 = 600 di pannello + 108 di striscia bassa. E' il numero da cui dipende tutta la geometria
-// dell'editor: la regola .sx-chassis in synth.css deve restare uguale a questo valore (il test
-// in SynthWindow.test.tsx controlla che non divergano), e da Task 12 anche kChassisHeight in
-// PluginEditor.cpp deve restare uguale a questo valore. Esportata perche' e' quella verita', non
-// il testo del CSS, a dover guidare chi la legge.
-export const H = 708;
+// 680 = i 670 px che i figli dello chassis occupano davvero, piu' 10 px di respiro in fondo.
+//
+// I figli sono tutti `shrink-0` e si sommano: padding verticale 20 + Header 40 + WaveDisplay 130
+// + i tre pannelli 224 + TabArea 124 + BottomStrip 108 + quattro gap da 6 = 670. Gli stessi 10 px
+// di respiro c'erano prima della striscia bassa, quando la somma faceva 590 dentro una scatola
+// da 600.
+//
+// Il primo numero scelto era 708, giustificato come "600 di pannello invariato piu' 108 di
+// striscia": premessa falsa, perche' quei 600 contenevano gia' il Footer da 28 px che
+// BottomStrip ha sostituito. 708 lasciava 38 px vuoti in fondo, e la finestra del plugin
+// ereditava l'errore a ogni scala.
+//
+// E' il numero da cui dipende tutta la geometria dell'editor: la regola .sx-chassis in synth.css
+// deve restare uguale a questo valore (il test in SynthWindow.test.tsx controlla che non
+// divergano), e anche kChassisHeight in PluginEditor.cpp. Esportata perche' e' quella verita',
+// non il testo del CSS, a dover guidare chi la legge.
+export const H = 680;
 
 // Lo chassis si scala con `transform`, non con `zoom`.
 //
@@ -49,7 +60,7 @@ export const H = 708;
 // Il <canvas> di WaveDisplay ha comunque bisogno di conoscere la scala: `transform` non
 // tocca il backing store, quindi lo schermo dell'onda restava a risoluzione 1x anche quando
 // tutto il resto era ingrandito. Lo ricava da getBoundingClientRect (vedi WaveDisplay.tsx).
-/** Finestra del plugin: 900×708 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
+/** Finestra del plugin: 900×680 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
 export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixedScale, gutter = 16 }: SynthWindowProps) {
   const s = useSynth(initialTab);
   // Unica istanza dello stato condiviso: i tab lo leggono dal contesto, così non

@@ -1,4 +1,4 @@
-/* Finestra plugin: chassis 900×708 scalato nel contenitore, tre varianti di materiale.
+/* Finestra plugin: chassis 900×680 scalato nel contenitore, tre varianti di materiale.
    Le varianti ridefiniscono i token hardware di @xerum/ui sul chassis, così ogni
    primitiva (Knob, Segmented, Button…) cambia pelle senza prop aggiuntive. */
 
@@ -16,9 +16,10 @@
 
 .sx-chassis {
   width: 900px;
-  /* 708 = H in SynthWindow.tsx. Le due copie non devono divergere: la sorgente di verita' e'
-     H, questo valore la segue e SynthWindow.test.tsx controlla che lo faccia davvero. */
-  height: 708px;
+  /* 680 = H in SynthWindow.tsx (670 px di contenuto piu' 10 di respiro; l'aritmetica sta la').
+     Le due copie non devono divergere: la sorgente di verita' e' H, questo valore la segue e
+     SynthWindow.test.tsx controlla che lo faccia davvero. */
+  height: 680px;
   position: relative;
   display: flex;
   flex-direction: column;

@@ -70,6 +70,14 @@ Lo chassis passa da `900×600` a **`900×708`**: 600 di pannello invariato più 
 rapporto 900:708 diventa il vincolo del `ChassisConstrainer`; `kMinScale 0.72` e `kMaxScale 1.5`
 restano. A scala 1 la finestra è più alta di 30 px rispetto a oggi (708 contro 678).
 
+> **Emendamento (review di fine ramo, 20 set 2026) — l'altezza è 680, non 708.** La premessa
+> "600 di pannello invariato" è falsa: quei 600 contenevano già il `Footer` da 28 px che
+> `BottomStrip` ha sostituito. I figli dello chassis, tutti `shrink-0`, sommano 670 (padding 20 +
+> Header 40 + WaveDisplay 130 + pannelli 224 + TabArea 124 + BottomStrip 108 + quattro gap da 6);
+> prima del ramo la stessa somma faceva 590 dentro una scatola da 600, cioè 10 px di respiro in
+> fondo. `H = 680` conserva quei 10; `708` ne lasciava 38. Il rapporto del `ChassisConstrainer`
+> diventa 900:680.
+
 La striscia non è due righe su tutta la larghezza: le wheel hanno bisogno di corsa verticale.
 
 ```

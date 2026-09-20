@@ -33,13 +33,19 @@ describe("SynthWindow on the bridge", () => {
     expect(screen.getByTestId("chassis")).toHaveAttribute("data-attached");
   });
 
-  it("H è 708: 600 di pannello più 108 di striscia, il numero che PluginEditor.cpp deve ricalcare", async () => {
-    // Non un numero nel test: H e' il valore che guida davvero la scala dello chassis (vedi
-    // l'arithmetic in SynthWindow.tsx). Un fix precedente controllava solo il testo del CSS —
-    // cambiare H a 700 e lasciare synth.css intatto avrebbe fatto passare quel test con una UI
-    // rotta. Da Task 12 anche kChassisHeight in PluginEditor.cpp deve restare uguale a questo
-    // numero: tre posti, una sola sorgente di verita'.
-    expect(H).toBe(708);
+  it("H è 680: i 670 px dei figli più 10 di respiro, il numero che PluginEditor.cpp deve ricalcare", async () => {
+    // Non un numero nel test: H e' il valore che guida davvero la scala dello chassis. I figli
+    // in flusso sono tutti shrink-0 e si sommano a 670 (padding 20 + Header 40 + WaveDisplay 130
+    // + pannelli 224 + TabArea 124 + BottomStrip 108 + quattro gap da 6): l'aritmetica sta nel
+    // commento di H in SynthWindow.tsx. Il 708 di prima veniva da "600 di pannello invariato piu'
+    // 108 di striscia", ma quei 600 contenevano gia' il Footer da 28 che BottomStrip ha
+    // sostituito, e lasciavano 38 px vuoti in fondo.
+    //
+    // Un fix precedente controllava solo il testo del CSS — cambiare H e lasciare synth.css
+    // intatto avrebbe fatto passare quel test con una UI rotta. Anche kChassisHeight in
+    // PluginEditor.cpp deve restare uguale a questo numero: tre posti, una sola sorgente di
+    // verita'.
+    expect(H).toBe(680);
   });
 
   it("la regola .sx-chassis in synth.css non diverge da H", async () => {
