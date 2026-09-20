@@ -9,6 +9,20 @@ export function measureIndicator(container: HTMLElement, item: HTMLElement): Ind
   return { x: i.left - c.left, width: i.width };
 }
 
+/** Larghezza di base dell'indicatore, prima di qualunque `scaleX`: usa `offsetWidth`, MAI
+    `getBoundingClientRect()`. `getBoundingClientRect` riporta il box DOPO il transform
+    corrente; se quel transform è già uno `scaleX` (0 al primo render, perché la base parte a
+    0), la misura letta è il risultato dello scale precedente, non la larghezza di layout — un
+    ciclo di retroazione con punto fisso a zero: `scaleX(0)` rende un box largo 0, la lettura
+    torna 0, lo scale factor per una base 0 è 0 per definizione (vedi `indicatorScale`), e non
+    si esce mai da lì: l'indicatore resta invisibile per sempre. `offsetWidth` riporta invece il
+    box di LAYOUT, ignora qualunque transform applicato, e arrotonda a intero — esattamente
+    l'invariante che serve qui (2 quando un bordo impedisce a un `width: 1px` dichiarato di
+    scendere sotto i 2px, 1 quando non lo impedisce), qualunque sia lo scale corrente. */
+export function baseWidthOf(el: HTMLElement): number {
+  return el.offsetWidth;
+}
+
 /** Fattore di `scaleX` per portare l'indicatore alla larghezza del box misurato, a partire
     dalla sua larghezza renderizzata reale (`baseWidth`), non da un valore assunto: un bordo,
     un padding, o qualunque altra cosa che box-sizing possa far vincere sulla `width` dichiarata

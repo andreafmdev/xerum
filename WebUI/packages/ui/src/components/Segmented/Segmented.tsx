@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 import { toneStyle, type Tone } from "@/lib/tone";
-import { indicatorTransform, measureIndicator, type IndicatorBox } from "@/lib/indicator";
+import { baseWidthOf, indicatorTransform, measureIndicator, type IndicatorBox } from "@/lib/indicator";
 
 export type SegmentedOption<V extends string = string> = { value: V; label: string };
 
@@ -47,7 +47,9 @@ export function Segmented<V extends string = string>({
     if (!container || !item) return;
     const measure = () => {
       setBox(measureIndicator(container, item));
-      setBaseWidth(indicator.current?.getBoundingClientRect().width ?? 0);
+      // offsetWidth, non getBoundingClientRect: quest'ultimo leggerebbe il box già trasformato
+      // (lo scaleX corrente), un ciclo di retroazione che si blocca a zero — vedi baseWidthOf.
+      setBaseWidth(indicator.current ? baseWidthOf(indicator.current) : 0);
     };
     measure();
     const ro = new ResizeObserver(measure);

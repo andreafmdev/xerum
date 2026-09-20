@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { indicatorTransform, measureIndicator } from "./indicator";
+import { baseWidthOf, indicatorTransform, measureIndicator } from "./indicator";
 
 /** Un elemento finto con il solo `getBoundingClientRect` che serve alla misura. */
 const at = (left: number, width: number) =>
@@ -32,5 +32,22 @@ describe("indicatorTransform", () => {
   it("falls back to a zero scale when the base width is not yet measurable", () => {
     // jsdom, o il primo render prima che il layout esista: nessuna divisione per zero.
     expect(indicatorTransform({ x: 0, width: 0 }, 0)).toBe("translateX(0px) scaleX(0)");
+  });
+});
+
+describe("baseWidthOf", () => {
+  it("reads offsetWidth, the layout box, not getBoundingClientRect (the transformed box)", () => {
+    // Regressione: leggere `getBoundingClientRect().width` restituisce il box DOPO il
+    // transform corrente. Se quel transform è già uno scaleX (0 al primo render, perché la
+    // base parte a 0), la misura letta è 0, lo scale factor per una base 0 resta 0, e
+    // l'indicatore non esce mai da quel punto fisso: invisibile per sempre. `offsetWidth`
+    // ignora il transform e riporta la larghezza di layout, qualunque essa sia in quel momento.
+    const el = {
+      offsetWidth: 2,
+      // Un getBoundingClientRect che mentirebbe (0, per via di un scaleX(0) applicato):
+      // se baseWidthOf lo usasse per errore, questo test lo scoprirebbe.
+      getBoundingClientRect: () => ({ width: 0 }),
+    } as unknown as HTMLElement;
+    expect(baseWidthOf(el)).toBe(2);
   });
 });
