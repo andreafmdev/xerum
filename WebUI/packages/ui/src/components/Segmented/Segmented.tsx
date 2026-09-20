@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 import { toneStyle, type Tone } from "@/lib/tone";
-import { measureIndicator, type IndicatorBox } from "@/lib/indicator";
+import { indicatorTransform, measureIndicator, type IndicatorBox } from "@/lib/indicator";
 
 export type SegmentedOption<V extends string = string> = { value: V; label: string };
 
@@ -31,18 +31,28 @@ export function Segmented<V extends string = string>({
 }: SegmentedProps<V>) {
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const group = useRef<HTMLDivElement>(null);
+  const indicator = useRef<HTMLSpanElement>(null);
   const [box, setBox] = useState<IndicatorBox>({ x: 0, width: 0 });
+  // Larghezza renderizzata dell'indicatore stesso: la base vera dello `scaleX`, mai assunta
+  // a 1px (un bordo o altro può cambiarla sotto i piedi — vedi `indicator.ts`).
+  const [baseWidth, setBaseWidth] = useState(0);
   const active = options.findIndex((o) => o.value === value);
 
-  // La misura dopo il layout, e a ogni cambio di selezione o di larghezza del gruppo.
+  // La misura dopo il layout, e a ogni cambio di selezione, di larghezza del gruppo o della
+  // piastrina selezionata (un'etichetta più lunga, un cambio di font, può farla crescere senza
+  // che il gruppo stesso cambi larghezza).
   useLayoutEffect(() => {
     const container = group.current;
     const item = buttons.current[active];
     if (!container || !item) return;
-    const measure = () => setBox(measureIndicator(container, item));
+    const measure = () => {
+      setBox(measureIndicator(container, item));
+      setBaseWidth(indicator.current?.getBoundingClientRect().width ?? 0);
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(container);
+    ro.observe(item);
     return () => ro.disconnect();
   }, [active, options.length]);
 
@@ -69,11 +79,17 @@ export function Segmented<V extends string = string>({
       style={toneStyle(tone)}
     >
       <span
+        ref={indicator}
         aria-hidden
         data-testid="segmented-indicator"
         data-measured={box.width > 0}
-        className="pointer-events-none absolute top-0.5 bottom-0.5 left-0 -z-10 origin-left rounded-[2px] border border-edge-dark bg-linear-to-b from-cap-hi to-cap-lo shadow-cap transition-transform duration-(--dur-state) ease-glass data-[measured=false]:opacity-0"
-        style={{ width: 1, transform: `translateX(${box.x}px) scaleX(${box.width})` }}
+        // Niente bordo né raggio d'angolo qui: sono proprietà dell'elemento scalato via
+        // `scaleX`, e uno scale factor di 19-34x le distorce (il bordo si assottiglia/ispessisce
+        // in modo asimmetrico, il raggio si appiattisce in uno spigolo ellittico). Il gradiente
+        // e l'ombra bastano da soli a leggersi come "rialzato"; il silhouette esatto (il box
+        // deve combaciare con la piastrina) conta più di un contorno.
+        className="pointer-events-none absolute top-0.5 bottom-0.5 left-0 -z-10 origin-left bg-linear-to-b from-cap-hi to-cap-lo shadow-cap transition-transform duration-(--dur-state) ease-glass data-[measured=false]:opacity-0"
+        style={{ width: 1, transform: indicatorTransform(box, baseWidth) }}
       />
       {options.map((o, i) => {
         const checked = o.value === value;
