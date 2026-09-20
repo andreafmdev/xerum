@@ -99,8 +99,9 @@ describe("JuceBackend", () => {
     const second = vi.fn();
     const off = b.onStateChanged(first);
     b.onStateChanged(second);
-    // removeEventListener upstream è un no-op: un solo addEventListener reale, il
-    // fan-out e l'unsubscribe restano locali al backend.
+    // fanOut chiama addEventListener upstream una sola volta per evento, non una
+    // per subscribe: fan-out e unsubscribe restano locali al Set del backend,
+    // upstream vede un solo listener reale indipendentemente dai subscriber.
     expect(stub.listeners.get("stateChanged")).toHaveLength(1);
     const fire = () => stub.listeners.get("stateChanged")!.forEach((fn) => fn({ version: 1, mods: [], arpSteps: [], origin: "x" }));
     fire();
