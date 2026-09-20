@@ -30,11 +30,17 @@ describe("Button", () => {
 });
 
 describe("Button motion", () => {
-  it("transitions a named list of properties, never all of them", () => {
+  it("transitions a named, complete list of properties, never all of them", () => {
     render(<Button>Load</Button>);
     const el = screen.getByRole("button", { name: "Load" });
     expect(el).not.toHaveClass("transition-all");
-    expect(el.className).toContain("transition-[transform,box-shadow,background-color,border-color]");
+    // Assertiamo la stringa esatta, non un sottoinsieme: ghost/outline animano il testo
+    // (hover:text-foreground, aria-expanded:text-foreground) e disabled anima l'opacità,
+    // quindi color e opacity devono comparire quanto transform. Un toContain su un
+    // singolo nome non avrebbe intercettato l'omissione di color/opacity la prima volta;
+    // la lista esatta obbliga ogni futura modifica a essere deliberata.
+    const match = el.className.match(/transition-\[([^\]]*)\]/);
+    expect(match?.[1]).toBe("transform,box-shadow,background-color,border-color,color,opacity");
   });
 
   it("presses instantly and releases on the press duration", () => {
