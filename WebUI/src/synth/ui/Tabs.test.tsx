@@ -1,8 +1,11 @@
+import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import { domAnimation, LazyMotion } from "motion/react";
 import { FakeBackend } from "../../juce/fake-backend";
 import { BridgeProvider } from "../../juce/provider";
 import { SynthWindow } from "./SynthWindow";
+import { TabArea } from "./Tabs";
 
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement["getContext"];
 
@@ -47,5 +50,40 @@ describe("FxTab", () => {
     const head = within(screen.getByTestId("fx-slot-Delay")).getByTestId("fx-slot-head");
     expect(within(head).getByRole("switch", { name: "Sync" })).toBeInTheDocument();
     expect(within(head).getByRole("switch", { name: "Ping" })).toBeInTheDocument();
+  });
+});
+
+// Wrapping serve perche' <m.div> senza un <LazyMotion> antenato non ha ne' renderer ne' feature
+// caricate: qui non conta per l'assert (statico, non su un'animazione in corso), ma tenerlo
+// coerente con l'uso reale (App.tsx monta <LazyMotion> alla radice) evita un falso positivo se
+// domani il test crescesse a osservare il crossfade in corso.
+const mountTabArea = (tab: "env" | "lfo", children: ReactNode) =>
+  render(
+    <LazyMotion features={domAnimation}>
+      <TabArea tab={tab} setTab={() => {}}>
+        {children}
+      </TabArea>
+    </LazyMotion>,
+  );
+
+describe("TabArea", () => {
+  it("crossfades the page instead of sliding it: 900px of chassis are too many pixels", () => {
+    const { rerender } = mountTabArea("env", <p>ENV</p>);
+    const page = screen.getByTestId("tab-page");
+    // L'opacita' e' uno stile animato applicato da motion (initial/animate), non una classe
+    // Tailwind: e' cosi' che si distingue il crossfade da uno scivolamento, che invece
+    // comparirebbe come classe `translate-x-*`.
+    expect(page.style.opacity).not.toBe("");
+    expect(page.className).not.toContain("translate-x");
+    rerender(
+      <LazyMotion features={domAnimation}>
+        <TabArea tab="lfo" setTab={() => {}}>
+          <p>LFO</p>
+        </TabArea>
+      </LazyMotion>,
+    );
+    // mode="wait" tiene la pagina vecchia finche' non e' uscita: non devono mai coesisterne due
+    // gia' montate una accanto all'altra, ma almeno una resta sempre presente.
+    expect(screen.getAllByTestId("tab-page").length).toBeGreaterThanOrEqual(1);
   });
 });

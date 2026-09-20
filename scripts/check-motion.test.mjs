@@ -185,13 +185,15 @@ test("still flags a raw duration outside the ambient-loop-block", () => {
 });
 
 // --- Fix round 1 / Finding 1: le deroghe devono essere per path, non per basename -------------
-// La regressione reale: WebUI/src/synth/ui/Tabs.tsx (grandfathered, ha duration-100 a riga 331)
-// e WebUI/packages/ui/src/components/Tabs/Tabs.tsx (il file toccato dal Task 6) condividono il
-// solo basename "Tabs.tsx". Un matching per basename copre entrambi in silenzio; uno per path
-// copre esattamente il file grandfathered.
+// La regressione reale: WebUI/src/synth/ui/Tabs.tsx (grandfathered fino alla task 11, aveva
+// duration-100 a riga 331) e WebUI/packages/ui/src/components/Tabs/Tabs.tsx (il file toccato dal
+// Task 6) condividono il solo basename "Tabs.tsx". Un matching per basename copre entrambi in
+// silenzio; uno per path copre esattamente il file grandfathered. La task 11 ha sistemato quella
+// violazione: nessuno dei due Tabs.tsx è più in deroga, ed è proprio quello che il primo assert
+// dimostra adesso.
 
-test("exempts the real grandfathered file by its full path", () => {
-  assert.equal(isDeroga("WebUI/src/synth/ui/Tabs.tsx"), true);
+test("no longer exempts the once-grandfathered file: the task 11 fix removed the entry", () => {
+  assert.equal(isDeroga("WebUI/src/synth/ui/Tabs.tsx"), false);
 });
 
 test("does NOT exempt a same-named file in a different directory (the case that was silently broken)", () => {

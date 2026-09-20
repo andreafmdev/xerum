@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Segmented, Select, Tabs, Toggle, toneStyle } from "@xerum/ui";
+import { AnimatePresence, m } from "motion/react";
+import { Segmented, Select, T, Tabs, Toggle, toneStyle } from "@xerum/ui";
 import { X } from "lucide-react";
 import { useBoolParam, useChoiceParam, useFloatParam, useMeterValue } from "../../juce/hooks";
 import { envPath, lfoPath } from "../curves";
@@ -35,7 +36,18 @@ export function TabArea({ tab, setTab, children }: { tab: TabId; setTab: (t: Tab
           ))}
         </div>
       </div>
-      {children}
+      <AnimatePresence mode="wait" initial={false}>
+        <m.div
+          key={tab}
+          data-testid="tab-page"
+          className="flex min-h-0 flex-1 flex-col"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: T.layerIn }}
+          exit={{ opacity: 0, transition: T.layerOut }}
+        >
+          {children}
+        </m.div>
+      </AnimatePresence>
     </section>
   );
 }
@@ -328,7 +340,7 @@ export function ArpTab() {
           >
             <ArpPlayhead index={i} on={arpOn.checked} />
             <i
-              className={`absolute inset-x-0 bottom-0 rounded-[2px] bg-(--tone) transition-[height] duration-100 ${v > 0 ? "opacity-100 shadow-[0_0_6px_color-mix(in_oklch,var(--tone)_60%,transparent)]" : "opacity-35"}`}
+              className={`absolute inset-x-0 bottom-0 rounded-[2px] bg-(--tone) transition-[height] duration-(--dur-press) ${v > 0 ? "opacity-100 shadow-[0_0_6px_color-mix(in_oklch,var(--tone)_60%,transparent)]" : "opacity-35"}`}
               style={{ height: `${Math.max(8, v * 100)}%` }}
             />
           </button>
