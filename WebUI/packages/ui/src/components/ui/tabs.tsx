@@ -76,10 +76,4 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   )
 }
 
-// Pubblica la geometria del tab attivo (--active-tab-left, --active-tab-width, ...) come
-// custom properties: chi la consuma non deve misurare niente a mano.
-function TabsIndicator({ className, ...props }: TabsPrimitive.Indicator.Props) {
-  return <TabsPrimitive.Indicator data-slot="tabs-indicator" className={className} {...props} />
-}
-
-export { Tabs, TabsList, TabsTrigger, TabsContent, TabsIndicator, tabsListVariants }
+export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants }
