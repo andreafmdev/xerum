@@ -11,7 +11,7 @@
 git submodule update --init --recursive
 ```
 
-JUCE is pinned under `external/JUCE` (tag `8.0.6`).
+JUCE is pinned under `external/JUCE` (tag `9.0.2`).
 
 ## One command
 
