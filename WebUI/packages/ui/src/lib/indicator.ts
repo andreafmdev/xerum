@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef, useState, type RefCallback, type RefObject } from "react";
+
 /** Posizione e larghezza dell'indicatore, relative al suo contenitore. */
 export type IndicatorBox = { x: number; width: number };
 
@@ -38,4 +40,89 @@ export function indicatorScale(box: IndicatorBox, baseWidth: number): number {
     larghezza. Mai `width`, che il sistema di motion vieta di animare (reflow nella WebView). */
 export function indicatorTransform(box: IndicatorBox, baseWidth: number): string {
   return `translateX(${box.x}px) scaleX(${indicatorScale(box, baseWidth)})`;
+}
+
+export type UseSlidingIndicatorOptions = {
+  /**
+   * Quando false l'hook non fa nulla: nessuna misura, nessun `ResizeObserver` montato. Un hook
+   * non si può chiamare a condizione (regola di React), ma il SUO lavoro sì — è la via corretta
+   * per un indicatore condizionale (es. `Tabs` in variante `plate`, che non ne ha uno).
+   * @default true
+   */
+  enabled?: boolean;
+};
+
+export type UseSlidingIndicatorResult<Container extends HTMLElement, Item extends HTMLElement> = {
+  /** Da mettere sul contenitore (il gruppo/la tablist): l'origine di `box.x`. */
+  containerRef: RefObject<Container | null>;
+  /** Da mettere sull'elemento che scorre (lo `span` assoluto, `width: 1` come base dello `scaleX`). */
+  indicatorRef: RefObject<HTMLSpanElement | null>;
+  /** Ref callback per l'i-esimo elemento selezionabile (bottone, tab...). Sostituisce l'array di
+      ref locale (`buttons.current[i]` / `triggers.current[i]`) che ciascun consumer teneva prima. */
+  itemRef: (index: number) => RefCallback<Item>;
+  /** `translateX(...) scaleX(...)`, pronto per `style={{ transform }}`. */
+  transform: string;
+  /** true solo dopo una misura reale (`box.width > 0`): in jsdom, senza layout, resta false per sempre. */
+  measured: boolean;
+};
+
+/**
+ * Wiring condiviso dietro ogni indicatore che scorre (`Segmented`, `Tabs` in variante `bar`):
+ * misura l'elemento attivo dopo il layout, lo rimisura a ogni cambio di indice/conteggio o di
+ * larghezza (`ResizeObserver` su contenitore ed elemento attivo), scollega tutto in cleanup, e
+ * deriva `transform` dalle funzioni pure qui sopra.
+ *
+ * Prima di questo hook, lo stesso effect era duplicato riga per riga in `Segmented.tsx` e in
+ * `Tabs.tsx`: le uniche righe toccate dai due bug Critical di Segmented (base letta con
+ * `getBoundingClientRect` invece di `offsetWidth`, scale calcolato sulla base sbagliata)
+ * vivevano in entrambe le copie, sincronizzate solo a mano. Ora c'è un solo posto da correggere
+ * se quella storia si ripete.
+ */
+export function useSlidingIndicator<Container extends HTMLElement = HTMLElement, Item extends HTMLElement = HTMLElement>(
+  activeIndex: number,
+  itemCount: number,
+  { enabled = true }: UseSlidingIndicatorOptions = {},
+): UseSlidingIndicatorResult<Container, Item> {
+  const containerRef = useRef<Container>(null);
+  const indicatorRef = useRef<HTMLSpanElement>(null);
+  const itemRefs = useRef<(Item | null)[]>([]);
+  const [box, setBox] = useState<IndicatorBox>({ x: 0, width: 0 });
+  // Larghezza renderizzata dell'indicatore stesso: la base vera dello `scaleX`, mai assunta
+  // a 1px (un bordo o altro può cambiarla sotto i piedi — vedi `baseWidthOf` sopra).
+  const [baseWidth, setBaseWidth] = useState(0);
+
+  // Misura dopo il layout, e a ogni cambio di indice attivo, di conteggio degli elementi, o di
+  // larghezza del contenitore/elemento attivo (un'etichetta più lunga, un cambio di font, può
+  // farla crescere senza che il contenitore stesso cambi larghezza).
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    const container = containerRef.current;
+    const item = itemRefs.current[activeIndex];
+    if (!container || !item) return;
+    const measure = () => {
+      setBox(measureIndicator(container, item));
+      // offsetWidth, non getBoundingClientRect: quest'ultimo leggerebbe il box già trasformato
+      // (lo scaleX corrente), un ciclo di retroazione che si blocca a zero — vedi baseWidthOf.
+      setBaseWidth(indicatorRef.current ? baseWidthOf(indicatorRef.current) : 0);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(container);
+    ro.observe(item);
+    return () => ro.disconnect();
+  }, [enabled, activeIndex, itemCount]);
+
+  const itemRef = (index: number): RefCallback<Item> => {
+    return (el) => {
+      itemRefs.current[index] = el;
+    };
+  };
+
+  return {
+    containerRef,
+    indicatorRef,
+    itemRef,
+    transform: indicatorTransform(box, baseWidth),
+    measured: box.width > 0,
+  };
 }
