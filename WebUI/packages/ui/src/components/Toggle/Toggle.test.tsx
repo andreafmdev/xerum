@@ -38,3 +38,21 @@ describe("Toggle", () => {
     expect(screen.getByTestId("toggle").style.getPropertyValue("--tone")).toBe("var(--color-lfo)");
   });
 });
+
+describe("Toggle motion", () => {
+  it("moves the thumb on the settle curve: it has mass", () => {
+    render(<Toggle checked={false} onChange={() => {}} label="Sync" />);
+    const cls = screen.getByRole("switch").className;
+    expect(cls).toContain("[&_[data-slot=switch-thumb]]:transition-transform");
+    expect(cls).toContain("[&_[data-slot=switch-thumb]]:duration-(--dur-state)");
+    expect(cls).toContain("[&_[data-slot=switch-thumb]]:ease-settle");
+  });
+
+  it("lights the LED faster than it lets it fade: a real LED has persistence", () => {
+    const { rerender } = render(<Toggle checked={true} onChange={() => {}} label="Sync" />);
+    const led = () => screen.getByTestId("toggle-led");
+    expect(led().className).toContain("duration-(--dur-press)");
+    rerender(<Toggle checked={false} onChange={() => {}} label="Sync" />);
+    expect(led().className).toContain("duration-(--dur-state)");
+  });
+});

@@ -37,14 +37,18 @@ export function Toggle({ checked, onChange, label, tone, disabled = false, class
           "[&_[data-slot=switch-thumb]]:size-3 [&_[data-slot=switch-thumb]]:rounded-[2px]",
           "[&_[data-slot=switch-thumb]]:bg-linear-to-b [&_[data-slot=switch-thumb]]:from-cap-hi [&_[data-slot=switch-thumb]]:to-cap-lo",
           "[&_[data-slot=switch-thumb]]:shadow-cap",
+          // Il thumb ha massa: è l'unico overshoot autorizzato dell'interfaccia.
+          "[&_[data-slot=switch-thumb]]:transition-transform [&_[data-slot=switch-thumb]]:duration-(--dur-state) [&_[data-slot=switch-thumb]]:ease-settle",
           "[&_[data-slot=switch-thumb][data-checked]]:translate-x-3!",
         )}
       />
       <span
         aria-hidden
+        data-testid="toggle-led"
         className={cn(
-          "size-1.5 shrink-0 rounded-full",
-          checked ? "bg-(--tone) shadow-[0_0_4px_var(--tone)]" : "bg-led-off",
+          "size-1.5 shrink-0 rounded-full transition-[background-color,box-shadow] ease-snap",
+          // Un LED vero si accende subito e si spegne con persistenza: l'opposto del vetro.
+          checked ? "bg-(--tone) shadow-[0_0_4px_var(--tone)] duration-(--dur-press)" : "bg-led-off duration-(--dur-state)",
           disabled && "opacity-50",
         )}
       />
