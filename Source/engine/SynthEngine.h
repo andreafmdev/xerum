@@ -3,6 +3,7 @@
 #include "dsp/Chorus.h"
 #include "dsp/PlateReverb.h"
 #include "dsp/Constants.h"
+#include "dsp/StereoDelay.h"
 #include "engine/Arpeggiator.h"
 #include "engine/NoteMask.h"
 #include "engine/EngineParams.h"
@@ -11,6 +12,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_dsp/juce_dsp.h>
 
+#include <array>
 #include <atomic>
 
 namespace engine
@@ -265,10 +267,20 @@ private:
     void crossfadeWithDry (float* const* channels, int numChannels, int numSamples,
                            juce::SmoothedValue<float>& gain) noexcept;
 
-    /** I campioni di silenzio in ingresso dopo i quali lo stadio si spegne. Vedi processFx(). */
+    /**
+     * I tre effetti, uno per metodo: processFxChunk li chiama nell'ordine di params_.fxOrder.
+     * Chorus e riverbero sono il codice di prima, spostato riga per riga; il delay e' il terzo.
+     * Ogni slot vede come "secco" cio' che gli arriva, cioe' l'uscita dello slot precedente.
+     */
+    void processChorusSlot (float* const* channels, juce::dsp::AudioBlock<float>& block, int fxChannels, int numSamples) noexcept;
+    void processReverbSlot (float* const* channels, juce::dsp::AudioBlock<float>& block, int fxChannels, int numSamples) noexcept;
+    void processDelaySlot (float* const* channels, juce::dsp::AudioBlock<float>& block, int fxChannels, int numSamples) noexcept;
+
+    /** I campioni di silenzio in ingresso dopo i quali lo stadio si spegne: il massimo fra il
+        ringout costante e le code degli effetti in esecuzione. Vedi processFx(). */
     int ringoutSamples() const noexcept;
 
-    /** Spegne i due effetti e azzera la loro memoria. Non alloca. */
+    /** Spegne i tre effetti e azzera la loro memoria. Non alloca. */
     void stopFx() noexcept;
 
     VoiceManager voices_;
@@ -375,6 +387,7 @@ private:
 
     dsp::Chorus chorus_;
     dsp::PlateReverb reverb_;
+    dsp::StereoDelay delay_;
 
     /**
      * Il dry/wet dello stadio, con regola `sin3dB` — l'equal-power, la stessa di Vital.
@@ -390,6 +403,9 @@ private:
         distinte su due effetti in serie, quindi due mixer e non uno. */
     juce::dsp::DryWetMixer<float> reverbMix_;
 
+    /** Il terzo, per il delay: `dlMix`. */
+    juce::dsp::DryWetMixer<float> delayMix_;
+
     /** Copia del secco del blocco, per la dissolvenza di bypass. Il DryWetMixer ha una copia
         sua ma la consuma dentro mixWetSamples(): servono entrambe. Una sola basta per tutti e
         due gli effetti perche' le due dissolvenze sono **in sequenza**: quella del riverbero
@@ -400,6 +416,7 @@ private:
     /** 0 = effetto completamente fuori, 1 = completamente dentro. Vedi processFx(). */
     juce::SmoothedValue<float> chorusGain_;
     juce::SmoothedValue<float> reverbGain_;
+    juce::SmoothedValue<float> delayGain_;
 
     int fxSilentSamples_ { 0 };
     int fxRingoutSamples_ { 0 };
@@ -412,5 +429,6 @@ private:
 
     bool chorusRunning_ { false };
     bool reverbRunning_ { false };
+    bool delayRunning_ { false };
 };
 } // namespace engine

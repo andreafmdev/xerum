@@ -88,6 +88,9 @@ void SynthEngine::prepare (const EngineSpec& spec) noexcept
     // dove stava nell'originale.
     reverb_.prepare (spec_.sampleRate);
 
+    // Il delay: due linee da due secondi, allocate qui e solo qui.
+    delay_.prepare (spec_.sampleRate, fxBlock);
+
     juce::dsp::ProcessSpec dspSpec {};
     dspSpec.sampleRate = spec_.sampleRate;
     dspSpec.maximumBlockSize = (juce::uint32) fxBlock;
@@ -99,12 +102,17 @@ void SynthEngine::prepare (const EngineSpec& spec) noexcept
     reverbMix_.setMixingRule (juce::dsp::DryWetMixingRule::sin3dB);
     reverbMix_.prepare (dspSpec);
 
+    delayMix_.setMixingRule (juce::dsp::DryWetMixingRule::sin3dB);
+    delayMix_.prepare (dspSpec);
+
     fxDry_.setSize (fxChannels, fxBlock, false, false, true);
 
     chorusGain_.reset (spec_.sampleRate, kFxCrossfadeSeconds);
     chorusGain_.setCurrentAndTargetValue (0.0f);
     reverbGain_.reset (spec_.sampleRate, kFxCrossfadeSeconds);
     reverbGain_.setCurrentAndTargetValue (0.0f);
+    delayGain_.reset (spec_.sampleRate, kFxCrossfadeSeconds);
+    delayGain_.setCurrentAndTargetValue (0.0f);
 
     fxRingoutSamples_ = (int) (kFxRingoutSeconds * spec_.sampleRate);
 
@@ -135,12 +143,15 @@ void SynthEngine::stopFx() noexcept
 {
     chorus_.reset();
     reverb_.reset();
+    delay_.reset();
     chorusGain_.setCurrentAndTargetValue (0.0f);
     reverbGain_.setCurrentAndTargetValue (0.0f);
+    delayGain_.setCurrentAndTargetValue (0.0f);
     fxSilentSamples_ = 0;
     chorusPrimeSamples_ = 0;
     chorusRunning_ = false;
     reverbRunning_ = false;
+    delayRunning_ = false;
 }
 
 void SynthEngine::setMasterGainLinear (float gain) noexcept
@@ -397,10 +408,16 @@ int SynthEngine::ringoutSamples() const noexcept
     // diventa allora la coda che i parametri correnti producono, calcolata e non misurata (vedi
     // dsp::PlateReverb::tailSeconds), quindi ai valori bassi il costo resta quello di prima e
     // solo a size e decay a fondo corsa lo stadio gira per quasi undici secondi di silenzio.
-    if (! reverbRunning_)
-        return fxRingoutSamples_;
+    auto samples = fxRingoutSamples_;
 
-    return juce::jmax (fxRingoutSamples_, (int) (reverb_.tailSeconds() * spec_.sampleRate));
+    if (reverbRunning_)
+        samples = juce::jmax (samples, (int) (reverb_.tailSeconds() * spec_.sampleRate));
+
+    // Stesso principio per il delay: la coda che tempo e feedback correnti producono.
+    if (delayRunning_)
+        samples = juce::jmax (samples, (int) (dsp::StereoDelay::tailSeconds (params_.delayTimeSeconds, params_.delayFeedback01) * spec_.sampleRate));
+
+    return samples;
 }
 
 void SynthEngine::processFxChunk (juce::AudioBuffer<float>& buffer, int startSample, int numSamples,
@@ -408,19 +425,21 @@ void SynthEngine::processFxChunk (juce::AudioBuffer<float>& buffer, int startSam
 {
     const auto wantChorus = params_.chorusOn;
     const auto wantReverb = params_.reverbOn;
+    const auto wantDelay = params_.delayOn;
 
     // "Fermo a zero": spento, e la dissolvenza finita da un pezzo. E' la condizione che rende
     // bit-trasparente il ramo di un effetto, ed e' per questo che viene letta **prima** di
     // qualunque cosa tocchi il buffer e non ricalcolata dopo.
     const auto chorusIdle = ! chorusGain_.isSmoothing() && chorusGain_.getCurrentValue() <= 0.0f;
     const auto reverbIdle = ! reverbGain_.isSmoothing() && reverbGain_.getCurrentValue() <= 0.0f;
+    const auto delayIdle = ! delayGain_.isSmoothing() && delayGain_.getCurrentValue() <= 0.0f;
 
-    if (! wantChorus && ! wantReverb && chorusIdle && reverbIdle)
+    if (! wantChorus && ! wantReverb && ! wantDelay && chorusIdle && reverbIdle && delayIdle)
     {
         // Si esce **senza toccare il buffer**: e' questa riga, non un confronto a valle, a
-        // garantire che con i due interruttori spenti l'uscita sia bit per bit quella di prima
+        // garantire che con i tre interruttori spenti l'uscita sia bit per bit quella di prima
         // dello stadio FX.
-        if (chorusRunning_ || reverbRunning_)
+        if (chorusRunning_ || reverbRunning_ || delayRunning_)
             stopFx();
 
         return;
@@ -455,20 +474,39 @@ void SynthEngine::processFxChunk (juce::AudioBuffer<float>& buffer, int startSam
 
     fxSilentSamples_ = inputPeak <= kFxSilenceFloor ? fxSilentSamples_ + numSamples : 0;
 
-    if (! chorusGain_.isSmoothing() && ! reverbGain_.isSmoothing()
+    if (! chorusGain_.isSmoothing() && ! reverbGain_.isSmoothing() && ! delayGain_.isSmoothing()
         && fxSilentSamples_ >= ringoutSamples())
     {
         // Gli effetti si spengono mentre l'ingresso tace, quindi i guadagni possono andare a
         // zero di scatto: non c'e' niente da dissolvere. stopFx() fa anche quello — senza, al
         // rientro del suono il guadagno ripartirebbe da 1 su linee appena azzerate, cioe' da un
         // buco.
-        if (chorusRunning_ || reverbRunning_)
+        if (chorusRunning_ || reverbRunning_ || delayRunning_)
             stopFx();
 
         return;
     }
 
     juce::dsp::AudioBlock<float> block (channels, (size_t) fxChannels, (size_t) numSamples);
+
+    // L'ordine e' un dato del blocco: tre metodi, uno per effetto, chiamati in fila. Con il
+    // delay fermo `cdr` e `crd` eseguono le stesse operazioni di prima nello stesso ordine.
+    using Slot = void (SynthEngine::*) (float* const*, juce::dsp::AudioBlock<float>&, int, int) noexcept;
+    constexpr Slot chorus = &SynthEngine::processChorusSlot;
+    constexpr Slot delay = &SynthEngine::processDelaySlot;
+    constexpr Slot reverb = &SynthEngine::processReverbSlot;
+    const auto order = params_.fxOrder == FxOrder::delayChorusReverb ? std::array<Slot, 3> { delay, chorus, reverb }
+                     : params_.fxOrder == FxOrder::chorusReverbDelay ? std::array<Slot, 3> { chorus, reverb, delay }
+                                                                      : std::array<Slot, 3> { chorus, delay, reverb };
+
+    for (const auto slot : order)
+        (this->*slot) (channels, block, fxChannels, numSamples);
+}
+
+void SynthEngine::processChorusSlot (float* const* channels, juce::dsp::AudioBlock<float>& block, int fxChannels, int numSamples) noexcept
+{
+    const auto wantChorus = params_.chorusOn;
+    const auto chorusIdle = ! chorusGain_.isSmoothing() && chorusGain_.getCurrentValue() <= 0.0f;
 
     // --- chorus ---------------------------------------------------------------------------
 
@@ -533,6 +571,12 @@ void SynthEngine::processFxChunk (juce::AudioBuffer<float>& buffer, int startSam
         chorus_.reset();
         chorusRunning_ = false;
     }
+}
+
+void SynthEngine::processReverbSlot (float* const* channels, juce::dsp::AudioBlock<float>& block, int fxChannels, int numSamples) noexcept
+{
+    const auto wantReverb = params_.reverbOn;
+    const auto reverbIdle = ! reverbGain_.isSmoothing() && reverbGain_.getCurrentValue() <= 0.0f;
 
     // --- riverbero ------------------------------------------------------------------------
 
@@ -596,6 +640,49 @@ void SynthEngine::processFxChunk (juce::AudioBuffer<float>& buffer, int startSam
     }
 }
 
+void SynthEngine::processDelaySlot (float* const* channels, juce::dsp::AudioBlock<float>& block, int fxChannels, int numSamples) noexcept
+{
+    const auto wantDelay = params_.delayOn;
+    const auto delayIdle = ! delayGain_.isSmoothing() && delayGain_.getCurrentValue() <= 0.0f;
+
+    if (! wantDelay && delayIdle)
+    {
+        if (delayRunning_)
+        {
+            delay_.reset();
+            delayRunning_ = false;
+        }
+
+        return;
+    }
+
+    if (! delayRunning_)
+    {
+        // Linea vuota e ingresso continuo: gli echi crescono da zero per costruzione, quindi ne'
+        // il riempimento del chorus ne' la rampa d'ingresso del riverbero servono qui.
+        delay_.reset();
+        delayRunning_ = true;
+    }
+
+    delayGain_.setTargetValue (wantDelay ? 1.0f : 0.0f);
+    const auto crossfading = delayGain_.isSmoothing() || delayGain_.getCurrentValue() < 1.0f;
+
+    if (crossfading)
+        for (int ch = 0; ch < fxChannels; ++ch)
+            fxDry_.copyFrom (ch, 0, channels[ch], numSamples);
+
+    delayMix_.setWetMixProportion (juce::jlimit (0.0f, 1.0f, params_.delayMix01));
+    delayMix_.pushDrySamples (block);
+
+    delay_.setParameters (params_.delayTimeSeconds, params_.delayFeedback01, params_.delayDamp01, params_.delayPingPong);
+    delay_.process (channels[0], channels[1], numSamples);
+
+    delayMix_.mixWetSamples (block);
+
+    if (crossfading)
+        crossfadeWithDry (channels, fxChannels, numSamples, delayGain_);
+}
+
 void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) noexcept
 {
     if (params_.bypass)
@@ -646,6 +733,8 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
     // Una conversione sola per blocco, letta poi da tutte le voci: prima ogni voce rifaceva lo
     // stesso std::pow dentro il proprio setParams().
     params_.lfoRateHz = params::lfoRateHzFromRaw (params_.lfoRateRaw, params_.lfoSync, params_.bpm);
+    // Idem per il tempo del delay: con sync dipende dal bpm, che arriva con il blocco.
+    params_.delayTimeSeconds = params::delayTimeSecondsFromRaw (params_.delayTimeRaw, params_.delaySync, params_.bpm);
 
     globalLfo_.setShape ((dsp::Lfo::Shape) juce::jlimit (0, 4, params_.lfoShapeIndex));
     globalLfo_.setFadeSeconds (0.0f); // la dissolvenza e' per nota: non ha senso sull'LFO libero
