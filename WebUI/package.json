@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "check:motion": "node ../scripts/check-motion.mjs",
-    "build": "pnpm check:motion && tsc --noEmit && vite build",
+    "build": "pnpm check:motion && pnpm ui:build && tsc --noEmit && vite build",
     "preview": "vite preview",
     "ui:build": "pnpm --filter @xerum/ui build",
     "ui:test": "pnpm --filter @xerum/ui test",
