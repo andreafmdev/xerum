@@ -57,4 +57,30 @@ describe("Wheel", () => {
     fireEvent.keyDown(screen.getByRole("slider"), { key: "End" });
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("con springBack, ArrowUp da tastiera lascia il valore mosso", () => {
+    const onChange = vi.fn();
+    render(<Wheel value={0.5} defaultValue={0.5} onChange={onChange} label="Pitch" springBack bipolar />);
+    const s = screen.getByRole("slider");
+    fireEvent.keyDown(s, { key: "ArrowUp" });
+    expect(onChange).toHaveBeenLastCalledWith(expect.closeTo(0.51, 5));
+  });
+
+  it("con springBack, il trascinamento seguito da pointerUp torna al riposo", () => {
+    const onChange = vi.fn();
+    render(<Wheel value={0.8} defaultValue={0.5} onChange={onChange} label="Pitch" springBack bipolar />);
+    const s = screen.getByRole("slider");
+    fireEvent.pointerDown(s, { clientX: 0, clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(s, { clientX: 0, clientY: 100, pointerId: 1 });
+    expect(onChange).toHaveBeenLastCalledWith(0.5);
+  });
+
+  it("con springBack, pointerCancel torna anch'esso al riposo", () => {
+    const onChange = vi.fn();
+    render(<Wheel value={0.8} defaultValue={0.5} onChange={onChange} label="Pitch" springBack bipolar />);
+    const s = screen.getByRole("slider");
+    fireEvent.pointerDown(s, { clientX: 0, clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerCancel(s, { clientX: 0, clientY: 100, pointerId: 1 });
+    expect(onChange).toHaveBeenLastCalledWith(0.5);
+  });
 });

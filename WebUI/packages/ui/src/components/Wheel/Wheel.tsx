@@ -38,16 +38,17 @@ export function Wheel({
   disabled = false,
   className,
 }: WheelProps) {
+  // Niente onChangeEnd qui: quel callback dell'hook scatta anche dopo tastiera, rotella e doppio
+  // click, non solo al rilascio del puntatore. Con springBack a on, un tasto freccia emetterebbe
+  // il valore mosso e poi (nello stesso batch sincrono) il valore di riposo, e chi ascolta vedrebbe
+  // solo il secondo: la rotella diventerebbe immobile da tastiera. Il molleggio e' quindi composto
+  // a mano sui soli handler di puntatore, sotto.
   const { ref, handlers, dragging } = useDragValue({
     value,
     defaultValue,
     onChange,
     disabled,
     axis: "y",
-    // Il ritorno a riposo e' esattamente "la gesture e' finita": useDragValue chiama onChangeEnd
-    // su pointer-up, pointer-cancel, rotella, tastiera e doppio click, cioe' in tutti i casi in
-    // cui una rotella vera tornerebbe al centro.
-    onChangeEnd: springBack ? () => onChange(defaultValue) : undefined,
   });
 
   // Bipolare: il riempimento cresce dal centro verso l'alto o verso il basso. Unipolare: dal
@@ -81,6 +82,17 @@ export function Wheel({
           disabled && "cursor-not-allowed opacity-50",
         )}
         {...handlers}
+        // Il molleggio e' solo "al rilascio del puntatore": l'handler dell'hook aggiorna prima il
+        // valore trascinato, poi torniamo a defaultValue. Tastiera, rotella e doppio click restano
+        // sul percorso dell'hook, senza molla.
+        onPointerUp={(e) => {
+          handlers.onPointerUp(e);
+          if (springBack && !disabled) onChange(defaultValue);
+        }}
+        onPointerCancel={(e) => {
+          handlers.onPointerCancel(e);
+          if (springBack && !disabled) onChange(defaultValue);
+        }}
       >
         <div data-testid="wheel-fill" className="absolute inset-x-px rounded-[2px] bg-(--tone)" style={fill} />
         {/* Il segno del riposo: al centro per la bipolare, assente per l'altra. */}
