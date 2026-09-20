@@ -340,6 +340,27 @@ void XerumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     engine::storePeak (meters_.vel,  engine_->getVelocityLevel());
 }
 
+double XerumAudioProcessor::getTailLengthSeconds() const
+{
+    // Chorus + riverbero: la costante verificata da ReverbTests. Il delay si aggiunge dai
+    // parametri correnti, e solo da acceso: con sync il tempo peggiore e' la linea intera.
+    auto tail = engine::SynthEngine::kDeclaredTailSeconds;
+    const auto raw = [this] (params::ParamSlot s) { return paramSlots_[(size_t) s] != nullptr ? paramSlots_[(size_t) s]->load() : 0.0f; };
+
+    if (raw (params::ParamSlot::fx3On) >= 0.5f)
+    {
+        const auto time = raw (params::ParamSlot::dlSync) >= 0.5f
+                              ? dsp::StereoDelay::kMaxDelaySeconds
+                              : params::delayTimeSecondsFromRaw (raw (params::ParamSlot::dlTime), false, 120.0f);
+        constexpr auto* specFb = params::find ("dlFeedback");
+        static_assert (specFb != nullptr, "dlFeedback non e' in ParameterTable.h");
+        const auto fb = params::denormalise (*specFb, raw (params::ParamSlot::dlFeedback)) * 0.01f;
+        tail = juce::jmax (tail, (double) dsp::StereoDelay::tailSeconds (time, fb));
+    }
+
+    return tail;
+}
+
 juce::AudioProcessorEditor* XerumAudioProcessor::createEditor()
 {
    #if XERUM_HEADLESS_TESTS

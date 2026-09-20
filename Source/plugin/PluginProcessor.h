@@ -55,8 +55,12 @@ public:
      * l'errore dalla parte giusta. "il valore dichiarato all'host copre la coda peggiore" in
      * Tests/ReverbTests.cpp lega questa riga alla formula, cosi' cambiare kMaxDecay o
      * kMaxSizeRatio senza tornare qui rompe la suite invece che l'export dell'utente.
+     *
+     * Il delay si somma sopra, e solo da acceso: la sua coda dipende da tempo e feedback correnti
+     * (dsp::StereoDelay::tailSeconds, letti dall'APVTS sul message thread), con sync il caso
+     * peggiore e' la linea intera. Vedi il .cpp.
      */
-    double getTailLengthSeconds() const override { return engine::SynthEngine::kDeclaredTailSeconds; }
+    double getTailLengthSeconds() const override;
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }

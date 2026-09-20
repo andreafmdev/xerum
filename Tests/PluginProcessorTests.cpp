@@ -1,3 +1,4 @@
+#include "dsp/StereoDelay.h"
 #include "plugin/PluginProcessor.h"
 #include "state/StateTree.h"
 
@@ -115,6 +116,21 @@ struct PluginProcessorTests final : public juce::UnitTest
             expectWithinAbsoluteError (b.getAPVTS().getParameter ("cutoff")->getValue(), 0.25f, 1.0e-6f);
             expectWithinAbsoluteError (b.getAPVTS().getParameter ("res")->getValue(),
                                        b.getAPVTS().getParameter ("res")->getDefaultValue(), 1.0e-6f);
+        }
+
+        beginTest ("la coda dichiarata cresce con il delay acceso e torna alla costante da spento");
+        {
+            XerumAudioProcessor a;
+            expectWithinAbsoluteError (a.getTailLengthSeconds(), engine::SynthEngine::kDeclaredTailSeconds, 1.0e-9);
+
+            a.getAPVTS().getParameter ("fx3On")->setValueNotifyingHost (1.0f);
+            a.getAPVTS().getParameter ("dlTime")->setValueNotifyingHost (1.0f);      // 2 s
+            a.getAPVTS().getParameter ("dlFeedback")->setValueNotifyingHost (1.0f);  // 90 %
+            expect (a.getTailLengthSeconds() > engine::SynthEngine::kDeclaredTailSeconds, "il delay lungo deve allungare la coda");
+            expect (a.getTailLengthSeconds() <= dsp::StereoDelay::kMaxTailSeconds + 1.0e-9);
+
+            a.getAPVTS().getParameter ("fx3On")->setValueNotifyingHost (0.0f);
+            expectWithinAbsoluteError (a.getTailLengthSeconds(), engine::SynthEngine::kDeclaredTailSeconds, 1.0e-9);
         }
 
         beginTest ("uno stato senza MODS e ARP li riceve vuoti, non manca niente dopo");
