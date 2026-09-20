@@ -25,7 +25,7 @@ const TAB_LIST = [...TAB_ITEMS];
 export function TabArea({ tab, setTab, children }: { tab: TabId; setTab: (t: TabId) => void; children: ReactNode }) {
   const tone = TAB_ITEMS.find((t) => t.value === tab)!.tone;
   return (
-    <section className="sx-plate sx-tabs flex h-31 shrink-0 flex-col overflow-hidden rounded-plate shadow-panel" style={toneStyle(tone)}>
+    <section className="sx-plate sx-tabs flex h-36 shrink-0 flex-col overflow-hidden rounded-plate shadow-panel" style={toneStyle(tone)}>
       <div className="sx-tabbar flex h-7 shrink-0 items-stretch bg-surface-0 shadow-[inset_0_-1px_0_var(--color-edge-dark)]">
         <Tabs variant="bar" value={tab} onChange={(v) => setTab(v as TabId)} items={TAB_LIST} className="flex-1" />
         <div className="flex items-center gap-1.5 px-2.5 text-[9px] tracking-[0.14em] text-text-dim uppercase">
@@ -44,12 +44,19 @@ const content = "flex flex-1 items-center gap-4 px-3.5 pt-1.5 pb-2";
 const group = "flex items-end gap-2.5";
 const vsep = "w-px self-stretch bg-linear-to-b from-transparent via-edge-dark to-transparent";
 const screen = "shrink-0 overflow-hidden rounded-control bg-well shadow-well";
+/** Knob della tab FX: il readout resta su una riga. Uno che va a capo alza il knob di 16 px e
+    con lui tutto lo slot. */
+const FX_KNOB = "[&_[data-part=readout]]:whitespace-nowrap";
+/** I due knob il cui readout porta un'unita' che in 38 px non ci sta: "1.60 Hz" ne misura 46,
+    "376 ms" 40. Gli altri undici stanno sotto i 33 e la larghezza minima li allargherebbe per
+    niente, prendendosi 110 px di riga che non ci sono. */
+const FX_KNOB_WIDE = `${FX_KNOB} min-w-12`;
 
 /**
  * I due inviluppi, con gli stessi quattro knob.
  *
  * La scelta: un selettore ENV / ENV2 che ricabla i knob gia' presenti, invece di otto knob
- * affiancati. Il plate del tab e' alto 124 px e largo quanto lo chassis — i quattro knob, lo
+ * affiancati. Il plate del tab e' alto 144 px e largo quanto lo chassis — i quattro knob, lo
  * schermo dell'inviluppo e i due knob piccoli lo riempiono gia'; raddoppiarli avrebbe voluto
  * dire rimpicciolirli tutti, e il grafico dell'inviluppo (che e' il modo in cui si legge un
  * ADSR) sarebbe rimasto uno solo per due forme diverse. Cosi' invece lo schermo mostra sempre
@@ -117,8 +124,8 @@ export function EnvTab() {
       <div className={vsep} />
       <div className="flex flex-col gap-1.5">
         <Segmented label="Inviluppo da modificare" value={which} onChange={setWhich} options={ENV_OPTIONS} />
-        {/* Il testo resta su due righe: sotto il selettore ci sono ~56 px prima che il plate
-            (h-31, overflow-hidden) cominci a tagliare. */}
+        {/* Il testo resta su due righe: sotto il selettore ci sono ~76 px prima che il plate
+            (h-36, overflow-hidden) cominci a tagliare. */}
         <p className="max-w-38 text-[11px] leading-snug text-text-dim">
           Trascina <b className="text-env">ENV</b> o <b className="text-fx">ENV2</b> su un knob.
         </p>
@@ -220,34 +227,46 @@ export function FxTab() {
   const dlPingPong = useBoolParam("dlPingPong");
   const order = useChoiceParam("fxOrder");
   const dirty = useDirty();
-  // Tre colonne, una per effetto: toggle, nome, knob. Il plate e' alto 124 px: i knob `sm` in
-  // una riga ci stanno, tre righe no.
+  // Tre colonne, una per effetto: toggle e nome sopra, knob sotto. Il conto verticale, misurato
+  // e non stimato: knob `sm` alto 76 px (38 di disco in glass, 6 di gap, label e readout da 16),
+  // piu' 16 di intestazione, 4 di gap e 8 di padding dello slot = 104. Nel plate da 124 px ne
+  // restavano 92 e il readout finiva sotto l'overflow-hidden di .sx-tabs; per questo TabArea e'
+  // passata a 144, che ne lascia 112.
+  //
+  // `FX_KNOB` serve al solo knob Rate: "1.60 Hz" non sta in 38 px e andava a capo, portando quel
+  // knob a 92 px e lo slot Chorus a 120. La larghezza minima e il nowrap lo tengono su una riga;
+  // lo spazio c'e', perche' i knob stanno in un `justify-around` che aveva margine da spendere.
   const slot = (on: boolean, setOn: (v: boolean) => void, name: string, knobs: ReactNode, extras?: ReactNode) => (
-    <div className={`sx-fxslot flex flex-1 flex-col gap-1 rounded-control bg-surface-1 px-2.5 py-1 shadow-[inset_0_0_0_1px_var(--color-edge-dark),inset_0_1px_0_var(--color-edge-light)] ${on ? "" : "[&_.fx-nm]:opacity-45 [&_[data-slot=knob]]:opacity-45"}`}>
-      <div className="flex items-center gap-2">
+    <div
+      data-testid={`fx-slot-${name}`}
+      className={`sx-fxslot flex flex-1 flex-col gap-1 rounded-control bg-surface-1 px-2.5 py-1 shadow-[inset_0_0_0_1px_var(--color-edge-dark),inset_0_1px_0_var(--color-edge-light)] ${on ? "" : "[&_.fx-nm]:opacity-45 [&_[data-slot=knob]]:opacity-45"}`}
+    >
+      <div data-testid="fx-slot-head" className="flex items-center gap-2">
         <Toggle checked={on} onChange={dirty(setOn)} label={`${name} on`} className="[&_label]:sr-only" />
         <span className="fx-nm text-2xs font-semibold tracking-widest text-(--tone) uppercase">{name}</span>
         {extras}
       </div>
-      <div className={`${group} justify-around gap-2`}>{knobs}</div>
+      {/* gap-1.5 e non gap-2: i due knob allargati sopra si prendono 20 px e in glass, dove il
+          disco e' 38 invece di 32, la riga ne aveva solo 10 di margine. */}
+      <div data-testid="fx-slot-knobs" className={`${group} justify-around gap-1.5`}>{knobs}</div>
     </div>
   );
   return (
     <div className={`${content} gap-2`} style={toneStyle("fx")}>
       {slot(fx1On.checked, fx1On.set, "Chorus", (
         <>
-          <ParamKnob id="chRate" size="sm" />
-          <ParamKnob id="chDepth" size="sm" />
-          <ParamKnob id="chFeedback" size="sm" />
-          <ParamKnob id="chMix" size="sm" />
+          <ParamKnob id="chRate" size="sm" className={FX_KNOB_WIDE} />
+          <ParamKnob id="chDepth" size="sm" className={FX_KNOB} />
+          <ParamKnob id="chFeedback" size="sm" className={FX_KNOB} />
+          <ParamKnob id="chMix" size="sm" className={FX_KNOB} />
         </>
       ))}
       {slot(fx3On.checked, fx3On.set, "Delay", (
         <>
-          <ParamKnob id="dlTime" size="sm" format={(v) => (dlSync.checked ? DIVISIONS[Math.min(5, Math.floor(v * 6))]! : formatValue(PARAM_SPECS.dlTime, v))} />
-          <ParamKnob id="dlFeedback" size="sm" />
-          <ParamKnob id="dlDamp" size="sm" />
-          <ParamKnob id="dlMix" size="sm" />
+          <ParamKnob id="dlTime" size="sm" className={FX_KNOB_WIDE} format={(v) => (dlSync.checked ? DIVISIONS[Math.min(5, Math.floor(v * 6))]! : formatValue(PARAM_SPECS.dlTime, v))} />
+          <ParamKnob id="dlFeedback" size="sm" className={FX_KNOB} />
+          <ParamKnob id="dlDamp" size="sm" className={FX_KNOB} />
+          <ParamKnob id="dlMix" size="sm" className={FX_KNOB} />
         </>
       ), (
         <span className="ml-auto flex items-center gap-1.5">
@@ -257,11 +276,11 @@ export function FxTab() {
       ))}
       {slot(fx2On.checked, fx2On.set, "Reverb", (
         <>
-          <ParamKnob id="rvPredelay" size="sm" />
-          <ParamKnob id="rvSize" size="sm" />
-          <ParamKnob id="rvDecay" size="sm" />
-          <ParamKnob id="rvDamp" size="sm" />
-          <ParamKnob id="rvMix" size="sm" />
+          <ParamKnob id="rvPredelay" size="sm" className={FX_KNOB} />
+          <ParamKnob id="rvSize" size="sm" className={FX_KNOB} />
+          <ParamKnob id="rvDecay" size="sm" className={FX_KNOB} />
+          <ParamKnob id="rvDamp" size="sm" className={FX_KNOB} />
+          <ParamKnob id="rvMix" size="sm" className={FX_KNOB} />
         </>
       ))}
       <div className="flex w-24 shrink-0 flex-col gap-1 self-start">

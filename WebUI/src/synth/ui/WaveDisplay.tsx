@@ -180,7 +180,7 @@ export function WaveDisplay({ scale }: Props) {
 
   return (
     <div
-      className="sx-display relative h-32.5 shrink-0 overflow-hidden rounded-plate bg-well shadow-well after:pointer-events-none after:absolute after:inset-0 after:bg-linear-to-br after:from-foreground/5 after:to-transparent"
+      className="sx-display relative h-27.5 shrink-0 overflow-hidden rounded-plate bg-well shadow-well after:pointer-events-none after:absolute after:inset-0 after:bg-linear-to-br after:from-foreground/5 after:to-transparent"
       style={toneStyle("osc")}
     >
       <canvas ref={ref} role="img" aria-label="Wavetable display" className="absolute inset-0 size-full" />

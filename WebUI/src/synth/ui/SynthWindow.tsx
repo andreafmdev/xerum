@@ -30,10 +30,15 @@ export type SynthWindowProps = {
 const W = 900;
 // 680 = i 670 px che i figli dello chassis occupano davvero, piu' 10 px di respiro in fondo.
 //
-// I figli sono tutti `shrink-0` e si sommano: padding verticale 20 + Header 40 + WaveDisplay 130
-// + i tre pannelli 224 + TabArea 124 + BottomStrip 108 + quattro gap da 6 = 670. Gli stessi 10 px
+// I figli sono tutti `shrink-0` e si sommano: padding verticale 20 + Header 40 + WaveDisplay 110
+// + i tre pannelli 224 + TabArea 144 + BottomStrip 108 + quattro gap da 6 = 670. Gli stessi 10 px
 // di respiro c'erano prima della striscia bassa, quando la somma faceva 590 dentro una scatola
 // da 600.
+//
+// I venti px passati dal WaveDisplay alla TabArea sono della tab FX, che e' la sola a impilare
+// due righe in uno slot: un knob `sm` alto 76 px sotto un'intestazione da 16 non stava nei 92
+// che il plate da 124 lasciava, e il readout finiva sotto l'overflow-hidden. Misurato, non
+// stimato. Il WaveDisplay li cede senza perdere niente: e' una forma d'onda, non una griglia.
 //
 // Il primo numero scelto era 708, giustificato come "600 di pannello invariato piu' 108 di
 // striscia": premessa falsa, perche' quei 600 contenevano gia' il Footer da 28 px che
