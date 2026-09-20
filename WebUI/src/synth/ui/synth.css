@@ -53,12 +53,22 @@
   /* Effetti opzionali: attivi solo in `glow`. */
   --glow: none;
   --tglow: none;
+}
 
-  /* Valori di riposo dell'ambient audio (Task 13): li scrive useMeterConductor a 30 Hz, ma
-     senza motore collegato (o prima del primo frame) la UI deve restare corretta lo stesso. */
+/* Round finale, finding 1: --m-out non vive più qui. Una custom property scritta sullo chassis
+   è scritta sulla radice di tutto il sottoalbero (Header, WaveDisplay, i tre pannelli, TabArea,
+   BottomStrip...): il motore deve rivalutare lo stile di ogni discendente che eredita custom
+   property a ogni frame da 30 Hz, anche se un solo pseudo-elemento la legge davvero. `.sx-aurora`
+   qui sotto è l'host dedicato — un elemento reale, non lo chassis — su cui useMeterConductor
+   scrive adesso: l'invalidazione resta quella di un nodo vuoto e dei suoi due pseudo-elementi,
+   mai quella dei ~40 knob e degli altri controlli sotto lo chassis. */
+.sx-aurora {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Riposo: senza motore collegato (o prima del primo frame) l'aurora deve restare corretta. */
   --m-out: 0;
-  --m-env: 0;
-  --m-lfo: 0;
 }
 
 /* soft = token di libreria così come sono. */
@@ -241,14 +251,18 @@
 }
 
 /* L'aurora: due strati di chiazze sfocate che ruotano lentamente, sotto tutto il resto
-   (z-index -1 dentro il contesto isolato dello chassis).
+   (z-index -1 dentro il contesto isolato dello chassis). I due pseudo-elementi vivono su
+   `.sx-aurora` (il div dedicato dichiarato sopra), non più su `.sx-chassis` stesso: un
+   pseudo-elemento eredita solo dal proprio elemento di origine, quindi la custom property che
+   consumano deve stare lì — ma "lì" ora è un nodo piccolo e vuoto, non la radice dell'intera
+   finestra.
    26s/37s sono scritti a mano di proposito: è un loop ambientale di sfondo misurato in
    decine di secondi, fuori dal vocabolario interattivo (press/state/layer/scene arrivano
    al massimo a 320ms). Non è un token, quindi non passa da una custom property come
    --dur-*: check-motion.mjs esenta solo le righe tra questi due marker. */
 /* ambient-loop-block:start */
-.sx-chassis[data-variant="glass"]::before,
-.sx-chassis[data-variant="glass"]::after {
+.sx-chassis[data-variant="glass"] .sx-aurora::before,
+.sx-chassis[data-variant="glass"] .sx-aurora::after {
   content: "";
   position: absolute;
   inset: -30%;
@@ -262,10 +276,11 @@
     radial-gradient(circle at 30% 80%, #e26fd680, transparent 30%);
   animation: sx-aurora 26s ease-in-out infinite alternate;
   /* Solo opacity, mai un transform sul chassis (900×680): --m-out arriva da useMeterConductor,
-     l'ambient respira con l'uscita audio invece di avere una luminosità fissa. */
+     scritta sull'host dell'aurora (vedi .sx-aurora sopra), e l'ambient respira con l'uscita
+     audio invece di avere una luminosità fissa. */
   opacity: calc(0.35 + 0.4 * var(--m-out));
 }
-.sx-chassis[data-variant="glass"]::after {
+.sx-chassis[data-variant="glass"] .sx-aurora::after {
   animation-duration: 37s;
   animation-direction: alternate-reverse;
   transform: rotate(180deg);
@@ -278,8 +293,8 @@
   100% { transform: translate(-3%, 7%) rotate(-15deg) scale(1.05); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sx-chassis[data-variant="glass"]::before,
-  .sx-chassis[data-variant="glass"]::after {
+  .sx-chassis[data-variant="glass"] .sx-aurora::before,
+  .sx-chassis[data-variant="glass"] .sx-aurora::after {
     animation: none;
   }
 }

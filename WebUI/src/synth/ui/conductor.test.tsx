@@ -15,21 +15,16 @@ function Probe({ onRender }: { onRender?: () => void }) {
 }
 
 describe("writeMeterVars", () => {
-  it("writes the three ambient variables as unitless numbers", () => {
+  it("writes --m-out as a unitless number", () => {
     const el = document.createElement("div");
-    writeMeterVars(el, { ...ZERO_METERS, out: 0.7, env: 0.25, lfo: -0.5 });
+    writeMeterVars(el, { ...ZERO_METERS, out: 0.7 });
     expect(el.style.getPropertyValue("--m-out")).toBe("0.7");
-    expect(el.style.getPropertyValue("--m-env")).toBe("0.25");
-    // L'LFO è bipolare: l'ambient ne usa il modulo, perché serve una luminosità.
-    expect(el.style.getPropertyValue("--m-lfo")).toBe("0.5");
   });
 
   it("clamps into 0..1, so a rogue frame cannot blow the brightness out", () => {
     const el = document.createElement("div");
-    writeMeterVars(el, { ...ZERO_METERS, out: 4, env: Number.NaN, lfo: -9 });
+    writeMeterVars(el, { ...ZERO_METERS, out: 4 });
     expect(el.style.getPropertyValue("--m-out")).toBe("1");
-    expect(el.style.getPropertyValue("--m-env")).toBe("0");
-    expect(el.style.getPropertyValue("--m-lfo")).toBe("1");
   });
 
   // Round 2, finding 2: Infinity/-Infinity sono il caso che un calcolo rotto nel bridge (una
@@ -39,10 +34,20 @@ describe("writeMeterVars", () => {
   // questo comportamento così com'è, non quello che sembrerebbe "più giusto" a occhio.
   it("tratta Infinity e -Infinity come un valore non finito, non come un valore da tagliare a 1", () => {
     const el = document.createElement("div");
-    writeMeterVars(el, { ...ZERO_METERS, out: Infinity, env: -Infinity, lfo: Infinity });
+    writeMeterVars(el, { ...ZERO_METERS, out: Infinity });
     expect(el.style.getPropertyValue("--m-out")).toBe("0");
-    expect(el.style.getPropertyValue("--m-env")).toBe("0");
-    expect(el.style.getPropertyValue("--m-lfo")).toBe("0");
+  });
+
+  // Round finale, finding 1: --m-env e --m-lfo non hanno mai avuto un consumatore CSS (il glow
+  // dei section header e il respiro del LED dell'LFO non sono mai stati costruiti) e sono stati
+  // rimossi da writeMeterVars. Questo test blocca il ritorno silenzioso di scritture morte: se
+  // qualcuno le riaggiunge senza costruire prima il consumatore, il conteggio delle setProperty
+  // nel test di coalescenza qui sotto lo tradisce.
+  it("scrive solo --m-out, non --m-env/--m-lfo che non hanno consumatori", () => {
+    const el = document.createElement("div");
+    writeMeterVars(el, { ...ZERO_METERS, out: 0.5, env: 0.9, lfo: 0.9 });
+    expect(el.style.getPropertyValue("--m-env")).toBe("");
+    expect(el.style.getPropertyValue("--m-lfo")).toBe("");
   });
 });
 
@@ -70,7 +75,7 @@ describe("useMeterConductor", () => {
     // Trenta frame, uno per componente selettore che ri-renderizzerebbe a 30 Hz se il
     // conductor passasse da React invece che dal DOM direttamente.
     for (let i = 0; i < 30; i++) {
-      backend.emitMeters({ ...ZERO_METERS, out: i / 29, env: 0.4, lfo: 0.6 });
+      backend.emitMeters({ ...ZERO_METERS, out: i / 29 });
     }
 
     // Il conductor coalizza i frame in un solo rAF: aspettarne uno vero (jsdom lo implementa
@@ -112,9 +117,10 @@ describe("useMeterConductor", () => {
 
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-    // Una sola esecuzione di flush() scrive esattamente tre custom property (--m-out/--m-env/
-    // --m-lfo): 3 chiamate a setProperty in tutto, non 3×30.
-    expect(setPropertySpy).toHaveBeenCalledTimes(3);
+    // Una sola esecuzione di flush() scrive l'unica custom property rimasta (--m-out, dopo la
+    // rimozione di --m-env/--m-lfo senza consumatori — finding 1): 1 chiamata a setProperty in
+    // tutto, non 1×30.
+    expect(setPropertySpy).toHaveBeenCalledTimes(1);
   });
 
   // Round 2, finding 3: il guard `if (el)` dentro flush() e la cancellazione nel cleanup

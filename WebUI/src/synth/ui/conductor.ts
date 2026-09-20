@@ -11,11 +11,14 @@ import type { MeterFrame } from "../../juce/backend";
     passare a opacity/brightness, che lo mostrerebbero come un buco o un lampo. */
 const unit = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(0, Math.abs(v))) : 0);
 
-/** Le tre variabili da cui dipende l'ambient. Pura, così è testabile senza rAF. */
+/** L'unica variabile da cui dipende l'ambient oggi. Pura, così è testabile senza rAF.
+    --m-env e --m-lfo (il glow dei section header e il respiro del LED dell'LFO, sezione 5
+    dello spec) non sono mai stati costruiti: scriverli comunque a 30 Hz era un costo per due
+    letture che non esistono in nessuna variante del chassis (verificato con un grep dell'intero
+    repo). Se quei due consumatori nasceranno, la scrittura torna qui accanto a --m-out, non
+    prima. */
 export function writeMeterVars(el: HTMLElement, f: MeterFrame) {
   el.style.setProperty("--m-out", String(unit(f.out)));
-  el.style.setProperty("--m-env", String(unit(f.env)));
-  el.style.setProperty("--m-lfo", String(unit(f.lfo)));
 }
 
 /** Un solo rAF per tutta la finestra, coalescente: più frame nello stesso vsync ne scrivono uno. */
