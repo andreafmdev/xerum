@@ -902,13 +902,28 @@ struct EngineRobustnessTests final : juce::UnitTest
             expect (! bitOf (synth, 60), "il note-off deve spegnere il bit");
             expect (bitOf (synth, 100), "e non deve toccare le altre note");
 
+            // Il 60 si ripreme prima del panico: senza, al momento dell'all-notes-off l'unica
+            // nota accesa starebbe nella meta' alta e le asserzioni sulla meta' bassa non
+            // potrebbero fallire comunque. Cosi' entrambe le parole hanno un bit da spegnere.
+            juce::MidiBuffer again;
+            again.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            buffer.clear();
+            synth.process (buffer, again);
+            expect (bitOf (synth, 60), "il 60 ripremuto deve tornare acceso");
+
             juce::MidiBuffer panic;
             panic.addEvent (juce::MidiMessage::allNotesOff (1), 0);
             buffer.clear();
             synth.process (buffer, panic);
 
-            expectEquals ((int) synth.getActiveNotesLo(), 0, "all notes off pulisce la meta' bassa");
-            expectEquals ((int) synth.getActiveNotesHi(), 0, "all notes off pulisce la meta' alta");
+            // Non `expectEquals ((int) ...)`: il cast a int di un juce::uint64 tiene solo i 32 bit
+            // bassi, quindi il bit 60 di Lo e il bit 36 di Hi — le due note usate qui — sparivano
+            // nel troncamento e le due asserzioni passavano anche col mask mai pulito. Si guarda
+            // quindi bit per bit con lo stesso bitOf del resto del test, e poi la parola intera.
+            expect (! bitOf (synth, 60), "all notes off deve spegnere il bit della meta' bassa");
+            expect (! bitOf (synth, 100), "all notes off deve spegnere il bit della meta' alta");
+            expect (synth.getActiveNotesLo() == 0, "all notes off pulisce la meta' bassa per intero");
+            expect (synth.getActiveNotesHi() == 0, "all notes off pulisce la meta' alta per intero");
         }
     }
 };
