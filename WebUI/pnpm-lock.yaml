@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@juce-framework/webview':
+        specifier: link:../external/JUCE/modules/juce_gui_extra/native/typescript/webview-interop
+        version: link:../external/JUCE/modules/juce_gui_extra/native/typescript/webview-interop
       '@xerum/ui':
         specifier: workspace:*
         version: link:packages/ui

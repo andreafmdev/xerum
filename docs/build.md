@@ -75,6 +75,10 @@ It prints one line per test and ends with `ALL TESTS PASSED` (or `TEST FAILURES`
 
 Requires pnpm 11 (`corepack enable`).
 
+Also requires the JUCE submodule to be initialised: `WebUI` links the WebView interop
+package straight out of `external/JUCE`, so `pnpm install` fails without it. The C++ build
+already required the submodule; the web build now does too.
+
     cd WebUI
     pnpm install
     pnpm ui:build        # @xerum/ui -> packages/ui/dist

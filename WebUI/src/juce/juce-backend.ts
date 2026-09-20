@@ -1,4 +1,4 @@
-// Implementazione di Backend sopra i relay JUCE 8: ogni parametro del plugin ha
+// Implementazione di Backend sopra i relay JUCE 9: ogni parametro del plugin ha
 // un relay registrato lato C++ con lo stesso id (slider per float/int, toggle
 // per bool, combo per choice). Qui li avvolgiamo in ParamHandle normalizzati
 // 0..1 e traduciamo getState/setMods/setArpSteps in native function call.
@@ -6,22 +6,31 @@
 import { PARAM_SPECS, type ParamId } from "../synth/params.generated";
 import { fromIndex, toIndex } from "../synth/mapping";
 import { defaultNormalised, type Backend, type BridgeState, type MeterFrame, type ModAssignment, type ParamHandle } from "./backend";
-import type * as Juce from "./vendor/juce-frontend/index";
+import type { getSliderState, getToggleState, getComboBoxState } from "@juce-framework/webview";
 
-declare global {
-  interface Window {
-    __JUCE__?: {
-      backend: { addEventListener(id: string, fn: (p: any) => void): number; removeEventListener(id: number): void; emitEvent(id: string, p: unknown): void };
-      initialisationData: { __juce__sliders: string[]; __juce__toggles: string[]; __juce__comboBoxes: string[]; __juce__functions: string[] };
-    };
-  }
-}
+/**
+ * Il pacchetto dichiara SliderState, ToggleState, ComboBoxState e ListenerList come classi
+ * ma **non le esporta**: esporta solo le funzioni che le restituiscono. I tipi si derivano
+ * quindi da quelle, invece di riscriverli a mano come faceva il nostro vecchio index.d.ts —
+ * cosi' restano legati al pacchetto e cambiano insieme a lui.
+ */
+type SliderState = ReturnType<typeof getSliderState>;
+type ToggleState = ReturnType<typeof getToggleState>;
+type ComboBoxState = ReturnType<typeof getComboBoxState>;
+type ListenerList = SliderState["valueChangedEvent"];
+
+// Niente `declare global` locale per Window.__JUCE__: importare il pacchetto (anche solo i
+// tipi, sopra) porta con se' index.d.ts, che a sua volta importa check_native_interop.d.ts e
+// li' il pacchetto stesso amplia globalThis.Window con __JUCE__: JuceGlobal. Una nostra
+// dichiarazione locale, anche se compatibile a runtime, andrebbe in conflitto di merge con
+// quella del pacchetto (stesso identificativo, modificatori o forma diversi) e tsc la rifiuta.
+// Usiamo quindi il tipo che il pacchetto stesso mette in globale.
 
 /** True solo dentro la WebView del plugin: fuori (browser, test) manca window.__JUCE__. */
 export const hasJuce = () => typeof window !== "undefined" && !!window.__JUCE__?.backend;
 
 type Subs = Set<() => void>;
-const subscribeTo = (list: Juce.ListenerList, subs: Subs) => { list.addListener(() => { for (const s of subs) s(); }); };
+const subscribeTo = (list: ListenerList, subs: Subs) => { list.addListener(() => { for (const s of subs) s(); }); };
 
 // Durante una gesture l'handle risponde con il valore impostato localmente e
 // ignora gli echo dell'host, cosi' il knob non "salta" mentre lo si trascina.
@@ -30,7 +39,7 @@ class SliderHandle implements ParamHandle {
   private subs: Subs = new Set();
   private dragging = false;
   private local = 0;
-  constructor(private st: Juce.SliderState) { subscribeTo(st.valueChangedEvent, this.subs); }
+  constructor(private st: SliderState) { subscribeTo(st.valueChangedEvent, this.subs); }
   get() { return this.dragging ? this.local : this.st.getNormalisedValue(); }
   // setNormalisedValue non fa scattare i listener del relay: notifichiamo noi,
   // altrimenti il knob si ridisegnerebbe solo all'eco del C++ (un giro di ritardo).
@@ -44,7 +53,7 @@ class SliderHandle implements ParamHandle {
 class ToggleHandle implements ParamHandle {
   readonly orphan = false;
   private subs: Subs = new Set();
-  constructor(private st: Juce.ToggleState) { subscribeTo(st.valueChangedEvent, this.subs); }
+  constructor(private st: ToggleState) { subscribeTo(st.valueChangedEvent, this.subs); }
   get() { return this.st.getValue() ? 1 : 0; }
   set(v: number) { this.st.setValue(v >= 0.5); for (const s of this.subs) s(); }
   begin() {} end() {}
@@ -54,7 +63,7 @@ class ToggleHandle implements ParamHandle {
 class ComboHandle implements ParamHandle {
   readonly orphan = false;
   private subs: Subs = new Set();
-  constructor(private st: Juce.ComboBoxState, private id: ParamId) { subscribeTo(st.valueChangedEvent, this.subs); }
+  constructor(private st: ComboBoxState, private id: ParamId) { subscribeTo(st.valueChangedEvent, this.subs); }
   get() { return fromIndex(PARAM_SPECS[this.id], this.st.getChoiceIndex()); }
   set(v: number) { this.st.setChoiceIndex(toIndex(PARAM_SPECS[this.id], v)); for (const s of this.subs) s(); }
   begin() {} end() {}
@@ -71,13 +80,13 @@ class OrphanHandle implements ParamHandle {
 }
 
 export async function createJuceBackend(): Promise<Backend> {
-  // Import dinamico: il modulo vendor legge window.__JUCE__ al caricamento.
-  const juce = await import("./vendor/juce-frontend/index.js");
+  // Import dinamico, e resta tale: il modulo legge window.__JUCE__ al caricamento.
+  const juce = await import("@juce-framework/webview");
   const init = window.__JUCE__!.initialisationData;
   const handles = new Map<ParamId, ParamHandle>();
   const call = (name: string) => juce.getNativeFunction(name);
 
-  // removeEventListener del bundle vendor upstream è un no-op: registrando un
+  // removeEventListener del bundle upstream è un no-op: registrando un
   // listener per ogni subscribe i callback si accumulerebbero ad ogni remount.
   // Ne registriamo uno solo per evento e distribuiamo a un Set locale, così la
   // funzione di unsubscribe restituita rimuove davvero il callback.
