@@ -26,6 +26,17 @@
       }
     },
     {
+      "name": "ninja-debug",
+      "displayName": "Debug (Ninja, per CI e build veloci)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/ninja-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "XERUM_COPY_PLUGIN": "OFF",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
       "name": "default",
       "displayName": "Default (alias of macos-debug)",
       "inherits": "macos-debug"
@@ -43,6 +54,10 @@
       "configuration": "Release"
     },
     {
+      "name": "ninja-debug",
+      "configurePreset": "ninja-debug"
+    },
+    {
       "name": "default",
       "configurePreset": "default",
       "configuration": "Debug"
@@ -53,6 +68,13 @@
       "name": "macos-debug",
       "configurePreset": "macos-debug",
       "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ninja-debug",
+      "configurePreset": "ninja-debug",
       "output": {
         "outputOnFailure": true
       }

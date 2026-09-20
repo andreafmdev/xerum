@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master, dev]
+  pull_request:
+
+jobs:
+  webui:
+    name: Web UI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: WebUI
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # WebUI linka webview-interop da dentro external/JUCE: senza il submodule pnpm install fallisce.
+          submodules: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: WebUI/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm ui:build
+      - run: pnpm ui:test
+      - run: pnpm test
+      - run: pnpm test:scripts
+      - run: pnpm build
+
+  cpp:
+    name: C++ (XerumTests)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - run: brew install ninja
+      - run: cmake --preset ninja-debug
+      - run: cmake --build --preset ninja-debug --target XerumTests
+      - run: ctest --preset ninja-debug

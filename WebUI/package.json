@@ -13,6 +13,7 @@
     "ui:storybook": "pnpm --filter @xerum/ui storybook",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:scripts": "node --test ../scripts/wavetable-dsp.test.mjs",
     "typecheck": "tsc --noEmit",
     "gen:params": "node ../scripts/gen-params.mjs"
   },

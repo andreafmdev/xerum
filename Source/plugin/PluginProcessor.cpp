@@ -1,5 +1,7 @@
 #include "plugin/PluginProcessor.h"
-#include "plugin/PluginEditor.h"
+#if ! XERUM_HEADLESS_TESTS
+ #include "plugin/PluginEditor.h"
+#endif
 #include "engine/ParamCollect.h"
 #include "state/StateToEngine.h"
 #include "state/StateTree.h"
@@ -340,7 +342,12 @@ void XerumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
 juce::AudioProcessorEditor* XerumAudioProcessor::createEditor()
 {
+   #if XERUM_HEADLESS_TESTS
+    // XerumTests compila il processore senza juce_gui_extra: nessun editor, e nessuno lo chiede.
+    return nullptr;
+   #else
     return new XerumAudioProcessorEditor (*this);
+   #endif
 }
 
 void XerumAudioProcessor::getStateInformation (juce::MemoryBlock& destData)

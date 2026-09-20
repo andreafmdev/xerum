@@ -3,8 +3,9 @@
 // i frame e normalizzazione globale. Niente rete, legge e riscrive solo
 // Resources/wavetables.
 //
-// Uso: node scripts/realign-wavetables.mjs [--dry-run] [--keep-frames] [--rms-exponent=N]
+// Uso: node scripts/realign-wavetables.mjs [--dry-run|--force] [--keep-frames] [--rms-exponent=N]
 //   --dry-run          stampa le metriche senza riscrivere niente
+//   --force            riscrive davvero: senza, lo script si ferma (vedi sotto)
 //   --keep-frames      si ferma ai passi sulla fase, senza reinterpolare i frame
 //   --rms-exponent=N   quanto pareggiare l'RMS fra i frame (default 0.7, 0 = niente)
 //
@@ -181,7 +182,14 @@ function main() {
     // distinti, anche dove il morph resta a scalini.
     keepFrames: process.argv.includes("--keep-frames"),
     rmsExponent: readExponent(),
+    force: process.argv.includes("--force"),
   };
+  // Non idempotente (vedi l'intestazione): un secondo passaggio sulle tavole gia' allineate le
+  // comprimerebbe due volte. Riscrivere e' un atto esplicito, non il default.
+  if (!options.dryRun && !options.force) {
+    console.error("realign-wavetables: le tavole in Resources/wavetables sono gia' passate da qui. Usa --dry-run per le metriche, o --force solo su .xwt appena generati da fetch-wavetables.mjs.");
+    process.exit(2);
+  }
   const outDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "Resources/wavetables");
   const results = TABLES.map((id) => processTable(id, resolve(outDir, `${id}.xwt`), options));
 

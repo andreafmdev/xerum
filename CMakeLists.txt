@@ -151,6 +151,10 @@ target_sources(XerumTests
         Tests/PresetGainStagingTests.cpp
         Tests/StateTreeTests.cpp
         Tests/NoteMaskTests.cpp
+        Tests/PluginProcessorTests.cpp
+        # Il processore, senza editor (XERUM_HEADLESS_TESTS): il round-trip dello stato salvato
+        # passa da qui, e prima non aveva nessun test.
+        Source/plugin/PluginProcessor.cpp
         Tests/PresetValueTests.cpp
         Tests/ParameterSeamTests.cpp
         Tests/ModMatrixTests.cpp
@@ -167,7 +171,9 @@ target_compile_definitions(XerumTests
         JUCE_UNIT_TESTS=1
         JUCE_STANDALONE_APPLICATION=1
         JUCE_WEB_BROWSER=0
-        JUCE_USE_CURL=0)
+        JUCE_USE_CURL=0
+        XERUM_HEADLESS_TESTS=1
+        "JucePlugin_Name=\"Xerum\"")
 
 xerum_set_warnings(XerumTests)
 

@@ -56,7 +56,7 @@ Vite serves `http://localhost:5173`. Debug builds of the editor navigate there a
 
 ## Unit tests
 
-`XerumTests` (`juce_add_console_app`, target defined in `CMakeLists.txt`) runs `juce::UnitTestRunner` over `Source/dsp`, `Source/engine` and `Source/parameters` (the suites in `Tests/`). It compiles the same `XerumCore` source list as the plugin, links `juce_dsp`/`juce_audio_basics`/`juce_audio_processors`/`juce_data_structures` — no `juce_gui_extra`, no WebView — and does not compile `Source/bridge/*` or `Source/plugin/*`, so `StateChannel::applyPreset` and the processor's state round-trip have no direct C++ test.
+`XerumTests` (`juce_add_console_app`, target defined in `CMakeLists.txt`) runs `juce::UnitTestRunner` over `Source/dsp`, `Source/engine` and `Source/parameters` (the suites in `Tests/`). It compiles the same `XerumCore` source list as the plugin, links `juce_dsp`/`juce_audio_basics`/`juce_audio_processors`/`juce_data_structures` — no `juce_gui_extra`, no WebView — and compiles `Source/plugin/PluginProcessor.cpp` without its editor (`XERUM_HEADLESS_TESTS`), so the saved-state round-trip is tested through the real processor (`Tests/PluginProcessorTests.cpp`). `Source/bridge/*` is still not compiled: `StateChannel::applyPreset` has no direct C++ test.
 
 Build and run through ctest:
 
@@ -66,6 +66,8 @@ ctest --preset macos-debug
 ```
 
 or run the binary directly (`build/macos-debug/XerumTests_artefacts/Debug/XerumTests`): it prints one line per test and ends with `ALL TESTS PASSED` (or `TEST FAILURES`, with a non-zero exit code). Must pass before any commit that touches `Source/dsp`, `Source/engine` or `Source/parameters`.
+
+CI (`.github/workflows/ci.yml`) runs the same suite with the `ninja-debug` preset (`brew install ninja`; `XERUM_COPY_PLUGIN=OFF`), plus the Web UI tests and build.
 
 ## Plugin identity
 
