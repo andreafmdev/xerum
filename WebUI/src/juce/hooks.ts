@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { PARAM_SPECS, type ParamId } from "../synth/params.generated";
 import { formatValue, fromIndex, fromInt, paramLabel, toIndex, toInt } from "../synth/mapping";
-import { ZERO_METERS, type BridgeState, type MeterFrame, type ModAssignment, type ModSource } from "./backend";
+import type { BridgeState, MeterFrame, ModAssignment, ModSource } from "./backend";
+import { meterStore } from "./meters";
 import { useBackend } from "./provider";
 
 function useHandle(id: ParamId) {
@@ -44,13 +45,13 @@ export function useIntParam(id: ParamId) {
   return { value: toInt(spec, value), set: (n: number) => h.set(fromInt(spec, n)), min: spec.map?.min ?? 0, max: spec.map?.max ?? 0 };
 }
 
-export const DEFAULT_DEPTH = 0.3;
+const DEFAULT_DEPTH = 0.3;
 /** Aggiunge un'assegnazione; identità invariata se la coppia src/target esiste già. */
 export function addModPure(mods: ModAssignment[], src: ModSource, target: ParamId): ModAssignment[] {
   return mods.some((m) => m.src === src && m.target === target) ? mods : [...mods, { src, target, depth: DEFAULT_DEPTH }];
 }
 
-export const ARP_STEPS = 16;
+const ARP_STEPS = 16;
 const EMPTY: BridgeState = { version: 1, mods: [], arpSteps: new Array(ARP_STEPS).fill(0) };
 
 const isMod = (m: unknown): m is ModAssignment => {
@@ -122,53 +123,17 @@ export function useBridgeState() {
   };
 }
 
-/** Il numero, o zero: scarta undefined, null e NaN in arrivo dal ponte. */
-const finite = (v: number) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+/**
+ * Un valore scelto dal frame dei meter. Il componente ri-renderizza solo quando il risultato
+ * del selettore cambia (confronto Object.is), quindi il selettore deve tornare un primitivo o
+ * il frame stesso: un oggetto nuovo a ogni chiamata farebbe ri-renderizzare sempre.
+ */
+export function useMeterValue<T>(select: (f: MeterFrame) => T): T {
+  const store = meterStore(useBackend());
+  return useSyncExternalStore(store.subscribe, () => select(store.get()));
+}
 
+/** Il frame intero: ri-renderizza a ogni frame. Per un solo campo usare useMeterValue. */
 export function useMeters(): MeterFrame {
-  const backend = useBackend();
-  const [frame, setFrame] = useState<MeterFrame>(ZERO_METERS);
-  // Istante dell'ultimo frame applicato: il decay dipende dal tempo trascorso (in
-  // "tick" da 1000/30 ms), non dal numero di eventi ricevuti. Così due copie dello
-  // stesso frame consegnate nello stesso istante (un listener doppione dopo un
-  // remount) applicano lo stesso decay (≈1, tempo trascorso ≈0) invece di
-  // comprimere 0.85 due volte.
-  const at = useRef<number | null>(null);
-  useEffect(
-    () =>
-      backend.onMeters((m) => {
-        const now = Date.now();
-        const elapsedTicks = at.current === null ? Infinity : (now - at.current) / (1000 / 30);
-        const decay = Math.min(1, Math.pow(0.85, elapsedTicks));
-        at.current = now;
-        // Il peak hold con decay è solo per i due meter audio, dove serve a rendere leggibile
-        // un picco che dura un frame. Le cinque sorgenti passano intatte: env/env2/vel sono già
-        // il picco del frame (lo prende il motore, vedi Source/engine/MeterFrame.h), e tenerle
-        // appese per altri 100 ms farebbe scendere l'anello molto dopo l'inviluppo che mostra —
-        // di nuovo un anello che non dice la verità, solo con un ritardo invece che con una
-        // costante.
-        //
-        // finite() su ogni campo per la stessa ragione di OrphanHandle in juce-backend.ts: un
-        // binario più vecchio della WebUI manda un frame senza env/env2/vel/mw, e quegli
-        // undefined finirebbero dentro liveValue() — un NaN, cioè un anello che sparisce invece
-        // di un anello fermo.
-        setFrame((p) => ({
-          in: Math.max(finite(m.in), p.in * decay),
-          out: Math.max(finite(m.out), p.out * decay),
-          lfo: finite(m.lfo),
-          env: finite(m.env),
-          env2: finite(m.env2),
-          vel: finite(m.vel),
-          mw: finite(m.mw),
-          arpStep: finite(m.arpStep),
-          // Il mask, come lfo/mw, e' uno stato istantaneo: passa intatto, nessun decay.
-          n0: finite(m.n0),
-          n1: finite(m.n1),
-          n2: finite(m.n2),
-          n3: finite(m.n3),
-        }));
-      }),
-    [backend],
-  );
-  return frame;
+  return useMeterValue((f) => f);
 }

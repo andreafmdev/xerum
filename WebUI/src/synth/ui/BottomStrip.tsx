@@ -81,7 +81,7 @@ export function BottomStrip() {
   const onNoteOff = useCallback((note: number) => { void backend.noteOff(note); }, [backend]);
   const onAllNotesOff = useCallback(() => { void backend.allNotesOff(); }, [backend]);
 
-  // Non passa da useMeterFrame: leggere quel contesto qui rirenderizzerebbe la striscia trenta
+  // Non passa da useMeterValue: leggere il frame qui rirenderizzerebbe la striscia trenta
   // volte al secondo, che e' esattamente cio' che Keybed evita mutando data-active via ref.
   const subscribeNotes = useCallback(
     (cb: (mask: KeybedNoteMask) => void) => backend.onMeters((m) => cb(noteMaskOf(m))),
@@ -92,6 +92,10 @@ export function BottomStrip() {
   // c'e' niente da ridisegnare — i tasti si accendono dal mask che torna dal motore, come per il
   // puntatore — e il gestore di keyup deve leggere sempre l'ultima versione.
   const typed = useRef(new Map<string, number>());
+  // Stesso pattern di Keybed: i gestori leggono l'ultimo valore da un ref, cosi' cambiare ottava
+  // o velocity non stacca e riattacca i tre listener globali.
+  const latest = useRef({ firstNote, velocity, onNoteOn, onNoteOff, onAllNotesOff });
+  latest.current = { firstNote, velocity, onNoteOn, onNoteOff, onAllNotesOff };
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       // `repeat` e' l'auto-ripetizione del sistema: non e' una nota nuova. E' un'uscita anticipata
@@ -101,12 +105,12 @@ export function BottomStrip() {
       if (typingInto(e.target)) return;
       const semi = KEY_SEMITONES[e.code];
       if (semi === undefined || typed.current.has(e.code)) return;
-      const note = firstNote + semi;
+      const note = latest.current.firstNote + semi;
       if (note > 127) return;
       typed.current.set(e.code, note);
       // La stessa strada del puntatore, velocity compresa: Keybed passa `velocity / 127` perche'
       // il bridge vuole 0..1.
-      onNoteOn(note, velocity / 127);
+      latest.current.onNoteOn(note, latest.current.velocity / 127);
     };
     const up = (e: KeyboardEvent) => {
       // Si spegne la nota registrata al keydown, non quella che `firstNote` darebbe adesso:
@@ -114,11 +118,11 @@ export function BottomStrip() {
       const note = typed.current.get(e.code);
       if (note === undefined) return;
       typed.current.delete(e.code);
-      onNoteOff(note);
+      latest.current.onNoteOff(note);
     };
     // Perdendo il fuoco la finestra non manda nessun keyup, e le note resterebbero appese per
     // sempre: stesso panic che Keybed fa per il puntatore.
-    const panic = () => { typed.current.clear(); onAllNotesOff(); };
+    const panic = () => { typed.current.clear(); latest.current.onAllNotesOff(); };
 
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
@@ -128,16 +132,17 @@ export function BottomStrip() {
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", panic);
     };
-  }, [firstNote, velocity, onNoteOn, onNoteOff, onAllNotesOff]);
+  }, []);
 
   return (
     <div className="flex h-[108px] shrink-0 gap-2">
-      <div className="flex w-16 shrink-0 gap-2 py-1">
+      <div className="sx-wheels flex w-16 shrink-0 gap-2 py-1">
         <Wheel value={pitch} onChange={onPitch} label="PB" defaultValue={0.5} bipolar springBack tone="osc" />
         <Wheel value={mod} onChange={onMod} label="MW" tone="lfo" />
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* Un po' d'aria fra la barra e i tasti: attaccata, la barra leggeva come parte della tastiera. */}
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <PerformanceBar
           firstNote={firstNote}
           onOctaveDown={() => shift(-12)}

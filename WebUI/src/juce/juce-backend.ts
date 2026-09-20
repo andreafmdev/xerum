@@ -40,42 +40,42 @@ export const hasJuce = () => !!juceGlobal()?.backend;
 type Subs = Set<() => void>;
 const subscribeTo = (list: ListenerList, subs: Subs) => { list.addListener(() => { for (const s of subs) s(); }); };
 
+// Comune ai tre handle vivi: gli abbonati e il modo di avvisarli. I set* dei relay JUCE non
+// fanno scattare i listener locali, quindi ogni `set` notifica da solo, altrimenti il controllo
+// si ridisegnerebbe solo all'eco del C++ (un giro di ritardo).
+abstract class RelayHandle implements ParamHandle {
+  readonly orphan = false;
+  protected subs: Subs = new Set();
+  abstract get(): number;
+  abstract set(v: number): void;
+  begin() {}
+  end() {}
+  protected notify() { for (const s of this.subs) s(); }
+  subscribe(cb: () => void) { this.subs.add(cb); return () => { this.subs.delete(cb); }; }
+}
+
 // Durante una gesture l'handle risponde con il valore impostato localmente e
 // ignora gli echo dell'host, cosi' il knob non "salta" mentre lo si trascina.
-class SliderHandle implements ParamHandle {
-  readonly orphan = false;
-  private subs: Subs = new Set();
+class SliderHandle extends RelayHandle {
   private dragging = false;
   private local = 0;
-  constructor(private st: SliderState) { subscribeTo(st.valueChangedEvent, this.subs); }
+  constructor(private st: SliderState) { super(); subscribeTo(st.valueChangedEvent, this.subs); }
   get() { return this.dragging ? this.local : this.st.getNormalisedValue(); }
-  // setNormalisedValue non fa scattare i listener del relay: notifichiamo noi,
-  // altrimenti il knob si ridisegnerebbe solo all'eco del C++ (un giro di ritardo).
   set(v: number) { this.local = v; this.st.setNormalisedValue(v); this.notify(); }
-  private notify() { for (const s of this.subs) s(); }
-  begin() { this.dragging = true; this.local = this.st.getNormalisedValue(); this.st.sliderDragStarted(); }
-  end() { this.dragging = false; this.st.sliderDragEnded(); for (const s of this.subs) s(); }
-  subscribe(cb: () => void) { this.subs.add(cb); return () => { this.subs.delete(cb); }; }
+  override begin() { this.dragging = true; this.local = this.st.getNormalisedValue(); this.st.sliderDragStarted(); }
+  override end() { this.dragging = false; this.st.sliderDragEnded(); this.notify(); }
 }
 
-class ToggleHandle implements ParamHandle {
-  readonly orphan = false;
-  private subs: Subs = new Set();
-  constructor(private st: ToggleState) { subscribeTo(st.valueChangedEvent, this.subs); }
+class ToggleHandle extends RelayHandle {
+  constructor(private st: ToggleState) { super(); subscribeTo(st.valueChangedEvent, this.subs); }
   get() { return this.st.getValue() ? 1 : 0; }
-  set(v: number) { this.st.setValue(v >= 0.5); for (const s of this.subs) s(); }
-  begin() {} end() {}
-  subscribe(cb: () => void) { this.subs.add(cb); return () => { this.subs.delete(cb); }; }
+  set(v: number) { this.st.setValue(v >= 0.5); this.notify(); }
 }
 
-class ComboHandle implements ParamHandle {
-  readonly orphan = false;
-  private subs: Subs = new Set();
-  constructor(private st: ComboBoxState, private id: ParamId) { subscribeTo(st.valueChangedEvent, this.subs); }
+class ComboHandle extends RelayHandle {
+  constructor(private st: ComboBoxState, private id: ParamId) { super(); subscribeTo(st.valueChangedEvent, this.subs); }
   get() { return fromIndex(PARAM_SPECS[this.id], this.st.getChoiceIndex()); }
-  set(v: number) { this.st.setChoiceIndex(toIndex(PARAM_SPECS[this.id], v)); for (const s of this.subs) s(); }
-  begin() {} end() {}
-  subscribe(cb: () => void) { this.subs.add(cb); return () => { this.subs.delete(cb); }; }
+  set(v: number) { this.st.setChoiceIndex(toIndex(PARAM_SPECS[this.id], v)); this.notify(); }
 }
 
 // Id che il plugin non espone: il controllo resta visibile ma inerte, cosi' una

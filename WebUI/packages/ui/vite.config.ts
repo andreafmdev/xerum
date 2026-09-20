@@ -15,13 +15,13 @@ export default defineConfig({
       exclude: ["**/*.test.*", "**/*.stories.*", "src/test/**", ".storybook/**", "vite.config.ts", "vitest.config.ts"],
     }),
   ],
-  resolve: { alias: { "@": resolve(__dirname, "src") } },
+  resolve: { alias: { "@": resolve(import.meta.dirname, "src") } },
   build: {
     outDir: "dist",
     emptyOutDir: true,
     sourcemap: true,
     lib: {
-      entry: resolve(__dirname, "src/index.ts"),
+      entry: resolve(import.meta.dirname, "src/index.ts"),
       formats: ["es"],
       fileName: "index",
       cssFileName: "ui",

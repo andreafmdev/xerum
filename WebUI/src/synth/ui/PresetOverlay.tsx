@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@xerum/ui";
 import { Search, X } from "lucide-react";
+import { canvas2d, cssColor } from "../canvas";
 import { sampleWave } from "../curves";
 import { AUTHOR, BANK, CATEGORIES, DESCRIPTIONS, filterPresets, presetWave, PRESETS, type Preset } from "../presets";
 import { Logo } from "./Header";
 
 type Props = { current: Preset; onPick: (p: Preset) => void; onClose: () => void };
+
+// Preset per categoria, contati una volta: nel render girava un filter per categoria a ogni
+// tasto battuto nella ricerca.
+const COUNT_BY_CAT = new Map<string, number>();
+for (const p of PRESETS) COUNT_BY_CAT.set(p.cat, (COUNT_BY_CAT.get(p.cat) ?? 0) + 1);
 
 const catRow =
   "sx-cat flex items-center gap-2 rounded-control px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground data-[on=true]:bg-surface-2 data-[on=true]:text-foreground data-[on=true]:shadow-panel";
@@ -47,7 +53,7 @@ export function PresetOverlay({ current, onPick, onClose }: Props) {
           {CATEGORIES.map((c) => (
             <button key={c} type="button" data-on={c === cat} onClick={() => setCat(c)} className={catRow}>
               {c}
-              <span className="ml-auto font-mono text-2xs text-text-dim">{c === "All" ? PRESETS.length : PRESETS.filter((p) => p.cat === c).length}</span>
+              <span className="ml-auto font-mono text-2xs text-text-dim">{c === "All" ? PRESETS.length : (COUNT_BY_CAT.get(c) ?? 0)}</span>
             </button>
           ))}
         </div>
@@ -118,20 +124,11 @@ function MiniWave({ pos, warp }: { pos: number; warp: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const cv = ref.current;
-    const ctx = cv?.getContext("2d");
-    if (!cv || !ctx) return;
-    const W = cv.clientWidth;
-    const H = cv.clientHeight;
-    if (!W || !H) return;
-    // Il browser sta sopra lo chassis scalato con transform: stesso backing store dello schermo
-    // principale (WaveDisplay.tsx), altrimenti le miniature restano a 1x.
-    const rect = cv.getBoundingClientRect();
-    const dpr = (window.devicePixelRatio || 1) * (rect.width > 0 ? rect.width / W : 1);
-    cv.width = Math.round(W * dpr);
-    cv.height = Math.round(H * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-    const col = getComputedStyle(cv).getPropertyValue("--color-osc").trim() || "currentColor";
+    // Il browser sta sopra lo chassis scalato: stesso backing store dello schermo principale.
+    const c = canvas2d(cv);
+    if (!cv || !c) return;
+    const { ctx, W, H } = c;
+    const col = cssColor(cv, "--color-osc");
     const x0 = 14;
     const w0 = W * 0.62;
     const amp = (H - 40) / 2;

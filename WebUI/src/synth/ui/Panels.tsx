@@ -4,9 +4,10 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useBoolParam, useChoiceParam, useFloatParam, useIntParam } from "../../juce/hooks";
 import { filterPath } from "../curves";
 import { signedInt } from "../mapping";
-import { liveValue, modsFor, type FilterType } from "../mod";
+import { modsFor, type FilterType } from "../mod";
 import { step } from "../presets";
-import { useSourceLevels } from "./MetersContext";
+import { useLiveValue } from "./meters";
+import { GlowCurve } from "./GlowCurve";
 import { ParamKnob } from "./ParamKnob";
 import { useDirty, useSynthCtx } from "./SynthContext";
 
@@ -71,8 +72,7 @@ const CURVE_H = 58;
  */
 function FilterCurve({ cutoff, res, type }: { cutoff: number; res: number; type: FilterType }) {
   const { mods } = useSynthCtx();
-  const sources = useSourceLevels();
-  const cutLive = liveValue(cutoff, modsFor(mods, "cutoff"), sources);
+  const cutLive = useLiveValue(cutoff, modsFor(mods, "cutoff"));
   const d = useMemo(() => filterPath(cutLive, res, type, CURVE_W, CURVE_H), [cutLive, res, type]);
   return (
     <div className="sx-well mx-2.5 overflow-hidden rounded-control bg-well shadow-well" style={{ height: CURVE_H }}>
@@ -80,8 +80,7 @@ function FilterCurve({ cutoff, res, type }: { cutoff: number; res: number; type:
         {[0.25, 0.5, 0.75].map((x) => (
           <line key={x} x1={x * CURVE_W} x2={x * CURVE_W} y1="0" y2={CURVE_H} className="stroke-line-strong" opacity={0.3} />
         ))}
-        <path d={`${d} L${CURVE_W} ${CURVE_H} L0 ${CURVE_H} Z`} className="fill-(--tone)" opacity={0.12} />
-        <path d={d} className="fill-none stroke-(--tone) [filter:var(--glow)]" strokeWidth={1.8} />
+        <GlowCurve d={d} close={`L${CURVE_W} ${CURVE_H} L0 ${CURVE_H} Z`} />
       </svg>
     </div>
   );

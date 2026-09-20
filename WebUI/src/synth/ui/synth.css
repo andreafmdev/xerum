@@ -110,6 +110,88 @@
   --glow: drop-shadow(0 0 3px color-mix(in oklch, var(--tone) 80%, transparent));
 }
 
+/* Knob come nel design: cappuccio grande (lg 64, md 42, sm 30 px di disco dentro una scatola
+   di +16), niente scala di tacche. La scatola si allarga con i token di spacing; il disco con
+   le proprieta' geometriche SVG (`r` e' una proprieta' CSS in SVG 2). */
+.sx-chassis[data-variant="glass"],
+.sx-chassis[data-variant="metal"] {
+  /* Il design usa 46/58/80 e con quelle misure trabocca (nel prototipo il knob Level
+     dell'oscillatore esce dal pannello): queste sono le piu' grandi che stanno nei 900 px
+     tenendo le stesse proporzioni disco/scatola. */
+  --spacing-knob-sm: 38px;
+  --spacing-knob-md: 48px;
+  --spacing-knob-lg: 68px;
+}
+.sx-chassis[data-variant="glass"] .sx-tabs > :not(.sx-tabbar),
+.sx-chassis[data-variant="metal"] .sx-tabs > :not(.sx-tabbar) {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="tick"],
+.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="tick"],
+.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="grip"] {
+  display: none;
+}
+.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="cap"],
+.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="cap"] {
+  r: 14.6;
+}
+.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="cap-edge"],
+.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="cap-edge"] {
+  r: 15.3;
+}
+.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="rim"],
+.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="rim"] {
+  r: 14.2;
+}
+/* Intestazioni dei pannelli senza la riga incisa: LED, titolo, spazio, azioni. */
+.sx-chassis[data-variant="glass"] [data-slot="section-header"] > span[aria-hidden]:not(:first-child) > span,
+.sx-chassis[data-variant="metal"] [data-slot="section-header"] > span[aria-hidden]:not(:first-child) > span {
+  visibility: hidden;
+}
+/* Rotelle a rullo: larghe, rigate, con una riga luminosa al posto del riempimento. */
+.sx-chassis[data-variant="glass"] .sx-wheels,
+.sx-chassis[data-variant="metal"] .sx-wheels {
+  width: 118px;
+  gap: 6px;
+}
+.sx-chassis[data-variant="glass"] [data-slot="wheel"],
+.sx-chassis[data-variant="metal"] [data-slot="wheel"] {
+  flex: 1;
+  min-width: 0;
+}
+.sx-chassis[data-variant="glass"] [data-slot="wheel"] [role="slider"],
+.sx-chassis[data-variant="metal"] [data-slot="wheel"] [role="slider"] {
+  width: 100%;
+  border-radius: 6px;
+}
+.sx-chassis[data-variant="glass"] [data-slot="wheel"] [role="slider"]::before,
+.sx-chassis[data-variant="metal"] [data-slot="wheel"] [role="slider"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(180deg, rgb(255 255 255 / 0.04) 0 1px, transparent 1px 5px);
+}
+.sx-chassis[data-variant="glass"] [data-slot="wheel"] [data-part="fill"],
+.sx-chassis[data-variant="metal"] [data-slot="wheel"] [data-part="fill"] {
+  display: none;
+}
+.sx-chassis[data-variant="glass"] [data-slot="wheel"] [data-part="marker"],
+.sx-chassis[data-variant="metal"] [data-slot="wheel"] [data-part="marker"] {
+  display: block;
+  background: #fff;
+  box-shadow: 0 0 6px var(--tone), 0 0 2px #fff;
+}
+.sx-chassis[data-variant="metal"] [data-slot="wheel"] [data-part="marker"] {
+  background: var(--tone);
+}
+.sx-chassis[data-variant="glass"] [data-slot="wheel"] > span,
+.sx-chassis[data-variant="metal"] [data-slot="wheel"] > span {
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  color: var(--color-text-dim);
+}
+
 /* ------------------------------------------------------------------------------------------
    GLASS: vetro fumé trasparente sopra un'aurora in movimento, bordi prismatici, cappucci
    di vetro. */
@@ -176,9 +258,12 @@
     inset 0 1px 0 rgb(255 255 255 / 0.15),
     0 14px 40px rgb(0 0 0 / 0.55);
 }
+/* Bordo prismatico: lo stesso anello di 1 px su plate, display, anteprima e tasti neri; i tasti
+   neri cambiano solo angolo e opacita' del gradiente, piu' sotto. */
 .sx-chassis[data-variant="glass"] .sx-plate::before,
 .sx-chassis[data-variant="glass"] .sx-display::before,
-.sx-chassis[data-variant="glass"] .sx-prev::before {
+.sx-chassis[data-variant="glass"] .sx-prev::before,
+.sx-chassis[data-variant="glass"] [data-key="black"]::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -246,10 +331,6 @@
     inset 0 0 0 1px color-mix(in oklch, var(--tone) 60%, transparent),
     inset 0 1px 0 rgb(255 255 255 / 0.2);
   color: #fff;
-}
-.sx-chassis[data-variant="glass"] [data-slot="wheel"] [role="slider"] > div:first-child {
-  background: #fff;
-  box-shadow: 0 0 6px var(--tone), 0 0 2px #fff;
 }
 
 /* Tasti rialzati dell'header e chip delle sorgenti. */
@@ -331,6 +412,9 @@
     inset 1px 0 0 rgb(0 0 0 / 0.33),
     inset 0 1px 0 rgb(255 255 255 / 0.19);
 }
+.sx-chassis[data-variant="glass"] [data-part="key-label"] {
+  color: rgb(255 255 255 / 0.4);
+}
 .sx-chassis[data-variant="glass"] [data-key="white"][data-active="true"] {
   background-image: linear-gradient(180deg, color-mix(in oklch, var(--color-osc) 55%, transparent), color-mix(in oklch, var(--color-osc) 30%, transparent));
   box-shadow:
@@ -342,17 +426,9 @@
   box-shadow: 0 4px 10px rgb(0 0 0 / 0.75);
 }
 .sx-chassis[data-variant="glass"] [data-key="black"]::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
   background: conic-gradient(from 200deg, #5ee6ff99, #ffffff40 25%, #c36cff90 50%, #ffffff30 70%, #e26fd680 85%, #5ee6ff99);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
   opacity: 0.6;
+  z-index: auto;
 }
 .sx-chassis[data-variant="glass"] [data-key="black"][data-active="true"] {
   background-image: linear-gradient(180deg, color-mix(in oklch, var(--color-osc) 60%, #000), color-mix(in oklch, var(--color-osc) 35%, #000));

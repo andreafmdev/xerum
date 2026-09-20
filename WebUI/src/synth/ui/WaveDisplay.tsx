@@ -1,19 +1,17 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toneStyle } from "@xerum/ui";
-import { noteMaskOf } from "../../juce/backend";
+import { noteMaskOf, type MeterFrame } from "../../juce/backend";
+import { useChoiceParam, useFloatParam } from "../../juce/hooks";
+import { useBackend } from "../../juce/provider";
+import { canvas2d, cssColor } from "../canvas";
 import { sampleWave, spectrum } from "../curves";
 import { formatValue } from "../mapping";
 import { modsFor } from "../mod";
 import { noteHz, topNote } from "../notes";
 import { PARAM_SPECS } from "../params.generated";
-import { useMeterFrame } from "./MetersContext";
 import { useSynthCtx } from "./SynthContext";
 
 type Props = {
-  position: number;
-  warp: number;
-  level: number;
-  name: string;
   /** Scala dello chassis. Serve solo al backing store del canvas: vedi `draw`. */
   scale: number;
 };
@@ -21,48 +19,49 @@ type Props = {
 const FRAMES = 9;
 const HARMONICS = 32;
 
+/** Il numero, o zero: un binario piu' vecchio della WebUI manda frame senza qualche campo. */
+const finite = (v: number) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
 /** Schermo principale: pila di frame in prospettiva, spettro del frame corrente a destra. */
-export function WaveDisplay({ position, warp, level, name, scale }: Props) {
+export function WaveDisplay({ scale }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
+  // I parametri che disegnano l'onda si leggono qui e non in SynthWindow: trascinando wtpos
+  // cambiano decine di volte al secondo e devono ridisegnare solo questo schermo, non la finestra.
+  const position = useFloatParam("wtpos").value;
+  const warp = useFloatParam("warp").value;
+  const level = useFloatParam("level").value;
+  const wt = useChoiceParam("wtIndex");
+  const name = wt.options.find((o) => o.value === wt.value)?.label ?? "";
+
   // Scostamento istantaneo della posizione: solo le sorgenti LFO assegnate a wtpos.
   const { mods } = useSynthCtx();
-  const frame = useMeterFrame();
-  const lfo = modsFor(mods, "wtpos").reduce((a, m) => a + (m.src === "lfo" ? m.depth * frame.lfo : 0), 0);
+  const modsRef = useRef(mods);
+  modsRef.current = mods;
+
+  // Cio' che arriva a 30 Hz dal motore sta in ref, non in stato: questo componente non deve
+  // ri-renderizzare a ogni frame. Prima `lfo` era fra le dipendenze di `draw`, e ogni frame
+  // rifaceva `draw`, staccava e riattaccava il listener di resize e riavviava il ciclo rAF.
+  const lfoRef = useRef(0);
   // Una nota tenuta fa scorrere l'onda e le fa fare piu' cicli salendo di altezza; il "gate"
   // ingrossa e illumina i tratti mentre suona e si spegne dolcemente al rilascio. La nota si
   // legge dal mask del motore (la piu' acuta), non dalla tastiera a schermo: cosi' vale anche
   // per il MIDI dell'host.
-  const top = topNote(noteMaskOf(frame));
-  const hz = top === null ? 0 : noteHz(top);
-  const hzRef = useRef(hz);
-  hzRef.current = hz;
+  const hzRef = useRef(0);
   const gate = useRef(0);
+  const looping = useRef(false);
+  // L'unico stato React: "una nota suona". Cambia al note-on/off, non a ogni frame.
+  const [playing, setPlaying] = useState(false);
 
   const draw = useCallback(() => {
     const cv = ref.current;
-    const ctx = cv?.getContext("2d");
-    if (!cv || !ctx) return;
-    const W = cv.clientWidth;
-    const H = cv.clientHeight;
-    // Lo chassis e' scalato con transform (SynthWindow.tsx), e transform non tocca il
-    // backing store del canvas: senza moltiplicarlo per la scala, questo resterebbe a
-    // risoluzione 1x mentre tutto il resto viene ingrandito — sfocato solo lo schermo
-    // dell'onda. Il rapporto rect/clientWidth misura la scala davvero applicata (regge
-    // anche se un giorno la si applicasse altrove); `scale` arriva come prop perche' serve
-    // come *dipendenza*: e' l'unica cosa che dice a questo effetto di rigirare quando la
-    // finestra cambia misura, e senza il canvas restava alla risoluzione del primo render.
-    const rect = cv.getBoundingClientRect();
-    const applied = W > 0 && rect.width > 0 ? rect.width / W : 1;
-    const dpr = (window.devicePixelRatio || 1) * applied;
-    const backingWidth = Math.round(W * dpr);
-    if (cv.width !== backingWidth) {
-      cv.width = backingWidth;
-      cv.height = Math.round(H * dpr);
-    }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-    const col = getComputedStyle(cv).getPropertyValue("--tone").trim() || "currentColor";
-    const grid = getComputedStyle(cv).getPropertyValue("--color-line-strong").trim() || col;
+    // `scale` arriva come prop perche' serve come *dipendenza*: e' l'unica cosa che dice a
+    // questo effetto di rigirare quando la finestra cambia misura, e senza il canvas restava
+    // alla risoluzione del primo render (il backing store lo rifa' canvas2d).
+    const c = canvas2d(cv);
+    if (!cv || !c) return;
+    const { ctx, W, H } = c;
+    const col = cssColor(cv, "--tone");
+    const grid = cssColor(cv, "--color-line-strong", col);
 
     ctx.strokeStyle = grid;
     ctx.globalAlpha = 0.18;
@@ -75,7 +74,7 @@ export function WaveDisplay({ position, warp, level, name, scale }: Props) {
     }
     ctx.globalAlpha = 1;
 
-    const cur = Math.min(1, Math.max(0, position + 0.06 * lfo));
+    const cur = Math.min(1, Math.max(0, position + 0.06 * lfoRef.current));
     const mags = spectrum(cur, warp, level, HARMONICS);
     const bw = (W * 0.32) / HARMONICS;
     ctx.fillStyle = col;
@@ -84,11 +83,12 @@ export function WaveDisplay({ position, warp, level, name, scale }: Props) {
     ctx.globalAlpha = 1;
 
     // Il gate segue la nota con un attacco rapido e un rilascio in nove frame circa.
+    const hz = hzRef.current;
     const g = gate.current;
-    gate.current = hzRef.current ? Math.min(1, g + 0.25) : g * 0.9;
+    gate.current = hz ? Math.min(1, g + 0.25) : g * 0.9;
     const t = performance.now() / 1000;
-    const cyc = hzRef.current ? 1 + Math.min(5, Math.log2(hzRef.current / 55)) : 1;
-    const scroll = hzRef.current ? (t * hzRef.current * 0.02) % 1 : 0;
+    const cyc = hz ? 1 + Math.min(5, Math.log2(hz / 55)) : 1;
+    const scroll = hz ? (t * hz * 0.02) % 1 : 0;
 
     const x0 = 26;
     const w0 = W * 0.55;
@@ -122,7 +122,29 @@ export function WaveDisplay({ position, warp, level, name, scale }: Props) {
     ctx.beginPath();
     ctx.arc(px, py + amp * 0.6 + 8, 2, 0, 7);
     ctx.fill();
-  }, [position, warp, level, lfo, scale]);
+  }, [position, warp, level, scale]);
+  // Il ciclo rAF e il listener dei meter durano piu' di un singolo `draw`: leggono sempre l'ultimo.
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+
+  // Sottoscrizione diretta al backend invece di useMeterValue: quell'hook ri-renderizza quando
+  // il valore cambia, e qui i due numeri finiscono in ref senza nessun render.
+  const backend = useBackend();
+  useEffect(
+    () =>
+      backend.onMeters((m: MeterFrame) => {
+        const lfoLevel = finite(m.lfo);
+        const lfo = modsFor(modsRef.current, "wtpos").reduce((a, x) => a + (x.src === "lfo" ? x.depth * lfoLevel : 0), 0);
+        const moved = lfo !== lfoRef.current;
+        lfoRef.current = lfo;
+        const top = topNote(noteMaskOf({ ...m, n0: finite(m.n0), n1: finite(m.n1), n2: finite(m.n2), n3: finite(m.n3) }));
+        hzRef.current = top === null ? 0 : noteHz(top);
+        setPlaying(hzRef.current !== 0);
+        // A strumento fermo l'LFO muove comunque la posizione: un disegno per frame, senza render.
+        if (moved && !looping.current) drawRef.current();
+      }),
+    [backend],
+  );
 
   // Il `resize` copre il caso rimanente: la finestra si sposta su uno schermo con un
   // devicePixelRatio diverso senza che la scala dello chassis cambi.
@@ -136,15 +158,20 @@ export function WaveDisplay({ position, warp, level, name, scale }: Props) {
   // frame: e' l'unico momento in cui il tempo entra nel disegno. Con lo strumento fermo non
   // gira nessun requestAnimationFrame.
   useEffect(() => {
-    if (!hz && gate.current < 0.02) return;
+    if (!playing && gate.current < 0.02) return;
+    looping.current = true;
     let id = 0;
     const loop = () => {
-      draw();
+      drawRef.current();
       if (hzRef.current || gate.current >= 0.02) id = requestAnimationFrame(loop);
+      else looping.current = false;
     };
     id = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(id);
-  }, [hz, draw]);
+    return () => {
+      cancelAnimationFrame(id);
+      looping.current = false;
+    };
+  }, [playing]);
 
   return (
     <div

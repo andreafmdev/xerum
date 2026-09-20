@@ -1,0 +1,7 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "ignore": [
+    "packages/ui/src/components/ui/**",
+    "src/synth/params.generated.ts"
+  ]
+}

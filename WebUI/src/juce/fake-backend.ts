@@ -64,6 +64,8 @@ export class FakeBackend implements Backend {
   onMeters(cb: (m: MeterFrame) => void) { this.meterSubs.add(cb); return () => { this.meterSubs.delete(cb); }; }
   emitStateChanged(s: BridgeState, origin: string) { for (const cb of this.stateSubs) cb({ ...structuredClone(s), origin }); }
   emitMeters(m: MeterFrame) { for (const cb of this.meterSubs) cb(m); }
+  /** Quanti listener di meter sono attaccati: lo store ne deve tenere uno solo. */
+  meterListeners() { return this.meterSubs.size; }
 
   async noteOn(note: number, _velocity: number) { this.playing.add(note); }
   async noteOff(note: number) { this.playing.delete(note); }

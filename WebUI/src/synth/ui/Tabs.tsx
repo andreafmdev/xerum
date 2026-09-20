@@ -1,12 +1,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Segmented, Tabs, Toggle, toneStyle } from "@xerum/ui";
 import { X } from "lucide-react";
-import { useBoolParam, useChoiceParam, useFloatParam } from "../../juce/hooks";
+import { useBoolParam, useChoiceParam, useFloatParam, useMeterValue } from "../../juce/hooks";
 import { envPath, lfoPath } from "../curves";
 import { formatValue, paramLabel, signedInt } from "../mapping";
 import { MOD_SOURCES, SOURCE_LABEL, SOURCE_TONE, type LfoShape } from "../mod";
 import { PARAM_SPECS, type ParamId } from "../params.generated";
-import { useMeterFrame } from "./MetersContext";
+import { GlowCurve } from "./GlowCurve";
 import { ModChip } from "./ModChip";
 import { ParamKnob } from "./ParamKnob";
 import { useDirty, useSynthCtx } from "./SynthContext";
@@ -19,13 +19,15 @@ const TAB_ITEMS = [
   { value: "fx", label: "Effects", tone: "fx" },
   { value: "arp", label: "Arpeggiator", tone: "master" },
 ] as const;
+// Copia mutabile fatta una volta: uno spread nel JSX darebbe a <Tabs> un array nuovo a ogni render.
+const TAB_LIST = [...TAB_ITEMS];
 
 export function TabArea({ tab, setTab, children }: { tab: TabId; setTab: (t: TabId) => void; children: ReactNode }) {
   const tone = TAB_ITEMS.find((t) => t.value === tab)!.tone;
   return (
     <section className="sx-plate sx-tabs flex h-31 shrink-0 flex-col overflow-hidden rounded-plate shadow-panel" style={toneStyle(tone)}>
       <div className="sx-tabbar flex h-7 shrink-0 items-stretch bg-surface-0 shadow-[inset_0_-1px_0_var(--color-edge-dark)]">
-        <Tabs variant="bar" value={tab} onChange={(v) => setTab(v as TabId)} items={[...TAB_ITEMS]} className="flex-1" />
+        <Tabs variant="bar" value={tab} onChange={(v) => setTab(v as TabId)} items={TAB_LIST} className="flex-1" />
         <div className="flex items-center gap-1.5 px-2.5 text-[9px] tracking-[0.14em] text-text-dim uppercase">
           Mod sources
           {MOD_SOURCES.map((s) => (
@@ -61,6 +63,7 @@ const ENV_SELECTOR = [
   { value: "env", label: "ENV" },
   { value: "env2", label: "ENV2" },
 ] as const;
+const ENV_OPTIONS = [...ENV_SELECTOR];
 
 /** I quattro slot dell'inviluppo scelto, nell'ordine attacco/decay/sustain/release. */
 const ENV_IDS = {
@@ -68,33 +71,35 @@ const ENV_IDS = {
   env2: ["att2", "dec2", "sus2", "rel2"],
 } as const satisfies Record<"env" | "env2", readonly [ParamId, ParamId, ParamId, ParamId]>;
 
+const ENV_W = 200;
+const ENV_H = 66;
+
+/** La curva dell'inviluppo scelto: si abbona ai suoi quattro parametri e a nessun altro. Montata
+    con `key={which}`, cosi' cambiare inviluppo rimonta quattro hook invece di tenerne otto vivi
+    e ridisegnare la curva di ENV mentre si trascina un knob di ENV2. */
+function EnvScreen({ ids, second }: { ids: readonly [ParamId, ParamId, ParamId, ParamId]; second: boolean }) {
+  const a = useFloatParam(ids[0]).value;
+  const dv = useFloatParam(ids[1]).value;
+  const sv = useFloatParam(ids[2]).value;
+  const r = useFloatParam(ids[3]).value;
+  const d = useMemo(() => envPath(a, dv, sv, r, ENV_W, ENV_H), [a, dv, sv, r]);
+  return (
+    <div className={screen} style={{ width: ENV_W, height: ENV_H }}>
+      <svg width={ENV_W} height={ENV_H} style={toneStyle(second ? SOURCE_TONE.env2 : SOURCE_TONE.env)}>
+        <GlowCurve d={d} close={`L${ENV_W - 6} ${ENV_H - 6} L6 ${ENV_H - 6}Z`} />
+      </svg>
+    </div>
+  );
+}
+
 export function EnvTab() {
   const [which, setWhich] = useState<"env" | "env2">("env");
-  // Tutti e otto gli hook, sempre: l'ordine delle chiamate non puo' dipendere dalla scelta.
-  const values = {
-    att: useFloatParam("att").value,
-    dec: useFloatParam("dec").value,
-    sus: useFloatParam("sus").value,
-    rel: useFloatParam("rel").value,
-    att2: useFloatParam("att2").value,
-    dec2: useFloatParam("dec2").value,
-    sus2: useFloatParam("sus2").value,
-    rel2: useFloatParam("rel2").value,
-  };
-  const [aId, dId, sId, rId] = ENV_IDS[which];
-  const [a, dv, sv, r] = [values[aId], values[dId], values[sId], values[rId]];
+  const ids = ENV_IDS[which];
+  const [aId, dId, sId, rId] = ids;
   const isSecond = which === "env2";
-  const W = 200;
-  const H = 66;
-  const d = useMemo(() => envPath(a, dv, sv, r, W, H), [a, dv, sv, r]);
   return (
     <div className={content}>
-      <div className={screen} style={{ width: W, height: H }}>
-        <svg width={W} height={H} style={toneStyle(isSecond ? SOURCE_TONE.env2 : SOURCE_TONE.env)}>
-          <path d={`${d} L${W - 6} ${H - 6} L6 ${H - 6}Z`} className="fill-(--tone)" opacity={0.12} />
-          <path d={d} className="fill-none stroke-(--tone) [filter:var(--glow)]" strokeWidth={1.8} />
-        </svg>
-      </div>
+      <EnvScreen key={which} ids={ids} second={isSecond} />
       <div className={`${group} gap-3.5`}>
         <ParamKnob key={aId} id={aId} />
         <ParamKnob key={dId} id={dId} />
@@ -108,7 +113,7 @@ export function EnvTab() {
       </div>
       <div className={vsep} />
       <div className="flex flex-col gap-1.5">
-        <Segmented label="Inviluppo da modificare" value={which} onChange={setWhich} options={[...ENV_SELECTOR]} />
+        <Segmented label="Inviluppo da modificare" value={which} onChange={setWhich} options={ENV_OPTIONS} />
         {/* Il testo resta su due righe: sotto il selettore ci sono ~56 px prima che il plate
             (h-31, overflow-hidden) cominci a tagliare. */}
         <p className="max-w-38 text-[11px] leading-snug text-text-dim">
@@ -162,7 +167,7 @@ export function LfoTab() {
 function LfoDot({ w, h }: { w: number; h: number }) {
   // Il bridge manda il livello dell'LFO, non la sua fase: il puntino sta al centro
   // dello schermo e sale/scende con il valore.
-  const { lfo } = useMeterFrame();
+  const lfo = useMeterValue((f) => f.lfo);
   return <circle cx={w / 2} cy={h / 2 - lfo * (h / 2 - 8)} r="3.5" className="fill-foreground" />;
 }
 
@@ -235,10 +240,11 @@ export function FxTab() {
   );
 }
 
-/** Riquadro dello step in riproduzione: l'unico pezzo dell'arp abbonato ai meter. */
+/** Riquadro dello step in riproduzione: l'unico pezzo dell'arp abbonato ai meter, e solo al
+    booleano "e' il mio turno": ri-renderizza quando lo step entra o esce, non a ogni frame. */
 function ArpPlayhead({ index, on }: { index: number; on: boolean }) {
-  const { arpStep } = useMeterFrame();
-  if (!on || arpStep !== index) return null;
+  const active = useMeterValue((f) => f.arpStep === index);
+  if (!on || !active) return null;
   return <i aria-hidden className="absolute inset-0 rounded-[2px] outline outline-offset-1 outline-foreground" />;
 }
 

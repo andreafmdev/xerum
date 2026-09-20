@@ -136,13 +136,21 @@ export function Keybed({
           data-note={note}
           data-active="false"
           className={cn(
-            "h-full flex-1 rounded-b-[3px] border-r border-edge-dark last:border-r-0",
+            "relative flex h-full flex-1 items-end justify-center rounded-b-[3px] border-r border-edge-dark pb-1 last:border-r-0",
             "bg-linear-to-b from-key-ivory-hi to-key-ivory-lo",
             "data-[active=true]:from-(--tone) data-[active=true]:to-key-ivory-active-lo",
           )}
           onPointerDown={(e) => { if (e.button === 0) press(note); }}
           onPointerEnter={(e) => { if (e.buttons === 1) press(note); }}
-        />
+        >
+          {/* Il nome dell'ottava sul DO, come su una master keyboard: e' l'unico riferimento
+              con cui si legge dove si e' sulla tastiera dopo uno shift di ottava. */}
+          {note % 12 === 0 && (
+            <span aria-hidden data-part="key-label" className="pointer-events-none font-mono text-[8px] tracking-wider text-key-ebony-lo/45 select-none">
+              C{note / 12 - 1}
+            </span>
+          )}
+        </div>
       ))}
 
       {blackNotes.map(({ note, index }) => (

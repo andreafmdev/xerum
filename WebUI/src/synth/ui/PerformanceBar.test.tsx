@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { FakeBackend } from "../../juce/fake-backend";
 import { BridgeProvider } from "../../juce/provider";
-import { MetersProvider } from "./MetersContext";
 import { PerformanceBar } from "./PerformanceBar";
 
 function mount(props: Partial<React.ComponentProps<typeof PerformanceBar>> = {}) {
@@ -16,9 +15,7 @@ function mount(props: Partial<React.ComponentProps<typeof PerformanceBar>> = {})
   };
   render(
     <BridgeProvider backend={new FakeBackend()}>
-      <MetersProvider>
-        <PerformanceBar {...all} />
-      </MetersProvider>
+      <PerformanceBar {...all} />
     </BridgeProvider>,
   );
 }

@@ -45,7 +45,7 @@ export type KnobMod = {
 export const MOD_DRAG_TYPE = "text/x-mod";
 
 /**
- * Le parti del disegno portano un `data-part` (track, value, cap-edge, cap, rim, grip, pointer,
+ * Le parti del disegno portano un `data-part` (tick, track, value, cap-shadow, cap-edge, cap, rim, grip, pointer,
  * pointer-groove, pointer-tip, label, readout): e' il contratto con cui una app cambia materiale
  * al knob via CSS (vetro, metallo spazzolato) senza aggiungere prop. I token --color-cap-* restano
  * la via per ricolorare il cappuccio; `data-part` serve per cio' che i token non coprono, come un
@@ -82,6 +82,11 @@ const TICKS = Array.from({ length: 11 }, (_, i) => {
   const [x2, y2] = polar(C, C, 19.5, deg);
   return { x1, y1, x2, y2, major };
 });
+// JSX costruito una volta: le tacche non hanno prop dinamiche e i knob modulati
+// ri-renderizzano a 30 Hz.
+const TICK_LINES = TICKS.map((t, i) => (
+  <line key={i} data-part="tick" x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} className="stroke-tick" strokeWidth={t.major ? 1.2 : 0.9} />
+));
 
 /** Zigrinatura: 12 intagli sul bordo del cappuccio. */
 const GRIPS = Array.from({ length: 12 }, (_, i) => {
@@ -90,6 +95,9 @@ const GRIPS = Array.from({ length: 12 }, (_, i) => {
   const [x2, y2] = polar(C, C, CAP_R - 0.1, deg);
   return { x1, y1, x2, y2 };
 });
+const GRIP_LINES = GRIPS.map((g, i) => (
+  <line key={i} data-part="grip" x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} className="stroke-edge-dark opacity-60" strokeWidth={0.8} />
+));
 
 export function Knob({
   value,
@@ -136,10 +144,10 @@ export function Knob({
     disabled,
   });
 
-  // useId produce ":r0:": i due punti sono legali in un id SVG ma rompono url(#…) in alcuni motori.
-  const uid = useId().replace(/:/g, "");
+  // Da React 19.1 useId produce "_R_0_" (solo caratteri validi in un selettore CSS), quindi va
+  // bene così com'è dentro url(#…).
+  const uid = useId();
   const capFill = `knob-cap-${uid}`;
-  const capShadow = `knob-shadow-${uid}`;
 
   const { start, end } = knobAngles(value, bipolar);
   const text = format(value);
@@ -183,22 +191,9 @@ export function Knob({
               <stop offset="0%" stopColor="var(--color-cap-hi)" />
               <stop offset="100%" stopColor="var(--color-cap-lo)" />
             </radialGradient>
-            <filter id={capShadow} x="-40%" y="-40%" width="180%" height="180%">
-              <feDropShadow dx="0" dy="0.8" stdDeviation="0.9" floodColor="black" floodOpacity="0.6" />
-            </filter>
           </defs>
 
-          {TICKS.map((t, i) => (
-            <line
-              key={i}
-              x1={t.x1}
-              y1={t.y1}
-              x2={t.x2}
-              y2={t.y2}
-              className="stroke-tick"
-              strokeWidth={t.major ? 1.2 : 0.9}
-            />
-          ))}
+          {TICK_LINES}
 
           <path
             data-part="track"
@@ -244,9 +239,12 @@ export function Knob({
             );
           })()}
 
-          {/* Ombra di contatto + cappuccio + rialzo del bordo. */}
+          {/* Ombra di contatto + cappuccio + rialzo del bordo. L'ombra e' un disco spostato in basso
+              e non un filtro feDropShadow: con ~40 knob a schermo, un filtro per knob pesa in
+              compositing (WebKit) piu' di tutto il resto del disegno. */}
+          <circle data-part="cap-shadow" cx={C} cy={C + 0.9} r={CAP_R + 0.7} className="fill-edge-dark opacity-70" />
           <circle data-part="cap-edge" cx={C} cy={C} r={CAP_R + 0.6} className="fill-none stroke-edge-dark" strokeWidth={1} />
-          <circle data-part="cap" cx={C} cy={C} r={CAP_R} fill={`url(#${capFill})`} filter={`url(#${capShadow})`} />
+          <circle data-part="cap" cx={C} cy={C} r={CAP_R} fill={`url(#${capFill})`} />
           <circle
             data-part="rim"
             cx={C}
@@ -255,18 +253,7 @@ export function Knob({
             className="fill-none stroke-cap-rim opacity-80"
             strokeWidth={0.7}
           />
-          {GRIPS.map((g, i) => (
-            <line
-              key={i}
-              data-part="grip"
-              x1={g.x1}
-              y1={g.y1}
-              x2={g.x2}
-              y2={g.y2}
-              className="stroke-edge-dark opacity-60"
-              strokeWidth={0.8}
-            />
-          ))}
+          {GRIP_LINES}
 
           {/* Indicatore: solco scuro con il fondo lucido sopra. */}
           <g data-part="pointer" transform={`rotate(${pointerDeg - 270} ${C} ${C})`}>

@@ -1,11 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Knob, type KnobProps } from "@xerum/ui";
 import { defaultNormalised, type ModAssignment } from "../../juce/backend";
 import { useFloatParam } from "../../juce/hooks";
 import { formatValue } from "../mapping";
-import { liveValue, modsFor, SOURCE_TONE, type ModSource } from "../mod";
+import { modsFor, SOURCE_TONE, type ModSource } from "../mod";
 import type { ParamId } from "../params.generated";
-import { useSourceLevels } from "./MetersContext";
+import { useLiveValue } from "./meters";
 import { useSynthCtx } from "./SynthContext";
 
 type Props = Omit<KnobProps, "value" | "onChange" | "onChangeEnd" | "mods" | "liveValue" | "onDropMod" | "label"> & {
@@ -17,7 +17,9 @@ type Props = Omit<KnobProps, "value" | "onChange" | "onChangeEnd" | "mods" | "li
 export function ParamKnob({ id, label, format, bipolar, ...rest }: Props) {
   const p = useFloatParam(id);
   const { mods, addMod, markDirty } = useSynthCtx();
-  const mine = modsFor(mods, id);
+  const mine = useMemo(() => modsFor(mods, id), [mods, id]);
+  const spec = p.spec;
+  const defaultFormat = useCallback((v: number) => formatValue(spec, v), [spec]);
 
   // Gesture: begin al primo onChange di un drag, end quando il Knob smette di trascinare.
   const inGesture = useRef(false);
@@ -46,7 +48,7 @@ export function ParamKnob({ id, label, format, bipolar, ...rest }: Props) {
     onChange,
     onChangeEnd,
     label: label ?? p.spec.name,
-    format: format ?? ((v) => formatValue(p.spec, v)),
+    format: format ?? defaultFormat,
     bipolar: bipolar ?? p.spec.bipolar,
     onDropMod: (src) => addMod(src as ModSource, id),
     ...rest,
@@ -61,12 +63,9 @@ export function ParamKnob({ id, label, format, bipolar, ...rest }: Props) {
 
 /** Knob con anelli e puntino live: l'unico che segue il livello istantaneo delle sorgenti. */
 function ModulatedKnob({ knob, mods }: { knob: KnobProps; mods: ModAssignment[] }) {
-  const sources = useSourceLevels();
-  return (
-    <Knob
-      {...knob}
-      mods={mods.map((m) => ({ tone: SOURCE_TONE[m.src], depth: m.depth, bipolar: m.src === "lfo" }))}
-      liveValue={liveValue(knob.value, mods, sources)}
-    />
-  );
+  // Gli anelli cambiano con la mod matrix, non con i meter; il puntino live e' l'unico valore
+  // selezionato dal frame, quindi il knob ri-renderizza solo quando quel numero cambia.
+  const rings = useMemo(() => mods.map((m) => ({ tone: SOURCE_TONE[m.src], depth: m.depth, bipolar: m.src === "lfo" })), [mods]);
+  const live = useLiveValue(knob.value, mods);
+  return <Knob {...knob} mods={rings} liveValue={live} />;
 }

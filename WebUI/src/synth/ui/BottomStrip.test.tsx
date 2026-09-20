@@ -3,7 +3,6 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { ZERO_METERS } from "../../juce/backend";
 import { FakeBackend } from "../../juce/fake-backend";
 import { BridgeProvider } from "../../juce/provider";
-import { MetersProvider } from "./MetersContext";
 import { BottomStrip } from "./BottomStrip";
 
 let unmountAll = () => {};
@@ -12,9 +11,7 @@ function mount() {
   const backend = new FakeBackend();
   const view = render(
     <BridgeProvider backend={backend}>
-      <MetersProvider>
-        <BottomStrip />
-      </MetersProvider>
+      <BottomStrip />
     </BridgeProvider>,
   );
   unmountAll = view.unmount;

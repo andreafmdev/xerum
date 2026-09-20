@@ -94,7 +94,11 @@ export function Wheel({
           if (springBack && !disabled) onChange(defaultValue);
         }}
       >
-        <div data-testid="wheel-fill" className="absolute inset-x-px rounded-[2px] bg-(--tone)" style={fill} />
+        <div data-testid="wheel-fill" data-part="fill" className="absolute inset-x-px rounded-[2px] bg-(--tone)" style={fill} />
+        {/* Il segno della posizione, per chi preferisce una riga a un riempimento (una rotella a
+            rullo, come su una tastiera): nascosto di default, una app lo accende via CSS e spegne
+            `fill`. Sta a `top`, non a `bottom`, perche' e' un punto e non un'altezza. */}
+        <span aria-hidden data-part="marker" className="absolute inset-x-0.5 hidden h-0.5 -translate-y-1/2 rounded-px bg-(--tone)" style={{ top: `${(1 - value) * 100}%` }} />
         {/* Il segno del riposo: al centro per la bipolare, assente per l'altra. */}
         {bipolar && <span aria-hidden className="absolute inset-x-0 top-1/2 h-px bg-tick" />}
       </div>

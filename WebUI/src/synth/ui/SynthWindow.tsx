@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useBoolParam, useBridgeState, useChoiceParam, useFloatParam } from "../../juce/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useBoolParam, useBridgeState } from "../../juce/hooks";
 import type { ModSource } from "../../juce/backend";
 import type { ParamId } from "../params.generated";
 import { useSynth, type TabId } from "../useSynth";
 import { BottomStrip } from "./BottomStrip";
 import { Header } from "./Header";
-import { MetersProvider } from "./MetersContext";
 import { FilterPanel, MasterPanel, OscPanel } from "./Panels";
 import { PresetOverlay } from "./PresetOverlay";
 import { SynthContext, type SynthCtx } from "./SynthContext";
@@ -47,32 +46,39 @@ const W = 900;
 // non il testo del CSS, a dover guidare chi la legge.
 export const H = 680;
 
-// Lo chassis si scala con `transform`, non con `zoom`.
+// Come si scala lo chassis: `zoom` se il motore lo implementa per bene, altrimenti `transform`.
 //
-// `zoom` e' stato provato proprio per risolvere la sfocatura del testo sopra 1x (transform
-// rasterizza il sottoalbero alla dimensione di layout e poi stira il bitmap) ed e' stato
-// tolto: WebKit — il motore della WKWebView in cui gira davvero il plugin, non Chromium —
-// non lo implementa come Chromium. Misurato con Playwright/WebKit a viewport 1309x873 e
-// `zoom: 1.4544` sullo chassis: il suo getBoundingClientRect resta 900x600 (non scalato) e i
-// discendenti vengono *divisi* per il fattore invece che moltiplicati (il display d'onda,
-// 130 px di layout, ne misurava 89.4 = 130 / 1.4544). Nel plugin l'effetto era una fascia
-// vuota di ~270 px fra il pannello e la tastiera. Se un giorno si volesse riprovare, serve
-// prima una misura su WebKit, non su Chrome.
+// `transform: scale` rasterizza il sottoalbero alla dimensione di layout e poi stira il bitmap:
+// sopra 1x testo e bordi si sfocano, ed e' la qualita' che si perde ingrandendo la finestra.
+// `zoom` invece rifa' il layout alla scala nuova, quindi resta nitido a qualsiasi misura. Il
+// problema e' che WebKit (il motore della WKWebView in cui gira il plugin) per anni lo ha
+// implementato a modo suo: misurato con Playwright/WebKit a viewport 1309x873 e `zoom: 1.4544`
+// sullo chassis, getBoundingClientRect restava 900x600 e i discendenti venivano *divisi* per
+// il fattore invece che moltiplicati (una fascia vuota di ~270 px fra pannello e tastiera).
+// Lo `zoom` standard (2024) e' arrivato dopo, e non si puo' sapere dalla versione quale dei
+// due si ha davanti.
 //
-// Il <canvas> di WaveDisplay ha comunque bisogno di conoscere la scala: `transform` non
-// tocca il backing store, quindi lo schermo dell'onda restava a risoluzione 1x anche quando
-// tutto il resto era ingrandito. Lo ricava da getBoundingClientRect (vedi WaveDisplay.tsx).
-/** Finestra del plugin: 900×680 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
+// Quindi non si sceglie a priori: si applica `zoom`, si misura lo chassis e, se la sua
+// larghezza a schermo non e' 900 × scala, si ripiega su `transform`. La misura e' quella che
+// la spec prescrive per lo zoom standard (getBoundingClientRect in pixel zoomati), quindi il
+// WebKit vecchio fallisce il test e il nuovo lo passa.
+//
+// Il <canvas> di WaveDisplay ha comunque bisogno di conoscere la scala: ne' `transform` ne'
+// `zoom` toccano il backing store, quindi lo schermo dell'onda resterebbe a risoluzione 1x
+// anche quando tutto il resto e' ingrandito. La ricava da getBoundingClientRect / clientWidth
+// (vedi WaveDisplay.tsx), che vale in entrambi i modi.
+export type ScaleMode = "zoom" | "transform";
+
+/** Finestra del plugin/** Finestra del plugin: 900×680 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
 export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixedScale, gutter = 16 }: SynthWindowProps) {
   const s = useSynth(initialTab);
   // Unica istanza dello stato condiviso: i tab lo leggono dal contesto, così non
   // esistono copie che si aggiornano a turno con gli echo dell'host.
   const state = useBridgeState();
+  // bypass cambia solo quando lo si preme: leggerlo qui non costa nulla. I parametri dell'onda
+  // (wtpos/warp/level/wtIndex) invece cambiano a ogni pointermove e vivono dentro WaveDisplay,
+  // altrimenti un drag sul knob ridisegnerebbe tutta la finestra, tastiera compresa.
   const bypass = useBoolParam("bypass");
-  const wtpos = useFloatParam("wtpos");
-  const warp = useFloatParam("warp");
-  const level = useFloatParam("level");
-  const wt = useChoiceParam("wtIndex");
 
   // useBridgeState ricrea addMod/setDepth/removeMod a ogni render: le avvolgiamo
   // dietro un ref per esporre callback stabili e non ricalcolare il contesto.
@@ -96,7 +102,21 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
   );
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const chassisRef = useRef<HTMLDivElement>(null);
   const [sc, setSc] = useState(fixedScale ?? 1);
+  const [mode, setMode] = useState<ScaleMode>("zoom");
+  // La verifica dello zoom, dopo il layout: una sola volta, alla prima scala diversa da 1.
+  useLayoutEffect(() => {
+    if (mode !== "zoom" || sc === 1) return;
+    const el = chassisRef.current;
+    if (!el) return;
+    const width = el.getBoundingClientRect().width;
+    if (!width) return; // jsdom e simili: nessun layout, niente da decidere
+    if (Math.abs(width - W * sc) > 2) {
+      if (import.meta.env.DEV) console.info(`[fit] zoom non standard (chassis ${width}px per scala ${sc}): uso transform`);
+      setMode("transform");
+    }
+  }, [mode, sc]);
   useEffect(() => {
     if (fixedScale) {
       setSc(fixedScale);
@@ -122,33 +142,39 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
           lui a togliere il margine — quello lo fa `gutter` dentro il calcolo del fit, qui sopra.
           Resta come segnale "questo chassis sta riempiendo una WebView", per chi dovesse volerlo
           leggere; un test lo blocca perche' non sparisca per distrazione. */}
-      <div data-testid="chassis" className="sx-chassis" data-variant={variant} data-attached={gutter === 0 ? "" : undefined} style={{ transform: `scale(${sc})`, opacity: bypass.checked ? 0.9 : 1 }}>
-        <SynthContext.Provider value={ctx}>
-          <MetersProvider>
-            <Header
-              preset={s.preset}
-              dirty={s.dirty}
-              onBrowse={() => s.setBrowse(true)}
-              onPrev={() => s.stepPreset(-1)}
-              onNext={() => s.stepPreset(1)}
-            />
-            <WaveDisplay position={wtpos.value} warp={warp.value} level={level.value} scale={sc} name={wt.options.find((o) => o.value === wt.value)?.label ?? ""} />
-            <div className="flex h-56 shrink-0 gap-2">
-              <OscPanel />
-              <FilterPanel />
-              <MasterPanel />
-            </div>
-            <TabArea tab={s.tab} setTab={s.setTab}>
-              {s.tab === "env" && <EnvTab />}
-              {s.tab === "lfo" && <LfoTab />}
-              {s.tab === "mod" && <ModTab />}
-              {s.tab === "fx" && <FxTab />}
-              {s.tab === "arp" && <ArpTab />}
-            </TabArea>
-            <BottomStrip />
-            {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
-          </MetersProvider>
-        </SynthContext.Provider>
+      <div
+        ref={chassisRef}
+        data-testid="chassis"
+        data-scale-mode={mode}
+        className="sx-chassis"
+        data-variant={variant}
+        data-attached={gutter === 0 ? "" : undefined}
+        style={{ ...(mode === "zoom" ? { zoom: sc } : { transform: `scale(${sc})` }), opacity: bypass.checked ? 0.9 : 1 }}
+      >
+        <SynthContext value={ctx}>
+          <Header
+            preset={s.preset}
+            dirty={s.dirty}
+            onBrowse={() => s.setBrowse(true)}
+            onPrev={() => s.stepPreset(-1)}
+            onNext={() => s.stepPreset(1)}
+          />
+          <WaveDisplay scale={sc} />
+          <div className="flex h-56 shrink-0 gap-2">
+            <OscPanel />
+            <FilterPanel />
+            <MasterPanel />
+          </div>
+          <TabArea tab={s.tab} setTab={s.setTab}>
+            {s.tab === "env" && <EnvTab />}
+            {s.tab === "lfo" && <LfoTab />}
+            {s.tab === "mod" && <ModTab />}
+            {s.tab === "fx" && <FxTab />}
+            {s.tab === "arp" && <ArpTab />}
+          </TabArea>
+          <BottomStrip />
+          {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
+        </SynthContext>
       </div>
     </div>
   );
