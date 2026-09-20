@@ -150,6 +150,10 @@ con interpolazione lineare fra i 256 punti. `wtIndex` diventa una dipendenza ver
 non più solo l'etichetta accanto allo schermo. Il `warp` continua a moltiplicare la fase come
 adesso.
 
+Lo **spettro** a destra dello schermo viene con lei senza lavoro in più: `spectrum()` calcola già
+una DFT su 128 punti presi da `sampleWave`, quindi basta che legga dalla tavola perché anche le
+barre smettano di essere quelle della forma finta.
+
 `sampleWave` esce da `curves.ts` insieme al suo test: nessun altro la usa.
 
 `PresetOverlay` eredita la miniatura giusta — `presetWave()` già restituisce `wtpos` e `warp`,
