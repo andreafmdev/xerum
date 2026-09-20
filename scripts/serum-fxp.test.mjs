@@ -56,6 +56,30 @@ test("splitZlibStreams separa gli stream concatenati e ignora la coda", () => {
   assert.equal(streams[1].length, 2 * SERUM_FRAME_SIZE * 4);
 });
 
+test("splitZlibStreams ignora una coda che comincia per 0x78 senza essere un header valido", () => {
+  // Caso reale: PD-Leaderboard0.fxp (RetroSynthwavePack2) lascia esattamente questa coda
+  // dopo i suoi due stream. 0x78 0x0a non e' un header zlib valido (RFC 1950, check mod 31).
+  const a = deflateSync(Buffer.from("stato"));
+  const b = deflateSync(rampStream(2));
+  const chunk = Buffer.concat([a, b, Buffer.from([0x78, 0x0a, 0x00, 0x00])]);
+  const streams = splitZlibStreams(chunk);
+  assert.equal(streams.length, 2);
+  assert.equal(streams[0].toString(), "stato");
+  assert.equal(streams[1].length, 2 * SERUM_FRAME_SIZE * 4);
+});
+
+test("splitZlibStreams accetta ancora gli header zlib reali 0x78 0x01 e 0x78 0x9c", () => {
+  const fast = deflateSync(Buffer.from("stato"), { level: 1 }); // header 78 01
+  const normal = deflateSync(rampStream(2), { level: 6 }); // header 78 9c
+  assert.deepEqual(fast.subarray(0, 2), Buffer.from([0x78, 0x01]));
+  assert.deepEqual(normal.subarray(0, 2), Buffer.from([0x78, 0x9c]));
+
+  const streams = splitZlibStreams(Buffer.concat([fast, normal]));
+  assert.equal(streams.length, 2);
+  assert.equal(streams[0].toString(), "stato");
+  assert.equal(streams[1].length, 2 * SERUM_FRAME_SIZE * 4);
+});
+
 test("framesFromStream ricava i frame e ne conserva i valori", () => {
   const frames = framesFromStream(rampStream(3), SERUM_FRAME_SIZE);
   assert.equal(frames.length, 3);

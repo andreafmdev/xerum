@@ -26,17 +26,23 @@ export function parseFxp(buffer) {
   };
 }
 
+/** Header zlib valido: metodo di compressione 8 (deflate) e il check a 16 bit multiplo di 31. */
+const opensZlibStream = (b) => b.length >= 2 && (b[0] & 0x0f) === 8 && ((b[0] << 8) | b[1]) % 31 === 0;
+
 /**
- * Inflate ripetuto finche' i byte successivi aprono uno stream zlib (`0x78`).
+ * Inflate ripetuto finche' i byte successivi aprono uno stream zlib valido (RFC 1950).
  * `inflateSync(..., { info: true })` dice quanti byte di ingresso ha consumato: e' l'unico
- * modo di trovare l'inizio dello stream dopo. La coda di 4 byte che Serum lascia in fondo
- * non e' uno stream e viene ignorata.
+ * modo di trovare l'inizio dello stream dopo. La coda che Serum lascia in fondo non e' uno
+ * stream e viene ignorata: non basta guardare se comincia per `0x78` (il primo byte di ogni
+ * header zlib), perche' quella coda puo' cominciare proprio per `0x78` senza essere un header
+ * valido — e' il caso di `PD-Leaderboard0.fxp` nel pack RetroSynthwavePack2, la cui coda di 4
+ * byte e' `78 0a 00 00`.
  */
 export function splitZlibStreams(chunk) {
   const streams = [];
   let rest = chunk;
 
-  while (rest.length >= 2 && rest[0] === 0x78) {
+  while (opensZlibStream(rest)) {
     const { buffer, engine } = inflateSync(rest, { info: true });
     if (engine.bytesWritten <= 0) break;
     streams.push(buffer);
