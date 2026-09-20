@@ -227,7 +227,12 @@
 }
 
 /* L'aurora: due strati di chiazze sfocate che ruotano lentamente, sotto tutto il resto
-   (z-index -1 dentro il contesto isolato dello chassis). */
+   (z-index -1 dentro il contesto isolato dello chassis).
+   26s/37s sono scritti a mano di proposito: è un loop ambientale di sfondo misurato in
+   decine di secondi, fuori dal vocabolario interattivo (press/state/layer/scene arrivano
+   al massimo a 320ms). Non è un token, quindi non passa da una custom property come
+   --dur-*: check-motion.mjs esenta solo le righe tra questi due marker. */
+/* ambient-loop-block:start */
 .sx-chassis[data-variant="glass"]::before,
 .sx-chassis[data-variant="glass"]::after {
   content: "";
@@ -241,18 +246,16 @@
     radial-gradient(circle at 75% 70%, #c36cffb0, transparent 34%),
     radial-gradient(circle at 60% 20%, #6f9cff90, transparent 30%),
     radial-gradient(circle at 30% 80%, #e26fd680, transparent 30%);
-  /* Loop ambientale di sfondo, non un token di motion interattivo: la durata resta una
-     custom property locale invece di un valore scritto dentro `animation`. */
-  --aurora-dur: 26s;
-  animation: sx-aurora var(--aurora-dur) ease-in-out infinite alternate;
+  animation: sx-aurora 26s ease-in-out infinite alternate;
   opacity: 0.55;
 }
 .sx-chassis[data-variant="glass"]::after {
-  --aurora-dur: 37s;
+  animation-duration: 37s;
   animation-direction: alternate-reverse;
   transform: rotate(180deg);
   opacity: 0.35;
 }
+/* ambient-loop-block:end */
 @keyframes sx-aurora {
   0% { transform: translate(-6%, -4%) rotate(0deg) scale(1); }
   50% { transform: translate(5%, 6%) rotate(25deg) scale(1.15); }

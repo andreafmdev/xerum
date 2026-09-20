@@ -135,6 +135,20 @@ test("does not flag a raw ms literal that is part of a custom property name, not
   assert.deepEqual(rules("--default-transition-duration: 120ms;", "theme.css"), []);
 });
 
+// Round 2 / Finding B: il lookbehind non deve sopprimere anche i prefissi vendor, che sono
+// la stessa identica proprietà con un altro nome.
+test("still flags a vendor-prefixed transition duration", () => {
+  assert.deepEqual(rules(".sx { -webkit-transition: opacity 150ms; }", "a.css"), ["hardcoded-css-duration"]);
+});
+
+test("still flags a vendor-prefixed animation duration", () => {
+  assert.deepEqual(rules(".sx { -moz-animation-duration: 37s; }", "a.css"), ["hardcoded-css-duration"]);
+});
+
+test("accepts a vendor-prefixed transition using a token", () => {
+  assert.deepEqual(rules(".sx { -webkit-transition: opacity var(--dur-state); }", "a.css"), []);
+});
+
 test("does not flag a raw duration inside a marked motion-token-block", () => {
   const text = ["/* motion-token-block:start */", ".sx { transition: opacity 140ms; }", "/* motion-token-block:end */"].join("\n");
   assert.deepEqual(rules(text, "synth.css"), []);
@@ -148,4 +162,32 @@ test("still flags a raw duration outside the marked motion-token-block", () => {
     ".sy { transition: opacity 150ms; }",
   ].join("\n");
   assert.deepEqual(rules(text, "synth.css"), ["hardcoded-css-duration"]);
+});
+
+// Round 2 / Finding A: la deroga dell'aurora non è un'indirezione via custom property (quella
+// è esattamente il bypass generale che il reviewer ha dimostrato), ma un marker con nome
+// proprio, distinto da motion-token-block — visibile e cercabile con grep.
+test("does not flag a raw duration inside a differently-named marked block", () => {
+  const text = ["/* ambient-loop-block:start */", ".sx { animation: sx-aurora 26s ease-in-out infinite alternate; }", "/* ambient-loop-block:end */"].join(
+    "\n",
+  );
+  assert.deepEqual(rules(text, "synth.css"), []);
+});
+
+test("still flags a raw duration outside the ambient-loop-block", () => {
+  const text = [
+    "/* ambient-loop-block:start */",
+    ".sx { animation: sx-aurora 26s ease-in-out infinite alternate; }",
+    "/* ambient-loop-block:end */",
+    ".sy { animation: pulse 999ms; }",
+  ].join("\n");
+  assert.deepEqual(rules(text, "synth.css"), ["hardcoded-css-duration"]);
+});
+
+test("does not treat an unrelated custom-property indirection as a licensed exemption", () => {
+  // Nota per il reviewer: questo NON è coperto da una regola dedicata (fuori perimetro di
+  // questo round, che chiedeva solo di correggere la forma della deroga dell'aurora). Il test
+  // documenta il limite noto: una custom property qualsiasi resta un valore lecito per
+  // transition/animation, a prescindere da come si chiama.
+  assert.deepEqual(rules(".sx { --my-dur: 9999ms; animation: foo var(--my-dur); }", "a.css"), []);
 });

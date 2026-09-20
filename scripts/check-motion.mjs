@@ -22,20 +22,24 @@ const LINE_RULES = [
   { rule: "hardcoded-duration", re: /\bduration-(\[?\d*[1-9]\d*m?s?\]?)\b/ },
 ];
 
-// Righe tra questi due marker sono escluse da ogni regola: usati nel blocco di override dei
-// token di durata per variante dentro synth.css, l'unico punto dove i ms si scrivono a mano
-// di proposito. Lo scoping è per riga, non per file: il resto di synth.css resta sorvegliato.
-const BLOCK_START = "motion-token-block:start";
-const BLOCK_END = "motion-token-block:end";
+// Righe tra un marker `<nome>:start` e il suo `<nome>:end` sono escluse da ogni regola. Ogni
+// deroga ha il proprio nome (es. `motion-token-block`, `ambient-loop-block`): visibile,
+// cercabile con grep, e motivata da un commento accanto — mai un'indirezione (una custom
+// property qualsiasi con un valore letterale dentro) che aggirerebbe la regola in silenzio.
+// Lo scoping è per riga, non per file: il resto del file resta sorvegliato.
+const BLOCK_MARKER_RE = /([\w-]+):(start|end)\b/;
 
 function excludedLineRanges(text) {
   const ranges = [];
-  let start = -1;
+  const open = new Map();
   text.split("\n").forEach((line, i) => {
-    if (line.includes(BLOCK_START)) start = i;
-    else if (line.includes(BLOCK_END) && start !== -1) {
-      ranges.push([start, i]);
-      start = -1;
+    const m = line.match(BLOCK_MARKER_RE);
+    if (!m) return;
+    const [, name, kind] = m;
+    if (kind === "start") open.set(name, i);
+    else if (open.has(name)) {
+      ranges.push([open.get(name), i]);
+      open.delete(name);
     }
   });
   return ranges;
@@ -81,11 +85,15 @@ const KEYFRAMES_BACKDROP_RE = /\bbackdrop-filter\s*:/;
 const KEYFRAMES_FILTER_BLUR_RE = /\bfilter\s*:[^;]*\bblur\(/;
 
 // ---- hardcoded-css-duration: durate scritte a mano in transition/animation (CSS, non
-// Tailwind). `(?<!-)` esclude il nome di una custom property come
-// `--default-transition-duration`, che contiene la sottostringa "transition-duration" ma non
-// È quella proprietà. -------------------------------------------------------------------------
+// Tailwind). Un prefisso vendor opzionale (-webkit-/-moz-/-ms-/-o-) fa parte del match, così
+// `-webkit-transition` resta sorvegliato: è la stessa proprietà con un altro nome. Il
+// lookbehind `(?<![\w-])` richiede che nulla di "attaccato" preceda l'inizio del match: questo
+// esclude la sottostringa "transition-duration" dentro il NOME di una custom property come
+// `--default-transition-duration` (lì il carattere subito prima è un `-` di "default-"), senza
+// per questo escludere `-webkit-transition` (lì il carattere subito prima del prefisso vendor
+// è uno spazio o un `;`, non un carattere di identificatore).
 const DURATION_DECL_RE =
-  /(?<!-)\b(transition-duration|transition-delay|animation-duration|animation-delay|transition|animation)\s*:([^;]+);/g;
+  /(?<![\w-])(?:-(?:webkit|moz|ms|o)-)?(transition-duration|transition-delay|animation-duration|animation-delay|transition|animation)\s*:([^;]+);/g;
 const RAW_DURATION_RE = /\b\d*[1-9]\d*m?s\b/;
 
 /** Le violazioni di un insieme di file già letti. */
