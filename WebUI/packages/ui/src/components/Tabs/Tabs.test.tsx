@@ -72,7 +72,11 @@ describe("Tabs motion", () => {
   it("slides a single underline in the bar variant", () => {
     render(<Tabs variant="bar" value="env" onChange={() => {}} items={items} />);
     const ind = screen.getByTestId("tabs-indicator");
-    expect(ind.className).toContain("transition-[translate,scale]");
+    // Fix round 1 / Finding 2: la larghezza deve scorrere insieme alla posizione (scaleX +
+    // translateX via transform, misurati in JS come in Segmented), non scattare all'istante da
+    // una lunghezza CSS di Base UI — vedi lib/indicator.ts. Un solo `transform` transizionato,
+    // mai `translate`/`scale` separati né, tantomeno, `width`.
+    expect(ind.className).toContain("transition-transform");
     expect(ind.className).toContain("duration-(--dur-state)");
     expect(ind.className).toContain("ease-glass");
   });
@@ -80,5 +84,12 @@ describe("Tabs motion", () => {
   it("has no indicator in the plate variant, where the active plate is pressed in", () => {
     render(<Tabs variant="plate" value="env" onChange={() => {}} items={items} />);
     expect(screen.queryByTestId("tabs-indicator")).toBeNull();
+  });
+
+  it("hides the indicator until there is a layout to measure", () => {
+    render(<Tabs variant="bar" value="env" onChange={() => {}} items={items} />);
+    // jsdom non fa layout: larghezza 0, quindi l'indicatore resta nascosto invece di scattare
+    // a un box 0×0 in un angolo (stesso pattern di Segmented).
+    expect(screen.getByTestId("tabs-indicator")).toHaveAttribute("data-measured", "false");
   });
 });
