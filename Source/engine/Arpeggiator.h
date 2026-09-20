@@ -172,6 +172,16 @@ private:
     {
         int note { 0 };
         int channel { 1 };
+
+        /**
+         * Se a tenere questo tasto sia il pedale invece del dito.
+         *
+         * Il latch non e' una seconda lista: e' un flag sulla stessa, perche' per tutto il resto
+         * dell'arpeggiatore — la sequenza, le ottave, l'ordinamento per numero di nota — un
+         * tasto tenuto dal pedale e' un tasto premuto e basta. La distinzione serve in un punto
+         * solo, quando il pedale si alza e vanno via *quelli e non gli altri*.
+         */
+        bool latched { false };
     };
 
     struct Sounding
@@ -190,6 +200,9 @@ private:
 
     void addHeld (int note, int channel) noexcept;
     void removeHeld (int note) noexcept;
+
+    /** Toglie dalla lista ogni tasto che teneva il pedale, lasciando quelli ancora sotto le dita. */
+    void dropLatchedKeys() noexcept;
 
     /** Il note-off di ogni nota in suono con quel numero, al campione `s`. E' quel che impedisce
         il bug di Odin: con gate pieno e nota ripetuta, il note-on arrivava **prima** del
@@ -223,6 +236,20 @@ private:
     /** Falso quando l'arp non ha niente da spegnere ne' da ricordare: e' la condizione che fa
         uscire process() **prima** di toccare il buffer. */
     bool active_ { false };
+
+    /**
+     * Il pedale di sustain (CC 64) visto dall'arpeggiatore, che con l'arp acceso lo interpreta
+     * come un **latch**: a pedale giu' le dita possono alzarsi e la sequenza continua a girare
+     * sull'accordo. E' cio' che fa la maggior parte degli hardware, ed e' l'unica lettura che
+     * dia un risultato suonabile — tenere invece le note che l'arp *emette* le accumulerebbe in
+     * un cluster che cresce a ogni passo.
+     *
+     * Il CC 64 viene comunque inoltrato a valle dal ramo generale dei controller, e non e' uno
+     * spreco: e' quello che permette a SynthEngine di sapere che il pedale e' giu' anche mentre
+     * l'arp se ne sta occupando, e quindi di non lasciare voci appese se l'arp viene spento con
+     * il piede ancora sul pedale.
+     */
+    bool sustain_ { false };
 
     /** Il contatore dei passi, monotono. In sync viene ricalcolato dal PPQ a ogni blocco. */
     std::int64_t nextStepIndex_ { 0 };

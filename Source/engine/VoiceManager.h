@@ -56,6 +56,31 @@ public:
     void allNotesOff() noexcept;
     void allSoundOff() noexcept;
 
+    /**
+     * Il pedale di sustain (CC 64), gia' ridotto a un booleano da chi legge il MIDI.
+     *
+     * A pedale giu' un note-off non viene *tradotto* in qualcos'altro: viene **differito**.
+     * La nota resta in `held_` esattamente com'era e la voce non viene toccata; l'unica traccia
+     * e' un bit in `sustained_`. Alzare il pedale riapplica i note-off differiti, e da li' in
+     * poi sono note-off normali che passano per la stessa `noteOff()` di sempre — compresi il
+     * ritorno al tasto precedente in Mono e il ritrigger dell'inviluppo.
+     *
+     * Differire invece di tradurre e' cio' che tiene i due modi monofonici corretti senza una
+     * riga di codice in piu': `held_` continua a descrivere "cosa deve suonare", che a pedale
+     * giu' non coincide piu' con "quali tasti sono fisicamente premuti", ed e' la prima delle
+     * due che monoNoteOn/monoNoteOff hanno sempre voluto sapere.
+     *
+     * Chiamarla con il valore che ha gia' non fa niente: un CC 64 ripetuto — che e' quello che
+     * mandano le pedaliere continue a ogni passo della corsa — non deve rilasciare niente.
+     */
+    void setSustainPedal (bool down) noexcept;
+
+    /** Se il pedale risulta giu'. Per i test e per chi decide se accendere il bit del keybed. */
+    bool isSustainPedalDown() const noexcept { return sustainPedal_; }
+
+    /** Se il note-off di quella nota sia stato differito dal pedale. Per i test. */
+    bool isNoteSustained (int midiNote) const noexcept { return sustainedBit (midiNote); }
+
     void render (float* outL, float* outR, int numSamples) noexcept;
 
     /** Propaga la tavola attiva a tutte le voci. Chiamata dal thread audio. */
@@ -195,6 +220,15 @@ private:
         /** L'ultimo premuto: quello che si sente. `note` vale -1 con la lista vuota. */
         Key last() const noexcept { return count > 0 ? keys[(size_t) (count - 1)] : Key {}; }
 
+        bool contains (int note) const noexcept
+        {
+            for (int i = 0; i < count; ++i)
+                if (keys[(size_t) i].note == note)
+                    return true;
+
+            return false;
+        }
+
         void clear() noexcept { count = 0; }
     };
 
@@ -202,6 +236,36 @@ private:
         dell'inviluppo che c'e' in Mono e non in Legato. */
     void monoNoteOn (int midiNote, float velocity) noexcept;
     void monoNoteOff (int midiNote) noexcept;
+
+    /** Riapplica i note-off che il pedale teneva fermi, dal piu' vecchio al piu' recente. */
+    void releaseSustainedNotes() noexcept;
+
+    /** Lettura e scrittura di un bit di `sustained_`. Una nota fuori da 0..127 non ha un bit e
+        le due funzioni non fanno niente: e' anche cio' che tiene lo spostamento definito. */
+    bool sustainedBit (int midiNote) const noexcept
+    {
+        if (midiNote < 0 || midiNote > 127)
+            return false;
+
+        const auto word = midiNote < 64 ? sustainedLo_ : sustainedHi_;
+        return (word & (1ull << (midiNote % 64))) != 0;
+    }
+
+    void setSustainedBit (int midiNote, bool on) noexcept
+    {
+        if (midiNote < 0 || midiNote > 127)
+            return;
+
+        auto& word = midiNote < 64 ? sustainedLo_ : sustainedHi_;
+        const auto bit = 1ull << (midiNote % 64);
+        word = on ? (word | bit) : (word & ~bit);
+    }
+
+    void clearSustainedBits() noexcept
+    {
+        sustainedLo_ = 0;
+        sustainedHi_ = 0;
+    }
 
     /**
      * Se la nota che sta per partire debba scivolare da `lastStartedNote_` o cominciare alla
@@ -321,5 +385,22 @@ private:
      * gira una volta per blocco anche se poi non si rende niente.
      */
     bool soundedSinceLastNoteOn_ { false };
+
+    // --- pedale di sustain ---
+
+    /** Se il pedale risulta giu'. Campo del solo thread audio, come modWheel_ in SynthEngine. */
+    bool sustainPedal_ { false };
+
+    /**
+     * Le note il cui note-off e' stato differito dal pedale: un bit per nota MIDI, 0..63 in
+     * `sustainedLo_` e 64..127 in `sustainedHi_`.
+     *
+     * Due parole di bit e non una lista: l'insieme e' senza ordine per costruzione — l'ordine in
+     * cui i note-off vanno riapplicati non e' quello in cui sono arrivati, e' quello di `held_`
+     * (vedi releaseSustainedNotes()) — e una maschera costa un confronto per nota invece di una
+     * scansione. Niente atomico: ci scrive e ci legge solo il thread audio.
+     */
+    unsigned long long sustainedLo_ { 0 };
+    unsigned long long sustainedHi_ { 0 };
 };
 } // namespace engine

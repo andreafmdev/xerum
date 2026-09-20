@@ -172,6 +172,15 @@ private:
     void handleMidiEvent (const juce::MidiMessage& message) noexcept;
 
     /**
+     * Arma o disarma il pedale di sustain, e con lui la maschera del keybed.
+     *
+     * Chi decide `down` e' il ramo CC 64 di handleMidiEvent, che ci passa gia' il verdetto
+     * dell'arbitraggio con l'arpeggiatore: ad arp acceso il pedale e' del latch dell'arp, e qui
+     * il sustain sulle voci deve restare spento. Vedi il commento di `sustainPedal_`.
+     */
+    void setSustainPedal (bool down) noexcept;
+
+    /**
      * Rende `numSamples` campioni spezzandoli in sotto-fette di al piu' kControlBlockSamples,
      * ciascuna con la propria valutazione della modulazione e il proprio avanzamento dell'LFO
      * libero. Il numero di sotto-fette e' al piu' ceil(numSamples / 32) + 1: limitato, noto, e
@@ -292,6 +301,30 @@ private:
     std::atomic<float> lfoLevel_ { 0.0f };
     float modWheel_ { 0.0f }; // CC 1, solo thread audio
     float pitchBend_ { 0.0f }; // rotella di pitch, -1..1, solo thread audio
+
+    /**
+     * Il pedale di sustain (CC 64) **come lo vede questo strato**, cioe' gia' arbitrato con
+     * l'arpeggiatore: falso ogni volta che l'arp e' acceso, perche' li' il pedale e' un latch
+     * dei tasti e se ne occupa Arpeggiator.
+     *
+     * L'arbitraggio serve e non e' una comodita': l'arp riscrive il MidiBuffer *prima* di questo
+     * strato, quindi un sustain armato qui sotto terrebbe ogni nota che l'arp emette, e la
+     * sequenza si accumulerebbe in un cluster che cresce a ogni passo invece di arpeggiare.
+     *
+     * E' una copia di quello che tiene VoiceManager, ed e' voluto: qui serve a decidere i bit
+     * del keybed, che sono di questo strato e che VoiceManager non conosce.
+     */
+    bool sustainPedal_ { false };
+
+    /**
+     * I tasti che restano **accesi sul keybed** perche' li tiene il pedale, un bit per nota.
+     *
+     * Non e' la stessa maschera di VoiceManager: quella governa quando una voce va in release,
+     * questa quando un tasto della UI si spegne. Tenerle separate e' cio' che permette al keybed
+     * di mostrare quello che si sente davvero senza che la UI sappia niente del pool di voci.
+     */
+    juce::uint64 sustainedNotesLo_ { 0 };
+    juce::uint64 sustainedNotesHi_ { 0 };
 
     // --- telemetria per il meter ---------------------------------------------------------
     // Sola lettura verso l'editor: niente qui dentro torna nel percorso del segnale. Gli

@@ -98,6 +98,7 @@ void Arpeggiator::reset() noexcept
         s.active = false;
 
     active_ = false;
+    sustain_ = false;
     nextStepIndex_ = 0;
     lastFiredStep_ = INT64_MIN;
     nextStepPos_ = 0.0;
@@ -126,6 +127,10 @@ void Arpeggiator::addHeld (int note, int channel) noexcept
         if (held_[i].note == note)
         {
             held_[i].channel = channel;
+
+            // Il dito ha ripreso il tasto: da adesso lo tiene lui. Senza questa riga, alzare il
+            // pedale toglierebbe dalla sequenza una nota che qualcuno sta premendo.
+            held_[i].latched = false;
             return;
         }
 
@@ -146,6 +151,7 @@ void Arpeggiator::addHeld (int note, int channel) noexcept
 
     held_[i].note = note;
     held_[i].channel = channel;
+    held_[i].latched = false;
     ++heldCount_;
 }
 
@@ -154,12 +160,36 @@ void Arpeggiator::removeHeld (int note) noexcept
     for (int i = 0; i < heldCount_; ++i)
         if (held_[i].note == note)
         {
+            // A pedale giu' il tasto resta nella sequenza: cambia solo chi lo tiene. Marcare
+            // invece di togliere e' cio' che rende il latch una riga sola — la lista non si
+            // accorcia, l'ordinamento per numero di nota non si tocca, e `heldCount_ > 0`
+            // continua a tenere l'arp che gira senza che nessun altro ramo sappia del pedale.
+            if (sustain_)
+            {
+                held_[i].latched = true;
+                return;
+            }
+
             for (int j = i; j + 1 < heldCount_; ++j)
                 held_[j] = held_[j + 1];
 
             --heldCount_;
             return;
         }
+}
+
+void Arpeggiator::dropLatchedKeys() noexcept
+{
+    // Compattazione in un passo solo: si riscrive la lista tenendo i soli tasti ancora sotto un
+    // dito. Chiamare removeHeld() in un ciclo sarebbe quadratico e, peggio, richiederebbe di
+    // scorrere all'indietro una lista che si accorcia.
+    int kept = 0;
+
+    for (int i = 0; i < heldCount_; ++i)
+        if (! held_[i].latched)
+            held_[kept++] = held_[i];
+
+    heldCount_ = kept;
 }
 
 void Arpeggiator::addSounding (int note, int channel, double offPos, int s) noexcept
@@ -377,6 +407,7 @@ void Arpeggiator::process (juce::MidiBuffer& midi, int numSamples, const ArpConf
             }
 
         heldCount_ = 0;
+        sustain_ = false;
         active_ = false;
         nextStepIndex_ = 0;
         lastFiredStep_ = INT64_MIN;
@@ -460,11 +491,23 @@ void Arpeggiator::process (juce::MidiBuffer& midi, int numSamples, const ArpConf
         {
             removeHeld (message.getNoteNumber());
         }
+        else if (message.isSustainPedalOn() || message.isSustainPedalOff())
+        {
+            // Il latch. Il messaggio passa comunque a valle dal ramo dei controller piu' sotto
+            // — vedi `sustain_` — quindi qui si interpreta soltanto.
+            sustain_ = message.isSustainPedalOn();
+
+            if (! sustain_)
+                dropLatchedKeys();
+
+            output_.addEvent (message, eventPos);
+        }
         else if (message.isAllNotesOff() || message.isAllSoundOff())
         {
             // Passa intatto — le voci devono vederlo — ma prima si chiudono le note emesse: il
             // messaggio dell'host parla dei tasti, non dell'arpeggio che ci sta sopra.
             heldCount_ = 0;
+            sustain_ = false;
             flushSounding (eventPos);
             output_.addEvent (message, eventPos);
         }

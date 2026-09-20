@@ -110,6 +110,7 @@ target_sources(XerumTests
         Tests/GlideVoiceModeTests.cpp
         Tests/ArpeggiatorTests.cpp
         Tests/PitchBendTests.cpp
+        Tests/SustainPedalTests.cpp
         Source/dsp/WavetableBlob.cpp
         Source/dsp/MipTable.cpp
         Source/dsp/WavetableStore.cpp

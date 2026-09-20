@@ -190,6 +190,28 @@ void SynthEngine::publishSourceLevels (float lfo, float env, float env2, float v
     modWheelLevel_.store (modWheel_, std::memory_order_relaxed);
 }
 
+void SynthEngine::setSustainPedal (bool down) noexcept
+{
+    if (down == sustainPedal_)
+        return;
+
+    sustainPedal_ = down;
+    voices_.setSustainPedal (down);
+
+    if (down)
+        return;
+
+    // Il piede si e' alzato: i tasti che teneva lui si spengono sul keybed adesso, insieme alle
+    // voci che VoiceManager sta rilasciando nella riga qui sopra.
+    activeNotesLo_.store (activeNotesLo_.load (std::memory_order_relaxed) & ~sustainedNotesLo_,
+                          std::memory_order_relaxed);
+    activeNotesHi_.store (activeNotesHi_.load (std::memory_order_relaxed) & ~sustainedNotesHi_,
+                          std::memory_order_relaxed);
+
+    sustainedNotesLo_ = 0;
+    sustainedNotesHi_ = 0;
+}
+
 void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
 {
     if (message.isController() && message.getControllerNumber() == 1)
@@ -197,6 +219,16 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
         // Mod wheel: sorgente `mw` del matrix, 0..1. Prima degli altri rami perche' e' il caso
         // piu' frequente fra i messaggi non di nota e non ha niente a che vedere con le voci.
         modWheel_ = (float) message.getControllerValue() / 127.0f;
+        return;
+    }
+
+    if (message.isSustainPedalOn() || message.isSustainPedalOff())
+    {
+        // L'arbitraggio con l'arpeggiatore e' tutto in questa condizione: ad arp acceso il
+        // pedale non arma niente qui sotto, perche' l'arp lo sta gia' usando come latch dei
+        // tasti — e l'arp gira **prima** di questo strato, quindi le note che arrivano qui sono
+        // le sue, non quelle della tastiera. Vedi sustainPedal_.
+        setSustainPedal (message.isSustainPedalOn() && ! params_.arp.on);
         return;
     }
 
@@ -214,9 +246,18 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
     const auto setNoteBit = [this] (int note, bool on) noexcept
     {
         auto& slot = note < 64 ? activeNotesLo_ : activeNotesHi_;
+        auto& sustained = note < 64 ? sustainedNotesLo_ : sustainedNotesHi_;
         const auto bit = juce::uint64 (1) << (note % 64);
+
+        // A pedale giu' un tasto lasciato non si spegne: la nota si sente ancora. Il bit resta
+        // acceso e passa fra i differiti, e sara' setSustainPedal() a spegnerlo quando il piede
+        // si alza. Un tasto ripremuto esce dall'insieme: da li' in poi lo tiene il dito.
+        const auto deferred = ! on && sustainPedal_;
+
         const auto current = slot.load (std::memory_order_relaxed);
-        slot.store (on ? (current | bit) : (current & ~bit), std::memory_order_relaxed);
+        slot.store (on || deferred ? (current | bit) : (current & ~bit), std::memory_order_relaxed);
+
+        sustained = deferred ? (sustained | bit) : (sustained & ~bit);
     };
 
     // Il panico (all-notes-off e all-sound-off) azzera il mask per intero: gemella di
@@ -225,6 +266,8 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
     {
         activeNotesLo_.store (0, std::memory_order_relaxed);
         activeNotesHi_.store (0, std::memory_order_relaxed);
+        sustainedNotesLo_ = 0;
+        sustainedNotesHi_ = 0;
     };
 
     if (message.isNoteOn())
@@ -235,6 +278,9 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
     else if (message.isNoteOff())
     {
         voices_.noteOff (message.getNoteNumber());
+
+        // A pedale giu' il bit resta acceso e finisce fra i differiti: setNoteBit() con `on`
+        // falso fa esattamente questo, e non spegne niente finche' sustainPedal_ e' vero.
         setNoteBit (message.getNoteNumber(), false);
     }
     else if (message.isAllNotesOff())
@@ -627,6 +673,13 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
     // legga, cosi' la precisione campione-esatta e' quella che il ciclo ha gia' (spezza il render
     // a ogni evento) e VoiceManager non sa nemmeno che l'arp esiste. Con `arpOn` falso non tocca
     // il buffer: e' da quella riga che discende la non-regressione bit per bit.
+    // L'arp che si accende disarma il pedale, anche se nessun CC 64 arriva in questo blocco: il
+    // caso e' il piede gia' sul pedale quando si preme il pulsante dell'arp, dove senza questa
+    // riga il sustain resterebbe armato sotto l'arpeggio e le sue note si accumulerebbero. Il
+    // ramo CC 64 di handleMidiEvent copre l'altro verso, l'arp che si spegne.
+    if (params_.arp.on)
+        setSustainPedal (false);
+
     arp_.process (midi, numSamples, params_.arp,
                   ArpTransport { (double) params_.bpm, params_.ppqPosition, params_.transportPlaying });
 

@@ -1,5 +1,7 @@
 #include "engine/VoiceManager.h"
 
+#include <array>
+
 namespace engine
 {
 void VoiceManager::prepare (double sampleRate) noexcept
@@ -12,6 +14,8 @@ void VoiceManager::prepare (double sampleRate) noexcept
     monoVoiceIndex_ = -1;
     lastStartedNote_ = -1;
     soundedSinceLastNoteOn_ = false;
+    sustainPedal_ = false;
+    clearSustainedBits();
 }
 
 void VoiceManager::reset() noexcept
@@ -24,6 +28,8 @@ void VoiceManager::reset() noexcept
     monoVoiceIndex_ = -1;
     lastStartedNote_ = -1;
     soundedSinceLastNoteOn_ = false;
+    sustainPedal_ = false;
+    clearSustainedBits();
 }
 
 SynthVoice* VoiceManager::findFreeVoice() noexcept
@@ -263,6 +269,10 @@ void VoiceManager::monoNoteOff (int midiNote) noexcept
 
 void VoiceManager::noteOn (int midiNote, float velocity) noexcept
 {
+    // Il dito ha ripreso il tasto: da adesso lo tiene lui, non il pedale. Senza questa riga,
+    // alzare il pedale rilascerebbe una nota che qualcuno sta ancora premendo.
+    setSustainedBit (midiNote, false);
+
     if (mode_ != VoiceMode::poly)
     {
         monoNoteOn (midiNote, velocity);
@@ -327,6 +337,14 @@ void VoiceManager::noteOn (int midiNote, float velocity) noexcept
 
 void VoiceManager::noteOff (int midiNote) noexcept
 {
+    // Il pedale differisce il note-off per intero: niente tocca `held_`, niente tocca la voce.
+    // Vedi setSustainPedal() per perche' differire e non tradurre.
+    if (sustainPedal_)
+    {
+        setSustainedBit (midiNote, true);
+        return;
+    }
+
     if (mode_ != VoiceMode::poly)
     {
         monoNoteOff (midiNote);
@@ -343,6 +361,11 @@ void VoiceManager::allNotesOff() noexcept
 {
     held_.clear();
 
+    // Le note differite se ne vanno con le voci che le tenevano: riapplicare i loro note-off
+    // dopo un panico vorrebbe dire rilasciare qualunque nota nuova abbia nel frattempo preso
+    // quel numero. Il pedale invece resta dov'e', perche' il piede non si e' mosso.
+    clearSustainedBits();
+
     for (auto& voice : voices_)
         voice.stop();
 }
@@ -351,9 +374,59 @@ void VoiceManager::allSoundOff() noexcept
 {
     held_.clear();
     monoVoiceIndex_ = -1;
+    clearSustainedBits();
 
     for (auto& voice : voices_)
         voice.kill();
+}
+
+void VoiceManager::setSustainPedal (bool down) noexcept
+{
+    if (down == sustainPedal_)
+        return;
+
+    sustainPedal_ = down;
+
+    if (! down)
+        releaseSustainedNotes();
+}
+
+void VoiceManager::releaseSustainedNotes() noexcept
+{
+    if (sustainedLo_ == 0 && sustainedHi_ == 0)
+        return;
+
+    // Si raccoglie **prima** di agire: ogni noteOff() qui sotto riscrive `held_`, e scorrere una
+    // lista che si accorcia sotto i piedi salterebbe elementi. Centoventotto interi sullo stack,
+    // nessuna allocazione: le note MIDI distinte non possono essere di piu'.
+    std::array<int, 128> pending {};
+    int count = 0;
+
+    // L'ordine e' quello di `held_`, cioe' dal tasto premuto per primo all'ultimo, e non e'
+    // cosmetico: in Mono ogni note-off che tocca la nota che si sente fa tornare la voce sul
+    // tasto precedente e — in Mono, non in Legato — ritriggerare l'inviluppo. Rilasciando dalla
+    // piu' recente, un accordo di tre note tenuto dal pedale darebbe tre ritrigger, cioe' un
+    // blip udibile al sollevamento del piede. Dalla piu' vecchia ne da' zero: i primi due
+    // note-off non riguardano la nota che suona, e l'ultimo trova la lista vuota e chiude.
+    for (int i = 0; i < held_.count; ++i)
+        if (sustainedBit (held_.keys[(size_t) i].note))
+            pending[(size_t) count++] = held_.keys[(size_t) i].note;
+
+    // E poi cio' che da `held_` e' gia' uscito: la lista tiene sedici tasti e a tastiera piena
+    // scarta il piu' vecchio, quindi con il pedale giu' e piu' di sedici note una nota differita
+    // puo' non esserci piu'. Senza questa spazzata resterebbe appesa finche' non arriva un
+    // panico.
+    for (int note = 0; note < 128; ++note)
+        if (sustainedBit (note) && ! held_.contains (note))
+            pending[(size_t) count++] = note;
+
+    // Prima del ciclo: `sustainPedal_` e' gia' falso, ma i bit no, e un bit ancora acceso non
+    // cambierebbe niente adesso — si azzerano qui perche' e' il punto in cui l'insieme ha finito
+    // di servire, non dopo un ciclo che potrebbe uscire da un ramo qualsiasi.
+    clearSustainedBits();
+
+    for (int i = 0; i < count; ++i)
+        noteOff (pending[(size_t) i]);
 }
 
 void VoiceManager::render (float* outL, float* outR, int numSamples) noexcept
