@@ -402,10 +402,10 @@ Expected: FAIL — `transition-all` presente, `active:duration-0` assente.
 
 - [ ] **Step 3: Replace transition-all in the shadcn primitive**
 
-In `WebUI/packages/ui/src/components/ui/button.tsx`, nella stringa base della `cva` (riga 6), sostituire `transition-all` con:
+In `WebUI/packages/ui/src/components/ui/button.tsx`, nella stringa base della `cva` (riga 6), sostituire `transition-all` con la lista esplicita. La lista deve coprire **ogni** proprietà che le varianti del bottone cambiano davvero: `color` perché `ghost` e `outline` hanno `hover:text-foreground`, `opacity` perché la stessa stringa base porta `disabled:opacity-50`. Una lista che ne dimentica una è una regressione travestita da fix — che è esattamente ciò che questa task rimuove.
 
 ```
-transition-[transform,box-shadow,background-color,border-color] duration-(--dur-press) ease-snap active:duration-0
+transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-(--dur-press) ease-snap active:duration-0
 ```
 
 - [ ] **Step 4: Give the focus ring its own entrance**

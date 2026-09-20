@@ -80,6 +80,8 @@ Questo blocco è l'unico punto, oltre a `motion.ts` e al suo specchio in `theme.
 
 `packages/ui/src/components/ui/button.tsx:6` usa `transition-all`. Anima anche `background-color` e `border-color`, quindi alla pressione il colore insegue il transform invece di arrivare insieme a lui. Si sostituisce con una lista esplicita di proprietà su `--dur-press` / `--ease-snap`.
 
+La lista va compilata guardando le varianti, non a memoria: deve contenere `color` (`ghost` e `outline` cambiano il colore del testo) e `opacity` (`disabled:opacity-50`) oltre a `transform`, `box-shadow`, `background-color` e `border-color`. Una proprietà dimenticata non sparisce: smette di animare e scatta, ed è una regressione più silenziosa di quella che questa sezione corregge.
+
 ### Prima inversione: la pressione
 
 Discesa **istantanea** (0 ms), risalita in `--dur-press`. Il dito è più veloce della molla, non il contrario. `active:translate-y-px` e `active:shadow-none` (`Button.tsx:21`) restano: guadagnano solo la curva sul ritorno.
