@@ -1,5 +1,7 @@
 #include "EngineTestHelpers.h"
 
+#include "dsp/StereoDelay.h"
+
 #include "dsp/MipTable.h"
 #include "dsp/Saturation.h"
 #include "dsp/PlateReverb.h"
@@ -125,6 +127,15 @@ struct ModulationStressTests final : juce::UnitTest
         float reverbPredelaySeconds { 0.0f };
         float reverbMix01 { 1.0f };
 
+        /** Il delay, terzo effetto: acceso vuol dire feedback e mix a fondo corsa, damp aperto. Il
+            tempo sceglie il regime: breve (raw 0.3, ~10 ms) e' un comb quasi risonante, lungo
+            (raw 0.78, il default, ~376 ms) sono echi distinti che si sommano alla nota tenuta. */
+        bool delay { false };
+        float delayTimeRaw { 0.78f };
+        float delayFeedback01 { 1.0f };
+        float delayDamp01 { 0.0f };
+        float delayMix01 { 1.0f };
+
         /**
          * Fattore applicato al gain master, cioe' all'**unico** stadio che sta fra lo stadio FX
          * e il soft clipper.
@@ -194,6 +205,12 @@ struct ModulationStressTests final : juce::UnitTest
         p.reverbDamp01 = cfg.reverbDamp01;
         p.reverbPredelaySeconds = cfg.reverbPredelaySeconds;
         p.reverbMix01 = cfg.reverbMix01;
+
+        p.delayOn = cfg.delay;
+        p.delayTimeRaw = cfg.delayTimeRaw;
+        p.delayFeedback01 = cfg.delayFeedback01;
+        p.delayDamp01 = cfg.delayDamp01;
+        p.delayMix01 = cfg.delayMix01;
         p.modBase.fill (0.5f);
 
         juce::MidiBuffer midi;
@@ -324,7 +341,12 @@ struct ModulationStressTests final : juce::UnitTest
         // ringout); il riverbero a size e decay a fondo corsa ne chiede dodici, che e' la coda
         // dichiarata all'host piu' un margine — e che questo numero sia cosi' grande e' proprio
         // cio' che getTailLengthSeconds() e' andato a dire.
-        const auto tailSeconds = cfg.reverb ? 12.08 : (cfg.chorus ? 1.08 : 0.08);
+        // Il delay a feedback 90 % su ~376 ms scende sotto -80 dB in 87 ripetizioni: ~33 s. La
+        // coda si prende dalla stessa formula che il motore usa per il ringout, piu' mezzo secondo.
+        const auto delayTail = cfg.delay
+                                   ? (double) dsp::StereoDelay::tailSeconds (params::delayTimeSecondsFromRaw (cfg.delayTimeRaw, false, 120.0f), cfg.delayFeedback01) + 0.5
+                                   : 0.0;
+        const auto tailSeconds = juce::jmax (cfg.reverb ? 12.08 : (cfg.chorus ? 1.08 : 0.08), delayTail);
         const int releaseBlocks = (int) std::ceil (tailSeconds * cfg.sampleRate / 128.0) + 10;
         renderPeak (synth, releaseBlocks, *this);
         const auto tail = renderPeak (synth, 20, *this);
@@ -737,6 +759,18 @@ struct ModulationStressTests final : juce::UnitTest
             const auto reverbIn = (double) sweep (store, reverbFactory, 240, "riverbero ai default") / scale;
             const auto everythingIn = (double) sweep (store, everything, 240, "chorus e riverbero a fondo corsa") / scale;
 
+            // Il delay, nei suoi due regimi: echi lunghi al tempo di default e il comb quasi
+            // risonante dei tempi brevissimi, sempre a feedback e mix a fondo corsa.
+            Config delayLong = dry;
+            delayLong.delay = true;
+
+            Config delayShort = dry;
+            delayShort.delay = true;
+            delayShort.delayTimeRaw = 0.3f;
+
+            const auto delayLongIn = (double) sweep (store, delayLong, 240, "delay a 376 ms, feedback e mix 100 %") / scale;
+            const auto delayShortIn = (double) sweep (store, delayShort, 240, "delay a 10 ms, feedback e mix 100 %") / scale;
+
             const auto report = [this, dryIn] (const char* what, double peak)
             {
                 logMessage (juce::String ("matrix pieno, picco al soft clipper, ") + what + ": "
@@ -752,6 +786,8 @@ struct ModulationStressTests final : juce::UnitTest
             report ("chorus a mix 100 %, feedback 100 %", bothIn);
             report ("riverbero ai valori di fabbrica", reverbIn);
             report ("chorus e riverbero, tutto a fondo corsa", everythingIn);
+            report ("delay a 376 ms, feedback e mix 100 %", delayLongIn);
+            report ("delay a 10 ms, feedback e mix 100 %", delayShortIn);
 
             // **Il contratto che conta.** Ai valori di fabbrica il chorus e' acceso su tutti e
             // dodici i preset, quindi non gli e' concesso di spostare il margine: il mix e'
@@ -794,6 +830,17 @@ struct ModulationStressTests final : juce::UnitTest
             expect (everythingDb < 0.0, "con i due effetti a fondo corsa il picco al clipper sale di "
                                             + juce::String (everythingDb, 2)
                                             + " dB: il riverbero a mix pieno deve sostituire i picchi, non sommarcisi");
+
+            // Il delay sta sotto il tetto di +8 dBFS ai tempi da delay (echi che si sommano a una
+            // nota tenuta: al piu' il doppio dell'ampiezza, e in pratica meno perche' arrivano
+            // scorrelati); ai tempi brevissimi e' un comb con 1/(1-0.9) = 10 di guadagno ai
+            // picchi, cioe' un risonatore, e come il chorus a feedback pieno gli si concede il
+            // tetto in cui il clipper smette di essere una rete, +14 dBFS.
+            expect (delayLongIn < 2.512, "il delay a 376 ms presenta " + juce::String (delayLongIn, 3)
+                                             + " al clipper (" + juce::String (juce::Decibels::gainToDecibels (delayLongIn), 2)
+                                             + " dBFS): oltre il tetto di +8 dBFS del gain staging");
+            expect (delayShortIn < 5.0118723, "il delay a 10 ms presenta " + juce::String (delayShortIn, 3)
+                                                  + " al clipper, oltre i +14 dBFS in cui smette di essere una rete");
         }
 
         beginTest ("fuzz a semi fissi: matrix casuale, parametri casuali, eventi casuali");
