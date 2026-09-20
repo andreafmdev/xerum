@@ -183,6 +183,27 @@ describe("SynthWindow on the bridge", () => {
     expect(screen.getByRole("button", { name: "Remove ENV2 → Filter · Resonance" })).toBeInTheDocument();
   });
 
+  it("a knob the engine cannot modulate refuses the drop and shows no drop target", async () => {
+    const b = mount(undefined, { initialTab: "env" });
+    await act(async () => {});
+    const knob = screen.getByRole("slider", { name: "Attack" }).closest("[data-slot=knob]")!;
+    expect(knob).not.toHaveAttribute("data-drop-target");
+    const dataTransfer = { types: ["text/x-mod"], getData: () => "env" };
+    fireEvent.dragOver(knob, { dataTransfer });
+    fireEvent.drop(knob, { dataTransfer });
+    expect((await b.getState()).mods).not.toContainEqual(expect.objectContaining({ target: "att" }));
+  });
+
+  it("a saved assignment on a target the engine ignores is listed as inert, and can still be removed", async () => {
+    const b = mount(new FakeBackend({ state: { mods: [{ src: "lfo", target: "att", depth: 0.5 }] } }), { initialTab: "mod" });
+    await act(async () => {});
+    const row = screen.getByRole("button", { name: "Remove LFO → Env · Attack" }).closest("[data-inert]") as HTMLElement;
+    expect(row).toHaveAttribute("data-inert", "true");
+    expect(within(row).getByText(/non modulabile/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Remove LFO → Env · Attack" }));
+    expect((await b.getState()).mods).toHaveLength(0);
+  });
+
   it("external state change updates the matrix", async () => {
     const b = mount(undefined, { initialTab: "mod" });
     await act(async () => {});

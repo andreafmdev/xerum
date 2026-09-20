@@ -22,6 +22,7 @@
 #include <juce_core/juce_core.h>
 
 #include <algorithm>
+#include <iterator>
 #include <cmath>
 #include <limits>
 #include <map>
@@ -74,8 +75,11 @@ struct ModulationStressTests final : juce::UnitTest
         tenerlo fuori da qui lascia intatta la taratura 1.4..2.512 del picco al clipper, misurata
         su questo esatto riempimento, e conserva il passo dispari da cui dipende l'alternanza dei
         segni descritta sopra. */
-    static constexpr int kGainTargets = 7;
-    static_assert (kGainTargets <= engine::kNumModTargets, "kGainTargets non puo' superare i target del motore");
+    static constexpr params::ParamSlot kGainTargetSlots[] = {
+        params::ParamSlot::cutoff, params::ParamSlot::res, params::ParamSlot::wtpos, params::ParamSlot::level,
+        params::ParamSlot::pan, params::ParamSlot::fine, params::ParamSlot::drive,
+    };
+    static constexpr int kGainTargets = (int) std::size (kGainTargetSlots);
 
     static engine::ModSnapshot fullSnapshot() noexcept
     {
@@ -84,7 +88,7 @@ struct ModulationStressTests final : juce::UnitTest
         for (int i = 0; i < engine::ModSnapshot::kMaxRoutes; ++i)
         {
             const auto src = (engine::ModSource) ((i / kGainTargets) % (int) engine::ModSource::count);
-            mods.routes[i] = { src, i % kGainTargets, (i % 2 == 0) ? 1.0f : -1.0f };
+            mods.routes[i] = { src, engine::modTargetIndexFor (kGainTargetSlots[i % kGainTargets]), (i % 2 == 0) ? 1.0f : -1.0f };
         }
 
         mods.count = engine::ModSnapshot::kMaxRoutes;

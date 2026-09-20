@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lfoShape, liveValue, modsFor, MOD_SOURCES, SOURCE_LABEL, SOURCE_TONE, type ModAssignment } from "./mod";
+import { isModTarget, lfoShape, liveValue, modsFor, MOD_SOURCES, SOURCE_LABEL, SOURCE_TONE, type ModAssignment } from "./mod";
 import { addModPure } from "../juce/hooks";
 
 describe("lfoShape", () => {
@@ -90,5 +90,14 @@ describe("parità con il DSP", () => {
       expect(lfoShape("Square", ph)).toBeCloseTo(ph < 0.5 ? 1 : -1, 5);
       expect(lfoShape("S&H", ph)).toBeCloseTo(Math.sin(Math.floor(ph * 8) * 7.3), 5);
     }
+  });
+});
+
+describe("isModTarget", () => {
+  it("dice quali knob il motore sa modulare, dalla lista generata", () => {
+    expect(isModTarget("cutoff")).toBe(true);
+    expect(isModTarget("warp")).toBe(true);
+    expect(isModTarget("att")).toBe(false);
+    expect(isModTarget("wtIndex")).toBe(false);
   });
 });

@@ -58,6 +58,14 @@ export function validate(ps) {
     const def = typeof p.default === "boolean" ? (p.default ? 1 : 0) : p.default;
     if (typeof def !== "number" || !Number.isFinite(def)) throw new Error(`${where}: default assente o non numerico`);
 
+    // Un target del mod matrix e' un valore normalizzato 0..1 su cui SynthVoice somma depth x
+    // livello: solo Kind::Float ha quel dominio (l'engine lo ribadisce con uno static_assert), e
+    // senza slot il motore non lo leggerebbe. E' la guardia del "bug delle quattro ottave" al
+    // livello del dato.
+    if (p.modTarget !== undefined && typeof p.modTarget !== "boolean") throw new Error(`${where}: "modTarget" deve essere booleano`);
+    if (p.modTarget && p.kind !== "float") throw new Error(`${where}: modTarget su un kind "${p.kind}": solo i float hanno un valore normalizzato modulabile`);
+    if (p.modTarget && !p.slot) throw new Error(`${where}: modTarget richiede "slot": true, altrimenti il motore non legge il parametro`);
+
     const [lo, hi] = defaultDomain(p);
     if (def < lo || def > hi)
       throw new Error(`${where}: default ${def} fuori da ${lo}..${hi} (dominio del kind "${p.kind}")`);
@@ -68,6 +76,7 @@ export function generate(json) {
   const ps = json.params;
   validate(ps);
   const slots = ps.filter((p) => p.slot);
+  const targets = ps.filter((p) => p.modTarget);
   const header = [
     "// GENERATED da Source/parameters/parameters.json — non modificare a mano.",
     "// Rigenera con: node scripts/gen-params.mjs",
@@ -148,6 +157,16 @@ export function generate(json) {
     ...chunk(slots.map((p) => String(ps.indexOf(p))), 16).map((row) => `    ${row.join(", ")},`),
     "};",
     "",
+    "// --- target del mod matrix -----------------------------------------------------------",
+    "//",
+    "// I parametri con \"modTarget\": true, nell'ordine di parameters.json. L'indice qui dentro e' la",
+    "// valuta con cui il thread audio somma le modulazioni (EngineParams::modBase); gli id testuali",
+    "// sono quelli che la UI scrive nel nodo MODS e che state::buildModSnapshot risolve. Solo",
+    "// Kind::Float con slot: lo impone il generatore, e engine/ModMatrix.h lo ribadisce a compile",
+    "// time. Nessuno stato salvato contiene un indice: riordinare il JSON non rompe un preset.",
+    `inline constexpr ParamSlot kModTargets[] = { ${targets.map((p) => `ParamSlot::${p.id}`).join(", ")} };`,
+    `inline constexpr const char* kModTargetIds[] = { ${targets.map((p) => cstr(p.id)).join(", ")} };`,
+    "",
     "/** La spec del parametro dietro uno slot. constexpr: non costa niente a runtime. */",
     "inline constexpr const Spec& specForSlot (ParamSlot s) noexcept",
     "{",
@@ -171,10 +190,13 @@ export function generate(json) {
     "  slot: boolean;",
     "  map?: { type: MapType; min: number; max: number; offset?: number };",
     "  default: number | boolean; unit?: string; decimals?: number; labelKind?: LabelKind; bipolar?: boolean;",
+    "  /** true se il motore lo modula (params::kModTargets): la UI accetta il drop di una sorgente solo qui. */",
+    "  modTarget?: boolean;",
     "  options?: { value: string; label: string }[];",
     "}",
     `export const GROUPS: Record<string, string> = ${JSON.stringify(json.groups)};`,
     `export const PARAM_IDS = ${JSON.stringify(ps.map((p) => p.id))} as const satisfies readonly ParamId[];`,
+    `export const MOD_TARGETS = ${JSON.stringify(targets.map((p) => p.id))} as const satisfies readonly ParamId[];`,
     "export const PARAM_SPECS: Record<ParamId, ParamSpec> = {",
     ...ps.map((p) => `  ${JSON.stringify(p.id)}: ${JSON.stringify(p)},`),
     "};",

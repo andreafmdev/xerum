@@ -21,36 +21,19 @@ namespace engine
 enum class ModSource { lfo, env, env2, vel, mw, count };
 
 /**
- * Gli otto parametri che il motore sa modulare, in ordine stabile: l'indice dentro questo array
- * e' la valuta con cui il thread audio somma le modulazioni, e indicizza EngineParams::modBase.
+ * I target del mod matrix e i loro id testuali, generati da parameters.json (`"modTarget": true`,
+ * vedi params::kModTargets in ParameterTable.h). Qui si importano e si verificano: che le due
+ * liste siano lunghe uguali, che riga per riga parlino dello stesso parametro, e che siano tutti
+ * Kind::Float — l'unico kind con un valore normalizzato 0..1 su cui modulated() puo' sommare.
  *
- * La UI lascia trascinare una sorgente su qualunque knob; le assegnazioni verso un target fuori
- * da questa lista vengono scartate quando si costruisce lo snapshot, cioe' sul message thread.
- * Il thread audio non vede mai una route che non sa applicare.
+ * L'indice dentro kModTargets e' la valuta con cui il thread audio somma le modulazioni, e
+ * indicizza EngineParams::modBase. La UI accetta il drop di una sorgente solo su questi knob
+ * (MOD_TARGETS in params.generated.ts, stessa fonte); un'assegnazione salvata verso un target
+ * fuori lista viene scartata da state::buildModSnapshot sul message thread e mostrata come
+ * inerte nel tab Mod.
  */
-inline constexpr params::ParamSlot kModTargets[] = {
-    params::ParamSlot::cutoff,
-    params::ParamSlot::res,
-    params::ParamSlot::wtpos,
-    params::ParamSlot::level,
-    params::ParamSlot::pan,
-    params::ParamSlot::fine,
-    params::ParamSlot::drive,
-    params::ParamSlot::warp,
-};
-
-/**
- * Gli id testuali degli stessi target, nello stesso ordine: sono quelli che la UI manda nel
- * nodo MODS.
- *
- * Resta una tabella scritta a mano perche' e' leggibile accanto a kModTargets, non perche' sia
- * l'unica fonte: da quando ParamSlot e kSlotTableIndex sono generati da parameters.json,
- * params::specForSlot() sa risalire allo spec di uno slot (l'ordine di ParamSlot e quello di
- * kTable non coincidono, e' kSlotTableIndex a fare il ponte). Gli static_assert qui sotto
- * verificano entrambe le cose che contano: che le due liste siano lunghe uguali, e che riga per
- * riga parlino dello stesso parametro.
- */
-inline constexpr const char* kModTargetIds[] = { "cutoff", "res", "wtpos", "level", "pan", "fine", "drive", "warp" };
+using params::kModTargets;
+using params::kModTargetIds;
 
 namespace detail
 {

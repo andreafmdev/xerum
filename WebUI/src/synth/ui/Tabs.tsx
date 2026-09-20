@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { useBoolParam, useChoiceParam, useFloatParam, useMeterValue } from "../../juce/hooks";
 import { envPath, lfoPath } from "../curves";
 import { formatValue, paramLabel, signedInt } from "../mapping";
-import { MOD_SOURCES, SOURCE_LABEL, SOURCE_TONE, type LfoShape } from "../mod";
+import { isModTarget, MOD_SOURCES, SOURCE_LABEL, SOURCE_TONE, type LfoShape } from "../mod";
 import { PARAM_SPECS, type ParamId } from "../params.generated";
 import { GlowCurve } from "./GlowCurve";
 import { ModChip } from "./ModChip";
@@ -192,11 +192,14 @@ export function ModTab() {
       {mods.map((m, i) => {
         const target = paramLabel(PARAM_SPECS[m.target]);
         const name = `${SOURCE_LABEL[m.src]} → ${target}`;
+        // Salvata su un knob che il motore non modula (preset vecchio o scritto a mano): resta in
+        // lista, attenuata e marcata, cosi' si vede e si puo' togliere. Non viene cancellata da sola.
+        const inert = !isModTarget(m.target);
         return (
-          <div key={`${m.src}-${m.target}`} className="flex h-5.5 items-center gap-2.5 text-[10px]" style={toneStyle(SOURCE_TONE[m.src])}>
+          <div key={`${m.src}-${m.target}`} data-inert={inert} className={`flex h-5.5 items-center gap-2.5 text-[10px] ${inert ? "opacity-55" : ""}`} style={toneStyle(SOURCE_TONE[m.src])}>
             <span className="w-8 font-semibold tracking-wider text-(--tone)">{SOURCE_LABEL[m.src]}</span>
             <span className="text-text-dim">→</span>
-            <span className="w-22 truncate text-muted-foreground">{target}</span>
+            <span className="w-22 truncate text-muted-foreground">{target}{inert && <em className="ml-1 not-italic text-destructive" title="Il motore non modula questo parametro">non modulabile</em>}</span>
             <input type="range" min="-1" max="1" step="0.01" value={m.depth} aria-label={`Depth ${name}`} onChange={(e) => setDepth(i, +e.target.value)} className="sx-range" />
             <span className="w-8 text-right font-mono text-foreground tabular-nums">{signedInt(Math.round(m.depth * 100))}</span>
             <button type="button" aria-label={`Remove ${name}`} onClick={() => removeMod(i)} className="text-text-dim hover:text-destructive">

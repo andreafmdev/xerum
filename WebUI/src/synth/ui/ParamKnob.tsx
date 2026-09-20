@@ -3,7 +3,7 @@ import { Knob, type KnobProps } from "@xerum/ui";
 import { defaultNormalised, type ModAssignment } from "../../juce/backend";
 import { useFloatParam } from "../../juce/hooks";
 import { formatValue } from "../mapping";
-import { modsFor, SOURCE_TONE, type ModSource } from "../mod";
+import { isModTarget, modsFor, SOURCE_TONE, type ModSource } from "../mod";
 import type { ParamId } from "../params.generated";
 import { useLiveValue } from "./meters";
 import { useSynthCtx } from "./SynthContext";
@@ -50,7 +50,9 @@ export function ParamKnob({ id, label, format, bipolar, ...rest }: Props) {
     label: label ?? p.spec.name,
     format: format ?? defaultFormat,
     bipolar: bipolar ?? p.spec.bipolar,
-    onDropMod: (src) => addMod(src as ModSource, id),
+    // Solo i target che il motore sa modulare accettano una sorgente: sugli altri il knob non si
+    // illumina e il drop non scrive nulla nello stato.
+    onDropMod: isModTarget(id) ? (src) => addMod(src as ModSource, id) : undefined,
     ...rest,
     // Il doppio clic rimanda al default: senza questo useDragValue userebbe 0 e
     // scriverebbe una gesture reale a zero verso l'host.

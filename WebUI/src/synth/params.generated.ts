@@ -11,31 +11,34 @@ export interface ParamSpec {
   slot: boolean;
   map?: { type: MapType; min: number; max: number; offset?: number };
   default: number | boolean; unit?: string; decimals?: number; labelKind?: LabelKind; bipolar?: boolean;
+  /** true se il motore lo modula (params::kModTargets): la UI accetta il drop di una sorgente solo qui. */
+  modTarget?: boolean;
   options?: { value: string; label: string }[];
 }
 export const GROUPS: Record<string, string> = {"osc":"Osc","filter":"Filter","master":"Master","env":"Env","lfo":"LFO","fx1":"Chorus","fx2":"Reverb","arp":"Arp","env2":"Env 2"};
 export const PARAM_IDS = ["oscOn","wtIndex","unison","oct","semi","wtpos","warp","detune","fine","pbRange","level","filtOn","ftype","slope","cutoff","res","drive","keytrk","voiceMode","pan","glide","volume","bypass","att","dec","sus","rel","envVel","envCurve","lshape","lsync","lretrig","lrate","lphase","lfade","fx1On","chRate","chDepth","chMix","fx2On","rvSize","rvDamp","rvMix","arpOn","arpMode","arpRate","arpGate","arpOct","arpSwing","att2","dec2","sus2","rel2","chFeedback","rvPredelay","rvDecay"] as const satisfies readonly ParamId[];
+export const MOD_TARGETS = ["wtpos","warp","fine","level","cutoff","res","drive","pan"] as const satisfies readonly ParamId[];
 export const PARAM_SPECS: Record<ParamId, ParamSpec> = {
   "oscOn": {"id":"oscOn","name":"Oscillator on","group":"osc","kind":"bool","slot":true,"default":true},
   "wtIndex": {"id":"wtIndex","name":"Wavetable","group":"osc","kind":"choice","slot":false,"default":0,"options":[{"value":"basic","label":"Basic Shapes"},{"value":"saws","label":"Analog Saws"},{"value":"grit","label":"Digital Grit"},{"value":"vocal","label":"Vocal Formant"},{"value":"bells","label":"Glass Bells"},{"value":"pwm","label":"PWM Sweep"}]},
   "unison": {"id":"unison","name":"Unison","group":"osc","kind":"choice","slot":true,"default":0,"options":[{"value":"1","label":"1"},{"value":"2","label":"2"},{"value":"4","label":"4"},{"value":"8","label":"8"}]},
   "oct": {"id":"oct","name":"Octave","group":"osc","kind":"int","slot":true,"map":{"type":"linear","min":-3,"max":3},"default":0,"unit":"OCT"},
   "semi": {"id":"semi","name":"Semitones","group":"osc","kind":"int","slot":true,"map":{"type":"linear","min":-12,"max":12},"default":0,"unit":"SEMI"},
-  "wtpos": {"id":"wtpos","name":"Position","group":"osc","kind":"float","slot":true,"map":{"type":"linear","min":1,"max":64},"default":0.32,"decimals":1},
-  "warp": {"id":"warp","name":"Warp","group":"osc","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0,"unit":"%","decimals":0},
+  "wtpos": {"id":"wtpos","name":"Position","group":"osc","kind":"float","slot":true,"modTarget":true,"map":{"type":"linear","min":1,"max":64},"default":0.32,"decimals":1},
+  "warp": {"id":"warp","name":"Warp","group":"osc","kind":"float","slot":true,"modTarget":true,"map":{"type":"linear","min":0,"max":100},"default":0,"unit":"%","decimals":0},
   "detune": {"id":"detune","name":"Detune","group":"osc","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.18,"unit":"ct","decimals":0},
-  "fine": {"id":"fine","name":"Fine","group":"osc","kind":"float","slot":true,"map":{"type":"linear","min":-100,"max":100},"default":0.5,"unit":"ct","decimals":0,"bipolar":true},
+  "fine": {"id":"fine","name":"Fine","group":"osc","kind":"float","slot":true,"modTarget":true,"map":{"type":"linear","min":-100,"max":100},"default":0.5,"unit":"ct","decimals":0,"bipolar":true},
   "pbRange": {"id":"pbRange","name":"Pitch bend range","group":"osc","kind":"int","slot":true,"map":{"type":"linear","min":0,"max":24},"default":2,"unit":"SEMI"},
-  "level": {"id":"level","name":"Level","group":"osc","kind":"float","slot":true,"map":{"type":"db","min":0,"max":1},"default":0.85,"unit":"dB","decimals":1},
+  "level": {"id":"level","name":"Level","group":"osc","kind":"float","slot":true,"modTarget":true,"map":{"type":"db","min":0,"max":1},"default":0.85,"unit":"dB","decimals":1},
   "filtOn": {"id":"filtOn","name":"Filter on","group":"filter","kind":"bool","slot":true,"default":true},
   "ftype": {"id":"ftype","name":"Filter type","group":"filter","kind":"choice","slot":true,"default":0,"options":[{"value":"LP","label":"LP"},{"value":"HP","label":"HP"},{"value":"BP","label":"BP"}]},
   "slope": {"id":"slope","name":"Slope","group":"filter","kind":"choice","slot":true,"default":1,"options":[{"value":"12","label":"12"},{"value":"24","label":"24"}]},
-  "cutoff": {"id":"cutoff","name":"Cutoff","group":"filter","kind":"float","slot":true,"map":{"type":"log","min":20,"max":20000},"default":0.62,"unit":"Hz","decimals":0,"labelKind":"hz"},
-  "res": {"id":"res","name":"Resonance","group":"filter","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.3,"unit":"%","decimals":0},
-  "drive": {"id":"drive","name":"Drive","group":"filter","kind":"float","slot":true,"map":{"type":"ms-squared","min":0,"max":24},"default":0,"unit":"dB","decimals":1},
+  "cutoff": {"id":"cutoff","name":"Cutoff","group":"filter","kind":"float","slot":true,"modTarget":true,"map":{"type":"log","min":20,"max":20000},"default":0.62,"unit":"Hz","decimals":0,"labelKind":"hz"},
+  "res": {"id":"res","name":"Resonance","group":"filter","kind":"float","slot":true,"modTarget":true,"map":{"type":"linear","min":0,"max":100},"default":0.3,"unit":"%","decimals":0},
+  "drive": {"id":"drive","name":"Drive","group":"filter","kind":"float","slot":true,"modTarget":true,"map":{"type":"ms-squared","min":0,"max":24},"default":0,"unit":"dB","decimals":1},
   "keytrk": {"id":"keytrk","name":"Key trk","group":"filter","kind":"float","slot":true,"map":{"type":"linear","min":0,"max":100},"default":0.5,"unit":"%","decimals":0},
   "voiceMode": {"id":"voiceMode","name":"Voice mode","group":"master","kind":"choice","slot":true,"default":0,"options":[{"value":"Poly","label":"Poly"},{"value":"Mono","label":"Mono"},{"value":"Legato","label":"Legato"}]},
-  "pan": {"id":"pan","name":"Pan","group":"master","kind":"float","slot":true,"map":{"type":"linear","min":-50,"max":50},"default":0.5,"decimals":0,"labelKind":"pan","bipolar":true},
+  "pan": {"id":"pan","name":"Pan","group":"master","kind":"float","slot":true,"modTarget":true,"map":{"type":"linear","min":-50,"max":50},"default":0.5,"decimals":0,"labelKind":"pan","bipolar":true},
   "glide": {"id":"glide","name":"Glide","group":"master","kind":"float","slot":true,"map":{"type":"ms-squared","min":0,"max":2000},"default":0,"unit":"ms/oct","decimals":0},
   "volume": {"id":"volume","name":"Volume","group":"master","kind":"float","slot":false,"map":{"type":"db","min":0,"max":1},"default":0.8,"unit":"dB","decimals":1},
   "bypass": {"id":"bypass","name":"Bypass","group":"master","kind":"bool","slot":true,"default":false},

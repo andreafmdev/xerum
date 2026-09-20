@@ -1,6 +1,6 @@
 import type { Tone } from "@xerum/ui";
 import type { ModAssignment, ModSource } from "../juce/backend";
-import type { ParamId } from "./params.generated";
+import { MOD_TARGETS, type ParamId } from "./params.generated";
 
 export type { ModAssignment, ModSource };
 
@@ -39,6 +39,10 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 export function liveValue(value: number, mods: ModAssignment[], sources: SourceLevels): number {
   return clamp01(mods.reduce((acc, m) => acc + m.depth * sources[m.src], value));
 }
+
+/** Se il motore modula quel parametro: la lista generata da parameters.json (`modTarget: true`),
+    la stessa di params::kModTargets. Un knob fuori lista non accetta il drop di una sorgente. */
+export const isModTarget = (id: ParamId): boolean => (MOD_TARGETS as readonly string[]).includes(id);
 
 export function modsFor(mods: ModAssignment[], target: ParamId): ModAssignment[] {
   return mods.filter((m) => m.target === target);

@@ -151,6 +151,16 @@ inline constexpr int kSlotTableIndex[kNumSlots] = {
     50, 51, 52, 53, 54, 55,
 };
 
+// --- target del mod matrix -----------------------------------------------------------
+//
+// I parametri con "modTarget": true, nell'ordine di parameters.json. L'indice qui dentro e' la
+// valuta con cui il thread audio somma le modulazioni (EngineParams::modBase); gli id testuali
+// sono quelli che la UI scrive nel nodo MODS e che state::buildModSnapshot risolve. Solo
+// Kind::Float con slot: lo impone il generatore, e engine/ModMatrix.h lo ribadisce a compile
+// time. Nessuno stato salvato contiene un indice: riordinare il JSON non rompe un preset.
+inline constexpr ParamSlot kModTargets[] = { ParamSlot::wtpos, ParamSlot::warp, ParamSlot::fine, ParamSlot::level, ParamSlot::cutoff, ParamSlot::res, ParamSlot::drive, ParamSlot::pan };
+inline constexpr const char* kModTargetIds[] = { "wtpos", "warp", "fine", "level", "cutoff", "res", "drive", "pan" };
+
 /** La spec del parametro dietro uno slot. constexpr: non costa niente a runtime. */
 inline constexpr const Spec& specForSlot (ParamSlot s) noexcept
 {
