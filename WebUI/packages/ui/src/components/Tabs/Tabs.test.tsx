@@ -62,3 +62,23 @@ describe("Tabs bar variant", () => {
     expect(screen.getByRole("tablist")).toHaveClass("w-full");
   });
 });
+
+describe("Tabs motion", () => {
+  const items = [
+    { value: "env", label: "ENV" },
+    { value: "lfo", label: "LFO" },
+  ];
+
+  it("slides a single underline in the bar variant", () => {
+    render(<Tabs variant="bar" value="env" onChange={() => {}} items={items} />);
+    const ind = screen.getByTestId("tabs-indicator");
+    expect(ind.className).toContain("transition-[translate,scale]");
+    expect(ind.className).toContain("duration-(--dur-state)");
+    expect(ind.className).toContain("ease-glass");
+  });
+
+  it("has no indicator in the plate variant, where the active plate is pressed in", () => {
+    render(<Tabs variant="plate" value="env" onChange={() => {}} items={items} />);
+    expect(screen.queryByTestId("tabs-indicator")).toBeNull();
+  });
+});
