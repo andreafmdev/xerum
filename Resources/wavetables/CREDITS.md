@@ -1,8 +1,6 @@
 # Wavetables
 
-Generate da `scripts/fetch-wavetables.mjs` il 2026-09-18, ri-processate da
-`scripts/realign-wavetables.mjs` il 2026-09-19 (allineamento di fase fra i frame,
-equalizzazione parziale dell'RMS e normalizzazione globale).
+Generate da `scripts/fetch-wavetables.mjs` il 2026-09-18.
 
 Fonte: **Adventure Kid Waveforms (AKWF)** — Kristoffer Ekstrand
 <https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE>
@@ -40,6 +38,14 @@ che stampa le metriche prima e dopo.
 | PWM Sweep (`pwm`) | `AKWF_bw_squ` |
 
 <!-- fetch-wavetables: sotto questa riga il contenuto non e' generato da questo script — non verra' toccato da una rigenerazione -->
+
+## Riallineamento delle sei tavole AKWF
+
+Le sei tavole sopra sono state ri-processate anche da `scripts/realign-wavetables.mjs` il
+2026-09-19 (allineamento di fase fra i frame, continuità di fase per armonica dove necessario,
+equalizzazione parziale dell'RMS e normalizzazione globale). Un rilancio di
+`scripts/fetch-wavetables.mjs` riscrive comunque da zero tutta la parte sopra il marcatore:
+questa nota è qui, sotto la riga di separazione, apposta perché quel rilancio non la cancelli.
 
 ## Tavole importate da Serum
 
@@ -90,15 +96,21 @@ frame grezzi originali di Serum (256 e 278 frame rispettivamente), non da un pro
 | `retro-commando` | -0.225 → 0.305 | -4.11 dB → -1.85 dB | 5.65 dB → 1.72 dB |
 | `retro-uridium-pad` | 0.013 → 0.357 | -2.95 dB → -1.60 dB | 3.18 dB → 4.42 dB |
 
-**Restano sotto lo standard delle sei tavole AKWF**, che questo stesso documento dichiara a
-correlazione minima ≥ 0.923 e peggiore perdita a metà morph ≥ -0.81 dB (vedi la sezione
-"Pipeline" sopra). Il riallineamento le ha portate dall'inusabile — frame adiacenti in
-antifase o di fatto scorrelati — al passabile, non allo standard di casa: sono le due tavole
-meno solide della dotazione. Il limite non è un passo mancante: la distanza fra gli spettri di
-ampiezza dei frame adiacenti (`midMorphLossBounds`, che nessun trattamento di sola fase può
-superare) era già -1.88 dB per `retro-commando` e -1.66 dB per `retro-uridium-pad` prima di
-qualunque intervento — due frame timbricamente molto diversi da qualche parte nella sequenza
-originale di Serum. Nessun passo oltre a quelli elencati sopra è stato tentato.
+**Restano sotto lo standard delle sei tavole AKWF.** Sulla perdita a metà morph — un confronto
+fra minimi, quindi omogeneo — le sei AKWF non scendono sotto -0.81 dB, mentre queste due
+restano a -1.85 dB e -1.60 dB. Sulla correlazione il confronto va fatto a parità di grandezza:
+la cifra 0.923 che si legge altrove per le sei AKWF è la **media** più bassa fra le sei tavole
+(quella di `vocal`), non un minimo — il minimo vero delle sei scende a 0.659 (`grit`). Sulla
+stessa media, `retro-commando` arriva a 0.974 (sopra la soglia delle AKWF), ma il suo minimo
+resta a 0.305; `retro-uridium-pad` ha media 0.789 e minimo 0.357 — sotto lo standard delle sei
+AKWF su entrambe le grandezze, media (0.923) e minimo (0.659). Il riallineamento le ha portate
+dall'inusabile — frame adiacenti in antifase o di fatto scorrelati — al passabile, non allo
+standard di casa: sono le due tavole meno solide della dotazione. Il limite non è un passo
+mancante: la distanza fra gli spettri di ampiezza dei frame adiacenti (`midMorphLossBounds`,
+che nessun trattamento di sola fase può superare) era già -1.88 dB per `retro-commando` e
+-1.66 dB per `retro-uridium-pad` prima di qualunque intervento — due frame timbricamente molto
+diversi da qualche parte nella sequenza originale di Serum. Nessun passo oltre a quelli
+elencati sopra è stato tentato.
 
 I due `.xwt` scritti da questo riallineamento **non sono più bit-identici** all'estrazione
 originale da Serum: la fase dei singoli frame è cambiata (per costruzione: è quello il

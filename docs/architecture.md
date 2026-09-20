@@ -295,7 +295,7 @@ This re-downloads the AKWF families from GitHub and overwrites the `.xwt` files 
 5. **Partial RMS equalisation**, gain `(rms_median / rms_k)^0.7` per frame. Not 1.0 on purpose: a narrowing pulse in a PWM sweep *should* get quieter, and flattening completely would erase differences in intensity that are musically correct. A constant gain per frame leaves the harmonic ratios alone, so it is timbrally neutral.
 6. **One global scale** so the loudest sample in the whole table is 1.0 — never per frame, which is what produced the loudness pumping in the first place. This mirrors Vital's `Wavetable::postProcess`.
 
-Measured end to end on the engine, RMS across a 32-step Position sweep: `pwm` went from 16.73 dB of swing to 4.19 dB, `grit` from 14.97 to 5.29; worst mid-morph loss across all six tables is now −0.81 dB and the lowest adjacent-frame correlation 0.923.
+Measured end to end on the engine, RMS across a 32-step Position sweep: `pwm` went from 16.73 dB of swing to 4.19 dB, `grit` from 14.97 to 5.29; worst mid-morph loss across all six tables is now −0.81 dB. Adjacent-frame correlation, averaged per table, is now no lower than 0.923 (`vocal`'s mean) — the true minimum over any single adjacent-frame pair across the six tables is 0.659 (`grit`).
 
 Steps 2–4 change which decisions depend on which: because equalisation brings neighbouring frames to similar levels, it *unmasks* cancellation that a loud frame next to a quiet one used to hide. The script therefore evaluates steps 3 and 4 against the finished table, not the intermediate one. Step 5 is not idempotent — running the script on its own output compresses twice.
 
@@ -336,10 +336,16 @@ adiacenti in antifase (-0.225, -4.11 dB) e `retro-uridium-pad` era di fatto scor
 -2.95 dB). Per queste due si è applicata la stessa pipeline delle sei AKWF (allineamento di
 fase, continuità di fase per armonica, equalizzazione parziale dell'RMS — opt-in per tavola,
 `REALIGN_TABLES` in `scripts/import-serum-wavetables.mjs`), dai frame grezzi originali di
-Serum: dopo la pipeline `retro-commando` arriva a correlazione 0.305 e perdita -1.85 dB,
-`retro-uridium-pad` a 0.357 e -1.60 dB. **Restano sotto lo standard delle sei AKWF** (0.923 di
-correlazione minima e -0.81 dB di perdita, vedi sopra): il riallineamento le ha portate
-dall'inusabile al passabile, non allo standard di casa, ed è un limite del materiale — la
+Serum: dopo la pipeline `retro-commando` arriva a correlazione minima 0.305 (media 0.974) e
+perdita -1.85 dB, `retro-uridium-pad` a correlazione minima 0.357 (media 0.789) e -1.60 dB.
+**Restano sotto lo standard delle sei AKWF**: sulla perdita a metà morph — un confronto fra
+minimi, quindi omogeneo — la soglia è -0.81 dB. Sulla correlazione il confronto va fatto a
+parità di grandezza: 0.923 (vedi sopra) è la **media** più bassa fra le sei AKWF (quella di
+`vocal`), non un minimo — il minimo vero delle sei scende a 0.659 (`grit`). Sulla stessa media
+`retro-commando` (0.974) sta sopra la soglia delle AKWF, ma il suo minimo (0.305) resta sotto
+0.659, e `retro-uridium-pad` sta sotto su entrambe le grandezze (0.789 di media, 0.357 di
+minimo). Il riallineamento le ha portate dall'inusabile al passabile, non allo standard di
+casa, ed è un limite del materiale — la
 distanza fra gli spettri di ampiezza dei frame adiacenti era già -1.88 dB e -1.66 dB prima di
 qualunque intervento, un limite che la sola fase non supera — non della pipeline. Sono le due
 tavole meno solide della dotazione. I due `.xwt` non sono più bit-identici all'estrazione
