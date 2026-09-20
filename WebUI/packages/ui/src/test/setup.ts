@@ -22,3 +22,25 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   }
   globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
 }
+
+// jsdom non implementa matchMedia: senza, ogni componente che chiede prefers-reduced-motion
+// solleva invece di rispondere.
+let reduced = false;
+
+export function setReducedMotion(on: boolean) {
+  reduced = on;
+}
+
+globalThis.matchMedia ??= ((query: string) =>
+  ({
+    matches: reduced && query.includes("prefers-reduced-motion"),
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  }) as unknown as MediaQueryList) as typeof matchMedia;
+
+afterEach(() => setReducedMotion(false));

@@ -107,3 +107,22 @@ html body {
   from { opacity: 0;   scale: 0.9; }
   to   { opacity: 0.8; scale: 1; }
 }
+
+/* A movimento ridotto non sparisce nessuna funzione: si smette di spostare pixel.
+   L'opacity resta, perché è ciò che rende leggibile un cambio di stato.
+   0.01ms non è un token --dur-*: è l'idioma standard per "praticamente zero" (0 netto fa
+   sì che alcuni browser ignorino la transizione invece di risolverla all'istante), quindi
+   resta scritto a mano dentro questo blocco marcato. */
+/* reduced-motion-block:start */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-property: opacity !important;
+    transition-duration: var(--dur-press) !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* reduced-motion-block:end */
