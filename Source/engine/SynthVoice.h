@@ -273,7 +273,7 @@ private:
         `detune` cambiano davvero: exp2() non ha niente da fare in un loop per campione. */
     void updateUnison (int voices, float detuneCents) noexcept;
 
-    /** Ricalcola i livelli delle cinque sorgenti e riapplica i sette target modulabili.
+    /** Ricalcola i livelli delle cinque sorgenti e riapplica gli otto target modulabili.
         Gira una volta per blocco (o per fetta fra due eventi MIDI), mai per campione. */
     void applyModulation() noexcept;
 
@@ -461,6 +461,7 @@ private:
     juce::SmoothedValue<float> smoothedFramePosition_;
     juce::SmoothedValue<float> smoothedLevel_;
     juce::SmoothedValue<float> smoothedPan_;
+    juce::SmoothedValue<float> smoothedWarp_;
 
     /**
      * Cio' che la modulazione aggiunge al valore rampato, ricalcolato a ogni sotto-fetta di
@@ -491,6 +492,7 @@ private:
     float framePositionMod_ { 0.0f };
     float levelMod_ { 0.0f };
     float panMod_ { 0.0f };
+    float warpMod_ { 0.0f };
 
     // --- modulazione ---
 

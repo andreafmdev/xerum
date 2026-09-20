@@ -248,6 +248,7 @@ struct ParamConversionTests final : juce::UnitTest
                     case params::ParamSlot::pan:    return 0.55f;
                     case params::ParamSlot::fine:   return 0.66f;
                     case params::ParamSlot::drive:  return 0.77f;
+                    case params::ParamSlot::warp:   return 0.88f;
                     default:                        return 0.5f;
                 }
             };
@@ -266,9 +267,25 @@ struct ParamConversionTests final : juce::UnitTest
             expectWithinAbsoluteError (base (params::ParamSlot::pan), 0.55f, 1.0e-6f);
             expectWithinAbsoluteError (base (params::ParamSlot::fine), 0.66f, 1.0e-6f);
             expectWithinAbsoluteError (base (params::ParamSlot::drive), 0.77f, 1.0e-6f);
+            expect (engine::modTargetIndexFor (params::ParamSlot::warp) >= 0, "warp e' un target del mod matrix");
+            if (engine::modTargetIndexFor (params::ParamSlot::warp) >= 0)
+                expectWithinAbsoluteError (base (params::ParamSlot::warp), 0.88f, 1.0e-6f);
 
             // I campi denormalizzati restano quelli di sempre: le basi si aggiungono, non sostituiscono.
             expectWithinAbsoluteError (p.cutoffHz, params::cutoffHzFromRaw (0.11f), 1.0e-2f);
+        }
+
+        beginTest ("warp ed envCurve arrivano in EngineParams nelle unita' del motore");
+        {
+            const auto rawFor = [] (params::ParamSlot slot) noexcept
+            {
+                if (slot == params::ParamSlot::warp) return 0.25f;      // 25 % -> 0.25
+                if (slot == params::ParamSlot::envCurve) return 0.75f;  // -100..100 -> +50 -> 0.5
+                return 0.5f;
+            };
+            const auto p = params::collectEngineParams (rawFor);
+            expectWithinAbsoluteError (p.warp, 0.25f, 1.0e-6f);
+            expectWithinAbsoluteError (p.envCurve, 0.5f, 1.0e-6f);
         }
 
         beginTest ("i parametri dell'LFO arrivano grezzi in EngineParams");

@@ -300,7 +300,7 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
  * decideva l'host.
  *
  * Il costo non e' lineare nel numero di sotto-fette perche' non lo e' il lavoro che ognuna fa:
- * applyModulation() denormalizza sette target (due con std::pow), updateCutoff() chiama
+ * applyModulation() denormalizza otto target (due con std::pow), updateCutoff() chiama
  * std::exp2 e setCutoffHz() std::tan. Misurato in Release nel caso peggiore (16 voci, unison 8,
  * una route lfo -> cutoff, blocco da 512 a 48 kHz) il prezzo di scendere da 128 a 32 campioni di
  * fetta e' meno di mezzo punto percentuale del budget del blocco. La tabella sta nel commento di

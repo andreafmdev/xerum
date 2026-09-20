@@ -951,3 +951,143 @@ struct WavetableInterpolationTests final : juce::UnitTest
 };
 
 static WavetableInterpolationTests wavetableInterpolationTests;
+
+/**
+ * Warp = sync: la fase letta corre 1 + 3·warp volte per periodo, cioe' da uno a quattro cicli
+ * del frame dentro un periodo della nota, con lo stesso mapping che WaveDisplay disegna.
+ */
+struct WarpTests final : juce::UnitTest
+{
+    WarpTests() : juce::UnitTest ("WavetableOscillator: warp (sync)", "dsp") {}
+
+    static std::vector<float> render (dsp::WavetableOscillator& osc, int numSamples)
+    {
+        std::vector<float> out ((size_t) numSamples);
+        for (auto& v : out)
+            v = osc.getSample();
+        return out;
+    }
+
+    /** Modulo dello spettro (bin 0..N/2) del segnale, N potenza di due. */
+    static std::vector<float> magnitudes (const std::vector<float>& x, int fftOrder)
+    {
+        std::vector<float> data (x.size() * 2, 0.0f);
+        std::copy (x.begin(), x.end(), data.begin());
+        juce::dsp::FFT fft (fftOrder);
+        fft.performFrequencyOnlyForwardTransform (data.data(), true);
+        data.resize (x.size() / 2 + 1);
+        return data;
+    }
+
+    static double centroidBin (const std::vector<float>& mags)
+    {
+        double num = 0.0, den = 0.0;
+        for (size_t i = 1; i < mags.size(); ++i)
+        {
+            const auto e = (double) mags[i] * (double) mags[i];
+            num += (double) i * e;
+            den += e;
+        }
+        return den > 0.0 ? num / den : 0.0;
+    }
+
+    void runTest() override
+    {
+        const auto bytes = makeHarmonicBlob (2048, 200);
+        const auto view = dsp::parseXwt (bytes.data(), bytes.size());
+        const auto table = dsp::buildMipTable (*view);
+
+        constexpr double sampleRate = 44100.0;
+        constexpr int numSamples = 8192;
+        constexpr int fftOrder = 13;
+        constexpr int fundamentalBin = 55;
+        const auto noteHz = (float) (sampleRate * (double) fundamentalBin / (double) numSamples);
+
+        const auto make = [&] (float warp)
+        {
+            dsp::WavetableOscillator osc;
+            osc.prepare (sampleRate);
+            osc.setTable (table.get());
+            osc.setFramePosition (0.0f);
+            osc.setFrequencyHz (noteHz);
+            osc.setWarp (warp);
+            return osc;
+        };
+
+        beginTest ("warp 0 e' l'identita': campione per campione come senza setWarp");
+        {
+            dsp::WavetableOscillator plain;
+            plain.prepare (sampleRate);
+            plain.setTable (table.get());
+            plain.setFramePosition (0.0f);
+            plain.setFrequencyHz (noteHz);
+            auto zero = make (0.0f);
+
+            const auto a = render (plain, 4096);
+            const auto b = render (zero, 4096);
+            int mismatches = 0;
+            for (size_t i = 0; i < a.size(); ++i)
+                mismatches += (a[i] != b[i]) ? 1 : 0;   // NOLINT: uguaglianza esatta voluta
+            expectEquals (mismatches, 0, "warp 0 deve essere ×1 esatto, non un'approssimazione");
+        }
+
+        beginTest ("a warp 1 il segnale suona sulla quarta armonica: niente energia sulla prima, seconda e terza");
+        {
+            auto osc = make (1.0f);
+            const auto mags = magnitudes (render (osc, numSamples), fftOrder);
+            const auto at = [&] (int h) { return (double) mags[(size_t) (fundamentalBin * h)]; };
+            expect (at (4) > 0.0, "la quarta armonica della nota c'e'");
+            for (int h = 1; h <= 3; ++h)
+                expect (at (h) < 1.0e-3 * at (4), "armonica " + juce::String (h) + " presente a warp 1: " + juce::String (at (h) / at (4)));
+        }
+
+        beginTest ("a warp 1 il livello mipmap segue la frequenza efficace: niente sopra il limite di 4f");
+        {
+            // Il limite e' quello che levelForFrequency sceglie per 4·f, non per f: con il livello
+            // di f la tavola porterebbe quattro volte le armoniche che stanno sotto Nyquist.
+            const auto level = dsp::levelForFrequency (noteHz * 4.0f, sampleRate, table->getFrameSize());
+            const auto kept = table->harmonicsAtLevel ((int) level);
+            auto osc = make (1.0f);
+            const auto mags = magnitudes (render (osc, numSamples), fftOrder);
+
+            double inside = 0.0, above = 0.0;
+            for (size_t i = 1; i < mags.size(); ++i)
+            {
+                const auto e = (double) mags[i] * (double) mags[i];
+                if ((int) i <= kept * fundamentalBin * 4) inside += e; else above += e;
+            }
+            expect (above < 0.01 * inside, "energia sopra il limite band-limited: " + juce::String (above / inside));
+        }
+
+        beginTest ("il warp e' monotono in brillantezza e la nota resta la stessa");
+        {
+            auto o0 = make (0.0f); auto o1 = make (0.5f); auto o2 = make (1.0f);
+            const auto m0 = magnitudes (render (o0, numSamples), fftOrder);
+            const auto m1 = magnitudes (render (o1, numSamples), fftOrder);
+            const auto m2 = magnitudes (render (o2, numSamples), fftOrder);
+            expect (centroidBin (m0) < centroidBin (m1) && centroidBin (m1) < centroidBin (m2), "centroide non crescente con il warp");
+
+            // A warp intermedio il periodo e' ancora quello della nota: l'energia sta sui
+            // multipli della fondamentale (il wrap del sync e' periodico con la nota).
+            double harmonic = 0.0, total = 0.0;
+            for (size_t i = 1; i < m1.size(); ++i)
+            {
+                const auto e = (double) m1[i] * (double) m1[i];
+                total += e;
+                if ((int) i % fundamentalBin == 0) harmonic += e;
+            }
+            expect (harmonic > 0.9 * total, "energia fuori dalle armoniche della nota: " + juce::String (1.0 - harmonic / total));
+        }
+
+        beginTest ("warp fuori range viene limitato a 0..1");
+        {
+            auto a = make (1.0f); auto b = make (7.0f);
+            const auto x = render (a, 2048), y = render (b, 2048);
+            int mismatches = 0;
+            for (size_t i = 0; i < x.size(); ++i) mismatches += (x[i] != y[i]) ? 1 : 0;
+            expectEquals (mismatches, 0);
+        }
+    }
+};
+
+static WarpTests warpTests;

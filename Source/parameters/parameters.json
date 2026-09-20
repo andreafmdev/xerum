@@ -11,7 +11,7 @@
     { "id": "oct",     "name": "Octave", "group": "osc", "kind": "int", "slot": true, "map": { "type": "linear", "min": -3, "max": 3 }, "default": 0, "unit": "OCT" },
     { "id": "semi",    "name": "Semitones", "group": "osc", "kind": "int", "slot": true, "map": { "type": "linear", "min": -12, "max": 12 }, "default": 0, "unit": "SEMI" },
     { "id": "wtpos",   "name": "Position", "group": "osc", "kind": "float", "slot": true, "map": { "type": "linear", "min": 1, "max": 64 }, "default": 0.32, "decimals": 1 },
-    { "id": "warp",    "name": "Warp", "group": "osc", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.1, "unit": "%", "decimals": 0 },
+    { "id": "warp",    "name": "Warp", "group": "osc", "kind": "float", "slot": true,  "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.0, "unit": "%", "decimals": 0 },
     { "id": "detune",  "name": "Detune", "group": "osc", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.18, "unit": "ct", "decimals": 0 },
     { "id": "fine",    "name": "Fine", "group": "osc", "kind": "float", "slot": true, "map": { "type": "linear", "min": -100, "max": 100 }, "default": 0.5, "unit": "ct", "decimals": 0, "bipolar": true },
     { "id": "pbRange", "name": "Pitch bend range", "group": "osc", "kind": "int", "slot": true, "map": { "type": "linear", "min": 0, "max": 24 }, "default": 2, "unit": "SEMI" },
@@ -39,7 +39,7 @@
     { "id": "sus",     "name": "Sustain", "group": "env", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.7, "unit": "%", "decimals": 0 },
     { "id": "rel",     "name": "Release", "group": "env", "kind": "float", "slot": true, "map": { "type": "ms-squared", "min": 1, "max": 8001 }, "default": 0.35, "labelKind": "time" },
     { "id": "envVel",  "name": "Vel → amp", "group": "env", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.6, "unit": "%", "decimals": 0 },
-    { "id": "envCurve","name": "Curve", "group": "env", "kind": "float", "slot": false, "map": { "type": "linear", "min": -100, "max": 100 }, "default": 0.5, "decimals": 0, "labelKind": "signed", "bipolar": true },
+    { "id": "envCurve","name": "Curve", "group": "env", "kind": "float", "slot": true, "map": { "type": "linear", "min": -100, "max": 100 }, "default": 0.5, "decimals": 0, "labelKind": "signed", "bipolar": true },
 
     { "id": "lshape",  "name": "LFO shape", "group": "lfo", "kind": "choice", "slot": true, "default": 0,
       "options": [ { "value": "Sine", "label": "Sine" }, { "value": "Tri", "label": "Tri" }, { "value": "Saw", "label": "Saw" }, { "value": "Square", "label": "Square" }, { "value": "S&H", "label": "S&H" } ] },

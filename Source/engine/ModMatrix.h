@@ -21,7 +21,7 @@ namespace engine
 enum class ModSource { lfo, env, env2, vel, mw, count };
 
 /**
- * I sette parametri che il motore sa modulare, in ordine stabile: l'indice dentro questo array
+ * Gli otto parametri che il motore sa modulare, in ordine stabile: l'indice dentro questo array
  * e' la valuta con cui il thread audio somma le modulazioni, e indicizza EngineParams::modBase.
  *
  * La UI lascia trascinare una sorgente su qualunque knob; le assegnazioni verso un target fuori
@@ -36,6 +36,7 @@ inline constexpr params::ParamSlot kModTargets[] = {
     params::ParamSlot::pan,
     params::ParamSlot::fine,
     params::ParamSlot::drive,
+    params::ParamSlot::warp,
 };
 
 /**
@@ -49,7 +50,7 @@ inline constexpr params::ParamSlot kModTargets[] = {
  * verificano entrambe le cose che contano: che le due liste siano lunghe uguali, e che riga per
  * riga parlino dello stesso parametro.
  */
-inline constexpr const char* kModTargetIds[] = { "cutoff", "res", "wtpos", "level", "pan", "fine", "drive" };
+inline constexpr const char* kModTargetIds[] = { "cutoff", "res", "wtpos", "level", "pan", "fine", "drive", "warp" };
 
 namespace detail
 {

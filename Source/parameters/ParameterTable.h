@@ -39,7 +39,7 @@ inline constexpr Spec kTable[kNumParams] = {
     { "oct", "Octave", "osc", Kind::Int, Map::Linear, -3.0f, 3.0f, 0.0f, 0.0f, "OCT", 0, Label::None, nullptr, 0 },
     { "semi", "Semitones", "osc", Kind::Int, Map::Linear, -12.0f, 12.0f, 0.0f, 0.0f, "SEMI", 0, Label::None, nullptr, 0 },
     { "wtpos", "Position", "osc", Kind::Float, Map::Linear, 1.0f, 64.0f, 0.0f, 0.32f, nullptr, 1, Label::None, nullptr, 0 },
-    { "warp", "Warp", "osc", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.1f, "%", 0, Label::None, nullptr, 0 },
+    { "warp", "Warp", "osc", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.0f, "%", 0, Label::None, nullptr, 0 },
     { "detune", "Detune", "osc", Kind::Float, Map::Linear, 0.0f, 100.0f, 0.0f, 0.18f, "ct", 0, Label::None, nullptr, 0 },
     { "fine", "Fine", "osc", Kind::Float, Map::Linear, -100.0f, 100.0f, 0.0f, 0.5f, "ct", 0, Label::None, nullptr, 0 },
     { "pbRange", "Pitch bend range", "osc", Kind::Int, Map::Linear, 0.0f, 24.0f, 0.0f, 2.0f, "SEMI", 0, Label::None, nullptr, 0 },
@@ -116,17 +116,17 @@ inline constexpr const Spec* find (const char* id) noexcept
 // scrive l'accessore, non un ABI pubblico: nessuno stato salvato contiene un indice di slot.
 // Non coincide con l'indice dentro kTable, perche' i parametri senza slot creano dei buchi:
 // per passare dall'uno all'altro c'e' specForSlot().
-inline constexpr int kNumSlots = 52;
+inline constexpr int kNumSlots = 54;
 
 enum class ParamSlot : int
 {
-    oscOn, unison, oct, semi, wtpos, detune, fine, pbRange,
-    level, filtOn, ftype, slope, cutoff, res, drive, keytrk,
-    voiceMode, pan, glide, bypass, att, dec, sus, rel,
-    envVel, lshape, lsync, lretrig, lrate, lphase, lfade, fx1On,
-    chRate, chDepth, chMix, fx2On, rvSize, rvDamp, rvMix, arpOn,
-    arpMode, arpRate, arpGate, arpOct, arpSwing, att2, dec2, sus2,
-    rel2, chFeedback, rvPredelay, rvDecay,
+    oscOn, unison, oct, semi, wtpos, warp, detune, fine,
+    pbRange, level, filtOn, ftype, slope, cutoff, res, drive,
+    keytrk, voiceMode, pan, glide, bypass, att, dec, sus,
+    rel, envVel, envCurve, lshape, lsync, lretrig, lrate, lphase,
+    lfade, fx1On, chRate, chDepth, chMix, fx2On, rvSize, rvDamp,
+    rvMix, arpOn, arpMode, arpRate, arpGate, arpOct, arpSwing, att2,
+    dec2, sus2, rel2, chFeedback, rvPredelay, rvDecay,
     count
 };
 
@@ -134,21 +134,21 @@ static_assert ((int) ParamSlot::count == kNumSlots, "enum e conteggio devono coi
 
 /** L'id del parametro di ogni slot, nello stesso ordine dell'enum. */
 inline constexpr const char* kSlotIds[kNumSlots] = {
-    "oscOn", "unison", "oct", "semi", "wtpos", "detune", "fine", "pbRange",
-    "level", "filtOn", "ftype", "slope", "cutoff", "res", "drive", "keytrk",
-    "voiceMode", "pan", "glide", "bypass", "att", "dec", "sus", "rel",
-    "envVel", "lshape", "lsync", "lretrig", "lrate", "lphase", "lfade", "fx1On",
-    "chRate", "chDepth", "chMix", "fx2On", "rvSize", "rvDamp", "rvMix", "arpOn",
-    "arpMode", "arpRate", "arpGate", "arpOct", "arpSwing", "att2", "dec2", "sus2",
-    "rel2", "chFeedback", "rvPredelay", "rvDecay",
+    "oscOn", "unison", "oct", "semi", "wtpos", "warp", "detune", "fine",
+    "pbRange", "level", "filtOn", "ftype", "slope", "cutoff", "res", "drive",
+    "keytrk", "voiceMode", "pan", "glide", "bypass", "att", "dec", "sus",
+    "rel", "envVel", "envCurve", "lshape", "lsync", "lretrig", "lrate", "lphase",
+    "lfade", "fx1On", "chRate", "chDepth", "chMix", "fx2On", "rvSize", "rvDamp",
+    "rvMix", "arpOn", "arpMode", "arpRate", "arpGate", "arpOct", "arpSwing", "att2",
+    "dec2", "sus2", "rel2", "chFeedback", "rvPredelay", "rvDecay",
 };
 
 /** L'indice dentro kTable di ogni slot: kTable[kSlotTableIndex[i]].id e' kSlotIds[i]. */
 inline constexpr int kSlotTableIndex[kNumSlots] = {
-    0, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
-    18, 19, 20, 22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 33, 34, 35,
-    36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51,
-    52, 53, 54, 55,
+    0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+    17, 18, 19, 20, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+    34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+    50, 51, 52, 53, 54, 55,
 };
 
 /** La spec del parametro dietro uno slot. constexpr: non costa niente a runtime. */

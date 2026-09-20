@@ -29,16 +29,43 @@ export function filterPath(cut: number, res: number, type: FilterType, W: number
   return "M" + pts.join(" L");
 }
 
-/** Inviluppo ADSR con curve smussate; il sustain dura 0.35 unità. */
-export function envPath(a: number, d: number, s: number, r: number, W: number, H: number): string {
+/** Punto di controllo di una Bézier: frazione lungo il segmento e frazione della corsa in altezza. */
+type Ctrl = readonly [number, number];
+const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
+
+/**
+ * I due punti di controllo di un segmento in base a `curve` (-1..1): a 0 gli stessi di sempre
+ * (esponenziale), a +1 sulla corda (una retta), a -1 piegati di più (ginocchio anticipato), come
+ * fa dsp::ADSREnvelope. `rise` è la frazione di corsa percorsa (1 per un segmento intero).
+ */
+function bend(curve: number, soft: readonly [Ctrl, Ctrl]): [Ctrl, Ctrl] {
+  const straight: [Ctrl, Ctrl] = [[1 / 3, 1 / 3], [2 / 3, 2 / 3]];
+  const sharp: [Ctrl, Ctrl] = [[0.12, 0.97], [0.35, 1]];
+  const to = curve >= 0 ? straight : sharp;
+  const k = Math.min(1, Math.abs(curve));
+  return [
+    [lerp(soft[0][0], to[0][0], k), lerp(soft[0][1], to[0][1], k)],
+    [lerp(soft[1][0], to[1][0], k), lerp(soft[1][1], to[1][1], k)],
+  ];
+}
+
+/** Inviluppo ADSR con curve smussate; il sustain dura 0.35 unità. `curve` come `envCurve` (-1..1). */
+export function envPath(a: number, d: number, s: number, r: number, W: number, H: number, curve = 0): string {
   const t = a + d + 0.35 + r + 0.001;
   const x = (v: number) => 6 + (v / t) * (W - 12);
   const y = (v: number) => H - 6 - v * (H - 12);
+  const [a1, a2] = bend(curve, [[0.3, 0.9], [0.6, 1]]);
+  const [d1, d2] = bend(curve, [[0.3, 0.7], [0.6, 1]]);
+  const [r1, r2] = bend(curve, [[0.3, 0.7], [0.6, 1]]);
+  // Decay scende da 1 a s, release da s a 0: la frazione di corsa si traduce in altezza assoluta.
+  const dy = (f: number) => 1 - (1 - s) * f;
+  const ry = (f: number) => s * (1 - f);
+  const rel = a + d + 0.35;
   return (
-    `M${x(0)} ${y(0)} C${x(a * 0.3)} ${y(0.9)},${x(a * 0.6)} ${y(1)},${x(a)} ${y(1)}` +
-    ` C${x(a + d * 0.3)} ${y(s + (1 - s) * 0.3)},${x(a + d * 0.6)} ${y(s)},${x(a + d)} ${y(s)}` +
-    ` L${x(a + d + 0.35)} ${y(s)}` +
-    ` C${x(a + d + 0.35 + r * 0.3)} ${y(s * 0.3)},${x(a + d + 0.35 + r * 0.6)} ${y(0)},${x(t)} ${y(0)}`
+    `M${x(0)} ${y(0)} C${x(a * a1[0])} ${y(a1[1])},${x(a * a2[0])} ${y(a2[1])},${x(a)} ${y(1)}` +
+    ` C${x(a + d * d1[0])} ${y(dy(d1[1]))},${x(a + d * d2[0])} ${y(dy(d2[1]))},${x(a + d)} ${y(s)}` +
+    ` L${x(rel)} ${y(s)}` +
+    ` C${x(rel + r * r1[0])} ${y(ry(r1[1]))},${x(rel + r * r2[0])} ${y(ry(r2[1]))},${x(t)} ${y(0)}`
   );
 }
 

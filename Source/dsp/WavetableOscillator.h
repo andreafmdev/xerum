@@ -71,6 +71,19 @@ public:
     /** Posizione nel morph, 0..1 sull'intero set di frame. */
     void setFramePosition (float normalised) noexcept;
 
+    /**
+     * Warp = **sync**, 0..1: la fase letta dal frame corre `1 + 3·warp` volte per periodo della
+     * nota, cioe' da uno a quattro cicli, con il wrap a ogni periodo — lo stesso mapping che
+     * WaveDisplay disegna (`sampleWave` in WebUI/src/synth/curves.ts). Il livello mipmap si
+     * sceglie sulla frequenza **efficace** `f · (1 + 3·warp)`: cio' che si legge resta
+     * band-limited, e l'unico alias e' quello del wrap, che e' il suono del sync.
+     *
+     * Zero e' l'identita' esatta: `phase · 1.0` e `x - floor(x)` con x in [0, 1) restituiscono
+     * lo stesso double, quindi l'uscita e' bit per bit quella di prima. Costo: una
+     * moltiplicazione e un floor per campione, nessuna chiamata a libm (floor e' un'istruzione).
+     */
+    void setWarp (float amount01) noexcept;
+
     float getSample() noexcept;
 
 private:
@@ -90,5 +103,8 @@ private:
     int frameLo_ { 0 };
     int frameHi_ { 0 };
     float frameMix_ { 0.0f };
+
+    /** 1 + 3·warp: quante volte la fase letta corre per periodo. 1.0 esatto senza warp. */
+    double warpRate_ { 1.0 };
 };
 } // namespace dsp

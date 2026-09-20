@@ -157,6 +157,9 @@ inline float resonanceQFromRaw (float raw) noexcept
                            params::denormalise (*spec, raw) * 0.01f);
 }
 
+/** warp 0..100 % -> 0..1: il grezzo e' gia' la quantita' di sync. */
+inline float warpFromRaw (float raw) noexcept { return params::clamp01 (raw); }
+
 /** wtpos e' gia' 0..1 sul set di frame: nessuna denormalizzazione. */
 inline float framePositionFromRaw (float raw) noexcept { return params::clamp01 (raw); }
 
@@ -211,6 +214,7 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     constexpr auto* specSus = params::find ("sus");
     constexpr auto* specRel = params::find ("rel");
     constexpr auto* specEnvVel = params::find ("envVel");
+    constexpr auto* specEnvCurve = params::find ("envCurve");
     constexpr auto* specAtt2 = params::find ("att2");
     constexpr auto* specDec2 = params::find ("dec2");
     constexpr auto* specSus2 = params::find ("sus2");
@@ -218,10 +222,10 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
 
     // Se uno di questi manca vuol dire che parameters.json/ParameterTable.h e' cambiato
     // sotto i piedi: meglio un errore di compilazione qui che una dereferenziazione di un
-    // puntatore nullo a runtime. I sette target modulabili non compaiono qui: le loro spec
+    // puntatore nullo a runtime. Gli otto target modulabili non compaiono qui: le loro spec
     // stanno dentro le funzioni di conversione sopra, con lo stesso static_assert.
     static_assert (specKeytrk != nullptr && specAtt != nullptr && specDec != nullptr
-                       && specSus != nullptr && specRel != nullptr && specEnvVel != nullptr
+                       && specSus != nullptr && specRel != nullptr && specEnvVel != nullptr && specEnvCurve != nullptr
                        && specAtt2 != nullptr && specDec2 != nullptr && specSus2 != nullptr
                        && specRel2 != nullptr,
                    "una spec di parametro usata da collectEngineParams non e' in ParameterTable.h");
@@ -267,6 +271,8 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.sustain = params::denormalise (*specSus, rawFor (ParamSlot::sus)) * 0.01f;
     p.releaseSeconds = params::denormalise (*specRel, rawFor (ParamSlot::rel)) * 0.001f;
     p.velocityAmount = params::denormalise (*specEnvVel, rawFor (ParamSlot::envVel)) * 0.01f;
+    p.envCurve = params::denormalise (*specEnvCurve, rawFor (ParamSlot::envCurve)) * 0.01f; // -100..100 -> -1..1
+    p.warp = warpFromRaw (rawFor (ParamSlot::warp));
 
     // Il secondo inviluppo: stesse mappe dei quattro d'ampiezza (ms-squared per i tempi,
     // percentuale per il sustain), quindi stesse conversioni. Non ha un `envVel` proprio — la
@@ -375,6 +381,7 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
     p.modBase[(size_t) engine::modTargetIndexFor (ParamSlot::pan)] = rawFor (ParamSlot::pan);
     p.modBase[(size_t) engine::modTargetIndexFor (ParamSlot::fine)] = rawFor (ParamSlot::fine);
     p.modBase[(size_t) engine::modTargetIndexFor (ParamSlot::drive)] = rawFor (ParamSlot::drive);
+    p.modBase[(size_t) engine::modTargetIndexFor (ParamSlot::warp)] = rawFor (ParamSlot::warp);
 
     constexpr auto* specLphase = params::find ("lphase");
     constexpr auto* specLfade = params::find ("lfade");

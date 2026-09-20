@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-int main()
+int main (int argc, char** argv)
 {
     // Un MessageManager per il thread principale: il processore (Timer, AsyncUpdater,
     // JUCE_ASSERT_MESSAGE_THREAD) e l'APVTS lo danno per scontato. Senza, ogni suite che li
@@ -15,7 +15,12 @@ int main()
     {
         juce::UnitTestRunner runner;
         runner.setAssertOnFailure (false);
-        runner.runAllTests();
+        // `XerumTests dsp` lancia solo quella categoria: il ciclo rosso/verde su una suite non
+        // deve pagare i due minuti dell'intera batteria.
+        if (argc > 1)
+            runner.runTestsInCategory (argv[1]);
+        else
+            runner.runAllTests();
 
         for (int i = 0; i < runner.getNumResults(); ++i)
             if (const auto* result = runner.getResult (i))

@@ -31,6 +31,8 @@ struct EngineParams
 {
     bool oscOn { true };
     float framePosition { 0.0f };    // 0..1 sul set di frame
+    /** Sync dell'oscillatore, 0..1 (il knob `warp`): 0 e' l'identita'. Vedi dsp::WavetableOscillator::setWarp. */
+    float warp { 0.0f };
     int octave { 0 };
     int semitones { 0 };
     float fineCents { 0.0f };
@@ -55,6 +57,8 @@ struct EngineParams
     float sustain { 1.0f };
     float releaseSeconds { 0.1f };
     float velocityAmount { 0.0f };   // 0..1: quanto la velocity scala il picco
+    /** Forma dei segmenti dell'inviluppo d'ampiezza, -1..1 (il knob `envCurve`). Solo ENV1. */
+    float envCurve { 0.0f };
 
     /**
      * Il secondo inviluppo, quello che non governa l'ampiezza: alimenta la sorgente
@@ -133,7 +137,7 @@ struct EngineParams
     // --- modulazione ---
 
     /**
-     * Valori normalizzati 0..1 dei sette target modulabili, indicizzati da engine::kModTargets.
+     * Valori normalizzati 0..1 degli otto target modulabili, indicizzati da engine::kModTargets.
      * Sono la base su cui SynthVoice somma depth × livello sorgente **prima** di denormalizzare:
      * la stessa aritmetica di liveValue() in WebUI/src/synth/mod.ts, cosi' l'anello del knob
      * nella UI e il suono raccontano la stessa storia.

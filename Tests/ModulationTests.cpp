@@ -742,3 +742,80 @@ struct ModStateWiringTests final : juce::UnitTest
 };
 
 static ModStateWiringTests modStateWiringTests;
+
+/** warp come ottavo target: una route sul warp deve suonare come il knob. */
+struct WarpModulationTests final : public juce::UnitTest
+{
+    WarpModulationTests() : juce::UnitTest ("mod matrix: warp come target", "engine") {}
+
+    void runTest() override
+    {
+        beginTest ("mw -> warp a fondo corsa suona come il knob warp a 1, passato il transitorio delle rampe");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+            const auto renderTail = [&] (bool viaMatrix)
+            {
+                engine::SynthEngine synth; prepareEngine (synth, store);
+                engine::ModSnapshot mods;
+                if (viaMatrix)
+                {
+                    mods.count = 1;
+                    mods.routes[0] = { engine::ModSource::mw, engine::modTargetIndexFor (params::ParamSlot::warp), 1.0f };
+                    synth.setMods (mods);
+                }
+                auto p = defaultParams();
+                p.filterOn = false;   // il filtro ha memoria: confronto solo l'oscillatore
+                p.warp = viaMatrix ? 0.0f : 1.0f;
+                synth.setParams (p);
+                synth.setMasterGainLinear (1.0f);
+
+                juce::MidiBuffer m;
+                m.addEvent (juce::MidiMessage::controllerEvent (1, 1, 127), 0);
+                m.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+                std::vector<float> tail;
+                juce::MidiBuffer none;
+                for (int b = 0; b < 60; ++b)   // 160 ms; le rampe durano 20
+                {
+                    juce::AudioBuffer<float> buf (2, 128);
+                    buf.clear();
+                    synth.process (buf, b == 0 ? m : none);
+                    if (b >= 30)
+                        tail.insert (tail.end(), buf.getReadPointer (0), buf.getReadPointer (0) + 128);
+                }
+                return tail;
+            };
+
+            const auto knob = renderTail (false);
+            const auto matrix = renderTail (true);
+            float maxDiff = 0.0f, peak = 0.0f;
+            for (size_t i = 0; i < knob.size(); ++i)
+            {
+                maxDiff = std::max (maxDiff, std::abs (knob[i] - matrix[i]));
+                peak = std::max (peak, std::abs (knob[i]));
+            }
+            expect (peak > 0.01f, "il motore deve suonare");
+            expect (maxDiff < 1.0e-4f, "route e knob divergono di " + juce::String (maxDiff));
+        }
+
+        beginTest ("il knob warp cambia davvero il suono");
+        {
+            dsp::WavetableStore store; store.setActive (1);
+            const auto rmsAt = [&] (float warp)
+            {
+                engine::SynthEngine synth; prepareEngine (synth, store);
+                auto p = defaultParams();
+                p.filterOn = true; p.cutoffHz = 2000.0f;   // un passa-basso rende udibile lo spostamento di brillantezza
+                p.warp = warp;
+                synth.setParams (p);
+                juce::MidiBuffer m; m.addEvent (juce::MidiMessage::noteOn (1, 48, 1.0f), 0);
+                juce::AudioBuffer<float> b (2, 128); b.clear(); synth.process (b, m);
+                renderRms (synth, 20);
+                return renderRms (synth, 40);
+            };
+            const auto plain = rmsAt (0.0f), warped = rmsAt (1.0f);
+            expect (std::abs (plain - warped) > 0.02f * plain, "warp 0 e warp 1 suonano uguali");
+        }
+    }
+};
+
+static WarpModulationTests warpModulationTests;

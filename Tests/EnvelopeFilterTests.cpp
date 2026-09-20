@@ -714,3 +714,123 @@ struct StateVariableFilterTests final : juce::UnitTest
 };
 
 static StateVariableFilterTests stateVariableFilterTests;
+
+/**
+ * envCurve: la forma dei segmenti. 0 e' il one-pole di sempre, bit per bit; +1 porta attacco,
+ * decay e release a una retta nel tempo nominale (bersaglio "sorpassato" e livello limitato);
+ * -1 anticipa il ginocchio dell'esponenziale senza allungare la durata.
+ */
+struct EnvelopeCurveTests final : juce::UnitTest
+{
+    EnvelopeCurveTests() : juce::UnitTest ("ADSREnvelope: curve", "dsp") {}
+
+    static dsp::ADSREnvelope make (float att, float dec, float sus, float rel, float curve, bool setIt = true)
+    {
+        dsp::ADSREnvelope env;
+        env.prepare (48000.0);
+        env.setAttackSeconds (att);
+        env.setDecaySeconds (dec);
+        env.setSustainLevel (sus);
+        env.setReleaseSeconds (rel);
+        if (setIt) env.setCurve (curve);
+        return env;
+    }
+
+    static float runFor (dsp::ADSREnvelope& env, int samples)
+    {
+        float last = 0.0f;
+        for (int i = 0; i < samples; ++i) last = env.getNextSample();
+        return last;
+    }
+
+    void runTest() override
+    {
+        beginTest ("curve 0 e' l'inviluppo di sempre, campione per campione");
+        {
+            auto a = make (0.05f, 0.05f, 0.4f, 0.1f, 0.0f, false);
+            auto b = make (0.05f, 0.05f, 0.4f, 0.1f, 0.0f, true);
+            a.noteOn (0.9f); b.noteOn (0.9f);
+            int mismatches = 0;
+            for (int i = 0; i < 9600; ++i) mismatches += (a.getNextSample() != b.getNextSample()) ? 1 : 0;
+            a.noteOff(); b.noteOff();
+            for (int i = 0; i < 9600; ++i) mismatches += (a.getNextSample() != b.getNextSample()) ? 1 : 0;
+            expectEquals (mismatches, 0, "setCurve (0) non deve cambiare un bit");
+        }
+
+        beginTest ("curve +1: l'attacco e' una retta e arriva al picco nel tempo nominale");
+        {
+            auto env = make (0.1f, 10.0f, 1.0f, 0.1f, 1.0f);
+            env.noteOn (1.0f);
+            const auto halfway = runFor (env, 2400);
+            expectWithinAbsoluteError (halfway, 0.5f, 0.04f, "a meta' attacco una retta sta a 0.5");
+            const auto atEnd = runFor (env, 2400);
+            expect (atEnd >= 0.99f, "al tempo nominale l'attacco e' completo: " + juce::String (atEnd));
+        }
+
+        beginTest ("curve +1: il decay e' una retta dal picco al sustain");
+        {
+            auto env = make (0.001f, 0.05f, 0.4f, 0.1f, 1.0f);
+            env.noteOn (1.0f);
+            runFor (env, 48);
+            const auto mid = runFor (env, 1200);
+            expectWithinAbsoluteError (mid, 0.7f, 0.04f, "a meta' decay una retta 1 -> 0.4 sta a 0.7");
+            const auto end = runFor (env, 1300);
+            expectWithinAbsoluteError (end, 0.4f, 0.02f);
+        }
+
+        beginTest ("curve +1: il release e' una retta e scende sotto -80 dB entro il tempo nominale");
+        {
+            auto env = make (0.001f, 0.01f, 1.0f, 0.1f, 1.0f);
+            env.noteOn (1.0f);
+            runFor (env, 4800);
+            env.noteOff();
+            const auto mid = runFor (env, 2400);
+            expectWithinAbsoluteError (mid, 0.5f, 0.04f, "a meta' release una retta sta a 0.5");
+            runFor (env, 2400);
+            expect (! env.isActive(), "al tempo nominale il release e' finito");
+        }
+
+        beginTest ("curve -1: il ginocchio dell'attacco arriva prima, il picco sempre nel tempo nominale");
+        {
+            auto sharp = make (0.1f, 10.0f, 1.0f, 0.1f, -1.0f);
+            auto plain = make (0.1f, 10.0f, 1.0f, 0.1f, 0.0f);
+            sharp.noteOn (1.0f); plain.noteOn (1.0f);
+            const auto sharpQuarter = runFor (sharp, 1200);
+            const auto plainQuarter = runFor (plain, 1200);
+            expect (sharpQuarter > plainQuarter + 0.05f, "a -1 il livello a un quarto dell'attacco deve stare piu' in alto");
+            const auto sharpHalf = runFor (sharp, 1200);
+            expect (sharpHalf < 0.99f, "a meta' attacco non e' ancora completo");
+            const auto sharpEnd = runFor (sharp, 2400);
+            expect (sharpEnd >= 0.99f, "al tempo nominale l'attacco e' completo: " + juce::String (sharpEnd));
+        }
+
+        beginTest ("il livello non sorpassa mai il picco ne' scende sotto il sustain");
+        {
+            auto env = make (0.02f, 0.02f, 0.3f, 0.05f, 1.0f);
+            env.noteOn (0.8f);
+            float maxSeen = 0.0f, minAfterPeak = 1.0f;
+            bool peaked = false;
+            for (int i = 0; i < 4800; ++i)
+            {
+                const auto v = env.getNextSample();
+                maxSeen = std::max (maxSeen, v);
+                if (v >= 0.8f * 0.99f) peaked = true;
+                if (peaked) minAfterPeak = std::min (minAfterPeak, v);
+            }
+            expect (maxSeen <= 0.8f + 1.0e-6f, "sorpassato il picco: " + juce::String (maxSeen));
+            expect (minAfterPeak >= 0.8f * 0.3f - 1.0e-6f, "sotto il sustain: " + juce::String (minAfterPeak));
+        }
+
+        beginTest ("curve fuori range viene limitata a -1..1");
+        {
+            auto a = make (0.05f, 0.05f, 0.4f, 0.1f, 1.0f);
+            auto b = make (0.05f, 0.05f, 0.4f, 0.1f, 5.0f);
+            a.noteOn (1.0f); b.noteOn (1.0f);
+            int mismatches = 0;
+            for (int i = 0; i < 9600; ++i) mismatches += (a.getNextSample() != b.getNextSample()) ? 1 : 0;
+            expectEquals (mismatches, 0);
+        }
+    }
+};
+
+static EnvelopeCurveTests envelopeCurveTests;

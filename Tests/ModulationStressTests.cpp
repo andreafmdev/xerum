@@ -69,15 +69,22 @@ struct ModulationStressTests final : juce::UnitTest
      * riceve due route positive e due negative da sorgenti diverse: le modulazioni si
      * contendono il parametro invece di spingerlo tutte dalla stessa parte.
      */
+    /** I sette target che spostano guadagno e timbro del percorso classico. `warp` (l'ottavo) e'
+        sync: cambia la forma d'onda, non il livello, e ha la sua suite (WarpModulationTests);
+        tenerlo fuori da qui lascia intatta la taratura 1.4..2.512 del picco al clipper, misurata
+        su questo esatto riempimento, e conserva il passo dispari da cui dipende l'alternanza dei
+        segni descritta sopra. */
+    static constexpr int kGainTargets = 7;
+    static_assert (kGainTargets <= engine::kNumModTargets, "kGainTargets non puo' superare i target del motore");
+
     static engine::ModSnapshot fullSnapshot() noexcept
     {
         engine::ModSnapshot mods;
 
         for (int i = 0; i < engine::ModSnapshot::kMaxRoutes; ++i)
         {
-            const auto src = (engine::ModSource) ((i / engine::kNumModTargets)
-                                                  % (int) engine::ModSource::count);
-            mods.routes[i] = { src, i % engine::kNumModTargets, (i % 2 == 0) ? 1.0f : -1.0f };
+            const auto src = (engine::ModSource) ((i / kGainTargets) % (int) engine::ModSource::count);
+            mods.routes[i] = { src, i % kGainTargets, (i % 2 == 0) ? 1.0f : -1.0f };
         }
 
         mods.count = engine::ModSnapshot::kMaxRoutes;

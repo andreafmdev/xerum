@@ -140,6 +140,12 @@ void WavetableOscillator::setFramePosition (float normalised) noexcept
     frameMix_ = position - (float) frameLo_;
 }
 
+void WavetableOscillator::setWarp (float amount01) noexcept
+{
+    warpRate_ = 1.0 + 3.0 * (double) juce::jlimit (0.0f, 1.0f, amount01);
+    updateLevel();
+}
+
 void WavetableOscillator::updateLevel() noexcept
 {
     if (table_ == nullptr)
@@ -149,7 +155,8 @@ void WavetableOscillator::updateLevel() noexcept
         return;
     }
 
-    const auto level = levelForFrequency (frequencyHz_, sampleRate_, table_->getFrameSize());
+    // La frequenza efficace: con il sync il frame viene letto warpRate_ volte piu' in fretta.
+    const auto level = levelForFrequency ((float) ((double) frequencyHz_ * warpRate_), sampleRate_, table_->getFrameSize());
 
     // levelForFrequency è già limitata a [0, kMaxLevel], quindi il troncamento sta in
     // range; jlimit è solo un paio di confronti e mette al riparo da un NaN che arrivasse
@@ -169,7 +176,10 @@ float WavetableOscillator::getSample() noexcept
     // largamente sovracampionata.
     const int size = table_->getFrameSize();
     const int mask = size - 1;
-    const double position = phase_ * (double) size;
+    // Sync: la fase letta corre warpRate_ volte e avvolge a ogni periodo. A warpRate_ 1.0 e'
+    // l'identita' esatta (vedi setWarp).
+    const double warped = phase_ * warpRate_;
+    const double position = (warped - std::floor (warped)) * (double) size;
     const int index = juce::jlimit (0, size - 1, (int) position);
     const auto fraction = (float) (position - (double) index);
 

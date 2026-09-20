@@ -82,7 +82,10 @@ function EnvScreen({ ids, second }: { ids: readonly [ParamId, ParamId, ParamId, 
   const dv = useFloatParam(ids[1]).value;
   const sv = useFloatParam(ids[2]).value;
   const r = useFloatParam(ids[3]).value;
-  const d = useMemo(() => envPath(a, dv, sv, r, ENV_W, ENV_H), [a, dv, sv, r]);
+  // envCurve e' solo di ENV1 (il knob e' disabilitato su ENV2): il grezzo 0..1 diventa -1..1.
+  const curveRaw = useFloatParam("envCurve").value;
+  const curve = second ? 0 : curveRaw * 2 - 1;
+  const d = useMemo(() => envPath(a, dv, sv, r, ENV_W, ENV_H, curve), [a, dv, sv, r, curve]);
   return (
     <div className={screen} style={{ width: ENV_W, height: ENV_H }}>
       <svg width={ENV_W} height={ENV_H} style={toneStyle(second ? SOURCE_TONE.env2 : SOURCE_TONE.env)}>

@@ -88,6 +88,7 @@ void SynthVoice::prepare (double sampleRate) noexcept
 
     smoothedCutoff_.reset (sampleRate_, kSmoothingSeconds);
     smoothedFramePosition_.reset (sampleRate_, kSmoothingSeconds);
+    smoothedWarp_.reset (sampleRate_, kSmoothingSeconds);
     smoothedLevel_.reset (sampleRate_, kSmoothingSeconds);
     smoothedPan_.reset (sampleRate_, kSmoothingSeconds);
 
@@ -210,6 +211,7 @@ void SynthVoice::start (int midiNote, float velocity, unsigned long long startOr
     // Una nota nuova parte subito ai valori correnti: niente rampa "ereditata" dalla
     // voce precedentemente occupata da questo slot del pool.
     smoothedFramePosition_.setCurrentAndTargetValue (smoothedFramePosition_.getTargetValue());
+    smoothedWarp_.setCurrentAndTargetValue (smoothedWarp_.getTargetValue());
     smoothedLevel_.setCurrentAndTargetValue (smoothedLevel_.getTargetValue());
     smoothedPan_.setCurrentAndTargetValue (smoothedPan_.getTargetValue());
 
@@ -389,7 +391,7 @@ void SynthVoice::setWavetable (const dsp::MipTable* table) noexcept
 void SynthVoice::setParams (const EngineParams& p) noexcept
 {
     // Copia per valore di una struct POD: nessuna allocazione, nessun puntatore seguito. Serve
-    // perche' i sette target modulabili non si applicano piu' qui ma in applyModulation(), che
+    // perche' gli otto target modulabili non si applicano piu' qui ma in applyModulation(), che
     // gira quando la voce sta per suonare.
     params_ = p;
 
@@ -399,6 +401,7 @@ void SynthVoice::setParams (const EngineParams& p) noexcept
     envelope_.setAttackSeconds (p.attackSeconds);
     envelope_.setDecaySeconds (p.decaySeconds);
     envelope_.setSustainLevel (p.sustain);
+    envelope_.setCurve (p.envCurve);
     envelope_.setReleaseSeconds (p.releaseSeconds);
     velocityAmount_ = p.velocityAmount;
 
@@ -561,6 +564,7 @@ void SynthVoice::applyModulation() noexcept
     levelMod_ = rampedBase (params::ParamSlot::level, params_.level,
                             &params::levelGainFromRaw, smoothedLevel_);
     panMod_ = rampedBase (params::ParamSlot::pan, params_.pan, &params::panFromRaw, smoothedPan_);
+    warpMod_ = rampedBase (params::ParamSlot::warp, params_.warp, &params::warpFromRaw, smoothedWarp_);
 
     // Cutoff a parte, e moltiplicativo: la mappa e' logaritmica, quindi la modulazione e' un
     // rapporto di frequenza — la stessa profondita' vale 632 Hz a meta' corsa e 12 kHz vicino al
@@ -690,8 +694,12 @@ void SynthVoice::render (float* outL, float* outR, int numSamples) noexcept
 
     const auto positionNow = juce::jlimit (0.0f, 1.0f,
                                            smoothedFramePosition_.skip (numSamples) + framePositionMod_);
+    const auto warpNow = juce::jlimit (0.0f, 1.0f, smoothedWarp_.skip (numSamples) + warpMod_);
     for (int i = 0; i < unisonVoices_; ++i)
+    {
         oscillators_[(size_t) i].setFramePosition (positionNow);
+        oscillators_[(size_t) i].setWarp (warpNow);
+    }
 
     // Pan a potenza costante: se seguisse la rampa campione per campione userebbe
     // cos()/sin() per campione, vietato. Il guadagno si ricalcola quindi una sola

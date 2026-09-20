@@ -63,3 +63,23 @@ describe("spectrum", () => {
     expect(spectrum(0.3, 0.2, 0.5, 8)[0]).toBeCloseTo(spectrum(0.3, 0.2, 1, 8)[0]! * 0.5);
   });
 });
+
+describe("envPath curve", () => {
+  const seg = (d: string) => d.split(" C")[1]!.split(",").map((p) => p.trim().split(" ").map(Number));
+  it("curve 0 (o assente) è la forma di sempre", () => {
+    expect(envPath(0.2, 0.3, 0.7, 0.4, 200, 70, 0)).toBe(envPath(0.2, 0.3, 0.7, 0.4, 200, 70));
+  });
+  it("curve +1 mette i punti di controllo dell'attacco sulla corda (retta)", () => {
+    const d = envPath(0.2, 0.3, 0.7, 0.4, 200, 70, 1);
+    const [c1, c2, end] = seg(d);
+    const x0 = 6, y0 = 64;
+    const slope = (end![1]! - y0) / (end![0]! - x0);
+    expect(Math.abs(c1![1]! - (y0 + slope * (c1![0]! - x0)))).toBeLessThan(0.3);
+    expect(Math.abs(c2![1]! - (y0 + slope * (c2![0]! - x0)))).toBeLessThan(0.3);
+  });
+  it("curve -1 piega l'attacco più di curve 0", () => {
+    const flat = seg(envPath(0.2, 0.3, 0.7, 0.4, 200, 70, 0));
+    const sharp = seg(envPath(0.2, 0.3, 0.7, 0.4, 200, 70, -1));
+    expect(sharp[0]![1]!).toBeLessThan(flat[0]![1]!); // più in alto (y più piccola) = più vicino al picco
+  });
+});
