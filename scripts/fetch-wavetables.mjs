@@ -2,7 +2,7 @@
 // Scarica le onde AKWF (CC0) e le converte nelle tavole .xwt del plugin.
 // Uso: node scripts/fetch-wavetables.mjs
 // Gira raramente: i .xwt sono committati, questo script serve solo a rigenerarli.
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -120,6 +120,72 @@ function selectIndices(list, count) {
   return Array.from({ length: count }, (_, i) => list[Math.round(((list.length - 1) * i) / (count - 1))]);
 }
 
+// Sotto questo marcatore, CREDITS.md porta note che questo script non ha scritto — oggi, la
+// nota sulla licenza non risolta delle sette tavole retro-* importate da Serum (vedi
+// scripts/import-serum-wavetables.mjs). Riscrivere il file da zero a ogni run, come faceva
+// prima, cancellerebbe quella nota in silenzio: e' l'unico posto dove sta scritto che quelle
+// tavole non sono ridistribuibili senza permesso.
+export const CREDITS_TAIL_MARKER =
+  "<!-- fetch-wavetables: sotto questa riga il contenuto non e' generato da questo script — non verra' toccato da una rigenerazione -->";
+
+/** La parte di CREDITS.md che questo script genera: intestazione, licenza AKWF, pipeline,
+    tabella delle sei famiglie. Non include mai la parte sotto il marcatore. */
+export function renderAutoCredits(date = new Date().toISOString().slice(0, 10)) {
+  return [
+    "# Wavetables",
+    "",
+    `Generate da \`scripts/fetch-wavetables.mjs\` il ${date}.`,
+    "",
+    "Fonte: **Adventure Kid Waveforms (AKWF)** — Kristoffer Ekstrand",
+    `<https://github.com/${REPO}>`,
+    "",
+    "Licenza: **CC0-1.0** (pubblico dominio). L'attribuzione non è dovuta: è qui per tracciare la provenienza.",
+    "",
+    "## Pipeline",
+    "",
+    `Per ogni tavola si scaricano fino a ${ANCHORS} onde della famiglia, che fanno da ancore del morph.`,
+    "",
+    `1. ogni onda viene ricampionata a ${FRAME_SIZE} campioni per ciclo (serie di Fourier) e le si toglie la continua;`,
+    "2. **allineamento di fase**: ogni ancora viene ruotata sullo shift circolare che la correla al massimo con",
+    "   la precedente. È solo un offset di fase, lo spettro di ampiezza non cambia, ma senza questo passaggio il",
+    "   crossfade fra onde sfasate le fa cancellare a pettine;",
+    `3. i ${FRAMES} frame si ricavano interpolando linearmente fra ancore adiacenti;`,
+    `4. se a metà strada fra due frame si perde più di ${-LOSS_TARGET_DB} dB di RMS, si applica anche la continuità`,
+    "   di fase per armonica (fase srotolata lungo i frame e riscritta come retta, ampiezze invariate);",
+    `5. **equalizzazione parziale dell'RMS**: ogni frame prende un guadagno \`(rms_mediano / rms)^${RMS_EXPONENT}\`. Le onde`,
+    "   AKWF sono già normalizzate a picco 1.0 una per una, quindi il loro RMS varia di una decina di dB dentro la",
+    `   stessa famiglia. L'esponente ${RMS_EXPONENT} comprime l'escursione al ${Math.round((1 - RMS_EXPONENT) * 100)}% invece di appiattirla: in uno sweep PWM`,
+    "   l'impulso che si stringe deve calare di volume. È un guadagno costante per frame, quindi timbralmente neutro;",
+    "6. **normalizzazione globale**: un solo fattore di scala per tutta la tavola, quello che porta a 1 il massimo",
+    "   campione su tutti i frame. Normalizzare frame per frame farebbe cambiare volume a Position.",
+    "",
+    "Le stesse operazioni si possono applicare a tavole già scritte con `node scripts/realign-wavetables.mjs`,",
+    "che stampa le metriche prima e dopo.",
+    "",
+    "| tavola | famiglia AKWF |",
+    "|---|---|",
+    ...TABLES.map((t) => `| ${t.label} (\`${t.id}\`) | \`${t.family}\` |`),
+    "",
+    "",
+  ].join("\n");
+}
+
+/** Cio' che va preservato di un CREDITS.md esistente: tutto cio' che segue il marcatore,
+    marcatore incluso. Stringa vuota se il file non esiste o non ha ancora il marcatore
+    (prima rigenerazione dopo averlo introdotto: non c'e' niente da preservare). */
+export function preservedTail(existingContent) {
+  if (!existingContent) return "";
+  const idx = existingContent.indexOf(CREDITS_TAIL_MARKER);
+  return idx < 0 ? "" : existingContent.slice(idx);
+}
+
+/** Il CREDITS.md completo da scrivere: la parte generata, piu' la coda preservata di
+    `existingContent` (o solo il marcatore, pronto per una coda futura, se non c'era). */
+export function mergeCredits(existingContent, date = undefined) {
+  const tail = preservedTail(existingContent) || `${CREDITS_TAIL_MARKER}\n`;
+  return renderAutoCredits(date) + tail;
+}
+
 async function main() {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const outDir = resolve(root, "Resources/wavetables");
@@ -127,45 +193,11 @@ async function main() {
 
   for (const table of TABLES) await buildTable(table, outDir);
 
-  writeFileSync(
-    resolve(outDir, "CREDITS.md"),
-    [
-      "# Wavetables",
-      "",
-      `Generate da \`scripts/fetch-wavetables.mjs\` il ${new Date().toISOString().slice(0, 10)}.`,
-      "",
-      "Fonte: **Adventure Kid Waveforms (AKWF)** — Kristoffer Ekstrand",
-      `<https://github.com/${REPO}>`,
-      "",
-      "Licenza: **CC0-1.0** (pubblico dominio). L'attribuzione non è dovuta: è qui per tracciare la provenienza.",
-      "",
-      "## Pipeline",
-      "",
-      `Per ogni tavola si scaricano fino a ${ANCHORS} onde della famiglia, che fanno da ancore del morph.`,
-      "",
-      `1. ogni onda viene ricampionata a ${FRAME_SIZE} campioni per ciclo (serie di Fourier) e le si toglie la continua;`,
-      "2. **allineamento di fase**: ogni ancora viene ruotata sullo shift circolare che la correla al massimo con",
-      "   la precedente. È solo un offset di fase, lo spettro di ampiezza non cambia, ma senza questo passaggio il",
-      "   crossfade fra onde sfasate le fa cancellare a pettine;",
-      `3. i ${FRAMES} frame si ricavano interpolando linearmente fra ancore adiacenti;`,
-      `4. se a metà strada fra due frame si perde più di ${-LOSS_TARGET_DB} dB di RMS, si applica anche la continuità`,
-      "   di fase per armonica (fase srotolata lungo i frame e riscritta come retta, ampiezze invariate);",
-      `5. **equalizzazione parziale dell'RMS**: ogni frame prende un guadagno \`(rms_mediano / rms)^${RMS_EXPONENT}\`. Le onde`,
-      "   AKWF sono già normalizzate a picco 1.0 una per una, quindi il loro RMS varia di una decina di dB dentro la",
-      `   stessa famiglia. L'esponente ${RMS_EXPONENT} comprime l'escursione al ${Math.round((1 - RMS_EXPONENT) * 100)}% invece di appiattirla: in uno sweep PWM`,
-      "   l'impulso che si stringe deve calare di volume. È un guadagno costante per frame, quindi timbralmente neutro;",
-      "6. **normalizzazione globale**: un solo fattore di scala per tutta la tavola, quello che porta a 1 il massimo",
-      "   campione su tutti i frame. Normalizzare frame per frame farebbe cambiare volume a Position.",
-      "",
-      "Le stesse operazioni si possono applicare a tavole già scritte con `node scripts/realign-wavetables.mjs`,",
-      "che stampa le metriche prima e dopo.",
-      "",
-      "| tavola | famiglia AKWF |",
-      "|---|---|",
-      ...TABLES.map((t) => `| ${t.label} (\`${t.id}\`) | \`${t.family}\` |`),
-      "",
-    ].join("\n"),
-  );
+  const creditsPath = resolve(outDir, "CREDITS.md");
+  const existing = existsSync(creditsPath) ? readFileSync(creditsPath, "utf8") : "";
+  writeFileSync(creditsPath, mergeCredits(existing));
 }
 
-await main();
+// Guardia di CLI, non di import: gira raramente e va lanciato a mano, ma le funzioni di
+// CREDITS.md sopra devono restare importabili da un test senza scaricare niente dalla rete.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

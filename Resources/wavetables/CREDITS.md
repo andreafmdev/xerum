@@ -39,6 +39,8 @@ che stampa le metriche prima e dopo.
 | Glass Bells (`bells`) | `AKWF_fmsynth` |
 | PWM Sweep (`pwm`) | `AKWF_bw_squ` |
 
+<!-- fetch-wavetables: sotto questa riga il contenuto non e' generato da questo script — non verra' toccato da una rigenerazione -->
+
 ## Tavole importate da Serum
 
 Estratte da *Retro Synthwave Pack 2* (autore `zak235`) con
