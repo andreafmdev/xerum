@@ -27,7 +27,9 @@ std::unique_ptr<MipTable> buildMipTable (const BlobView& blob);
  * tavola in silenzio: lo static_assert in engine/ParamCollect.h confronta le due liste a tempo
  * di compilazione, nome per nome (`value` + ".xwt").
  */
-inline constexpr const char* const kWavetableFiles[] = { "basic.xwt", "saws.xwt", "grit.xwt", "vocal.xwt", "bells.xwt", "pwm.xwt" };
+inline constexpr const char* const kWavetableFiles[] = { "basic.xwt", "saws.xwt", "grit.xwt", "vocal.xwt", "bells.xwt", "pwm.xwt",
+                                                         "retro-racing.xwt", "retro-spindizzy.xwt", "retro-ggsisters.xwt", "retro-commando.xwt",
+                                                         "retro-uridium-pad.xwt", "retro-leaderboard.xwt", "retro-uridium.xwt" };
 
 class WavetableStore
 {

@@ -408,6 +408,19 @@ struct WavetableStoreTests final : juce::UnitTest
             store.setActive (-1);
             expect (store.active() == first);
         }
+
+        beginTest ("ogni tavola registrata e' un blob valido e costruisce la mipmap");
+        {
+            dsp::WavetableStore store;
+            expectEquals (store.getNumTables(), (int) std::size (dsp::kWavetableFiles));
+
+            for (int i = 0; i < store.getNumTables(); ++i)
+            {
+                store.setActive (i);
+                expect (store.active() != nullptr,
+                        juce::String ("nessuna mipmap per ") + dsp::kWavetableFiles[i]);
+            }
+        }
     }
 };
 
