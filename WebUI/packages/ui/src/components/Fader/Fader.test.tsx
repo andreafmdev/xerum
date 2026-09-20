@@ -63,12 +63,16 @@ describe("Fader", () => {
 });
 
 describe("Fader motion", () => {
-  it("animates the fill only when the change did not come from the pointer", () => {
+  // Round finale (Finding 2): il fill non anima niente. `height`/`width` (inline, da `pct`)
+  // sono l'unica cosa che cambia su questo nodo, e la whitelist delle proprieta' animabili
+  // vieta di animare l'una e l'altra; `bg-(--tone)` e' statico per tutta la vita del
+  // componente. Una versione precedente dichiarava `transition-[background-color] ease-glass`
+  // che non aveva mai niente da animare — CSS morto sotto un commento che ne spiegava la
+  // fisica. Questo test blocca il suo ritorno silenzioso.
+  it("il riempimento non dichiara nessuna transizione: non c'e' niente che questo nodo animi davvero", () => {
     render(<Fader value={0.3} onChange={() => {}} label="Level" />);
     const fill = screen.getByTestId("fader-fill");
-    expect(fill.getAttribute("class")).toContain("ease-glass");
-    // Durante il drag la transizione sparisce: il riempimento insegue il dito, non una curva.
-    expect(fill.getAttribute("class")).toContain("group-data-[dragging=true]/fader:transition-none");
+    expect(fill.getAttribute("class")).not.toMatch(/transition|ease-/);
   });
 
   it("never disables the thumb's own press feedback while settling", () => {
@@ -76,15 +80,5 @@ describe("Fader motion", () => {
     const thumb = screen.getByTestId("fader-thumb");
     expect(thumb.getAttribute("class")).toContain("ease-snap");
     expect(thumb.getAttribute("class")).not.toContain("ease-glass");
-  });
-
-  it("declares an explicit transition-property list on the fill, not Tailwind's bare default", () => {
-    // La utility di base `transition` copre di suo anche `box-shadow` e `backdrop-filter`,
-    // vietate dalla whitelist: qui l'unica proprieta' che varia davvero e' il colore del
-    // riempimento (`bg-(--tone)`), quindi la lista esplicita contiene solo quella.
-    render(<Fader value={0.3} onChange={() => {}} label="Level" />);
-    const cls = screen.getByTestId("fader-fill").getAttribute("class") ?? "";
-    expect(cls).toContain("transition-[background-color]");
-    expect(cls).not.toMatch(/(^|\s)transition(?=\s|$)/);
   });
 });

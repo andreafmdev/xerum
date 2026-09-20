@@ -86,21 +86,15 @@ describe("Wheel", () => {
 });
 
 describe("Wheel motion", () => {
-  it("returns to centre on the settle curve: it is the one real spring here", () => {
+  // Round finale (Finding 2): il fill non anima niente. `bottom`/`height` (inline, calcolati da
+  // `fill` sopra) sono l'unica cosa che cambia su questo nodo, e la whitelist delle proprieta'
+  // animabili vieta di animare l'una e l'altra; `bg-(--tone)` e' statico per tutta la vita del
+  // componente. Una versione precedente dichiarava `transition-[background-color] ease-settle`
+  // spacciandola per il rimbalzo del ritorno a centro (springBack): non c'era nessun rimbalzo,
+  // solo il nome di uno. Questo test blocca il suo ritorno silenzioso.
+  it("il riempimento non dichiara nessuna transizione: non c'e' niente che questo nodo animi davvero", () => {
     render(<Wheel value={0.5} onChange={() => {}} label="Pitch" />);
     const cls = screen.getByTestId("wheel").querySelector('[data-part="fill"]')?.getAttribute("class") ?? "";
-    expect(cls).toContain("ease-settle");
-    expect(cls).toContain("group-data-[dragging=true]/wheel:transition-none");
-  });
-
-  it("declares an explicit transition-property list on the fill, not Tailwind's bare default", () => {
-    // Come per il Fader: la sola proprieta' che varia davvero su questo nodo e' il colore
-    // del riempimento (`bg-(--tone)`); `bottom`/`height` restano fuori (inline style, mai
-    // transizionati) e la utility di base `transition` porterebbe con se' anche
-    // `box-shadow`/`backdrop-filter`, vietate dalla whitelist.
-    render(<Wheel value={0.5} onChange={() => {}} label="Pitch" />);
-    const cls = screen.getByTestId("wheel").querySelector('[data-part="fill"]')?.getAttribute("class") ?? "";
-    expect(cls).toContain("transition-[background-color]");
-    expect(cls).not.toMatch(/(^|\s)transition(?=\s|$)/);
+    expect(cls).not.toMatch(/transition|ease-/);
   });
 });

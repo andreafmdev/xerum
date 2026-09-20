@@ -98,21 +98,17 @@ export function Wheel({
         <div
           data-testid="wheel-fill"
           data-part="fill"
-          // Il molleggio verso il centro e' l'unica vera molla dell'interfaccia: `ease-settle`
-          // a piena forza, spenta durante il trascinamento perche' li' il riempimento deve
-          // seguire il dito, non rincorrerlo. Nota per chi rivede: il riempimento resta
-          // `bottom`+`height` (mai un transform, per lo stesso motivo spiegato sopra), e la
-          // whitelist delle proprieta' animabili vieta di animare proprio `height`/`bottom` —
-          // quindi qui si usa la utility `transition` di base (il set curato di Tailwind:
-          // colori, opacity, box-shadow, transform, filter — MAI width/height/top/left/bottom),
-          // che dichiara l'intento e il timing (ease-settle) senza mai transizionare quelle due
-          // proprieta' vietate. Il ritorno al centro quindi scatta senza dissolvenza sul
-          // posizionamento: un vero rimbalzo animato richiederebbe un riempimento a `transform`,
-          // che qui e' stato deliberatamente escluso (vedi commento sopra "mai un transform").
-          // La lista esplicita sostituisce la utility di base `transition` (che porterebbe con
-          // se' anche `box-shadow`/`backdrop-filter`, vietate) con la sola proprieta' che
-          // questo nodo puo' davvero variare: il colore del riempimento.
-          className="absolute inset-x-px rounded-[2px] bg-(--tone) transition-[background-color] duration-(--dur-layer) ease-settle group-data-[dragging=true]/wheel:transition-none"
+          // Il riempimento scatta, non anima. La sua unica proprieta' che varia e' l'inline
+          // `bottom`/`height` qui sotto (fill, calcolato sopra), e la whitelist delle proprieta'
+          // animabili vieta di animare proprio quelle due (forzano layout). `bg-(--tone)' e'
+          // l'unico altro stile su questo nodo ed e' statico per tutta la vita del componente:
+          // una `transition-[background-color]` non avrebbe mai avuto niente da animare. C'era,
+          // in una revisione precedente, insieme a un commento che la spacciava per il rimbalzo
+          // del ritorno a centro (springBack) — non lo era: quel rimbalzo non esiste, il
+          // riempimento salta al nuovo bottom/height come qualsiasi altro cambio di valore. Un
+          // vero rimbalzo animato richiederebbe un riempimento a `transform`, fuori dal
+          // perimetro di questo componente; la decisione di lasciarlo scattare resta cosi'.
+          className="absolute inset-x-px rounded-[2px] bg-(--tone)"
           style={fill}
         />
         {/* Il segno della posizione, per chi preferisce una riga a un riempimento (una rotella a

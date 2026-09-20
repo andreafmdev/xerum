@@ -85,18 +85,15 @@ export function Fader({
           <div
             data-testid="fader-fill"
             data-part="fill"
-            // Stessa scelta del riempimento della rotella: `height`/`width` restano fuori dalla
-            // whitelist delle proprieta' animabili (layout, non compositing), quindi qui non c'e'
-            // nessun `transition-[height]`/`transition-[width]` esplicito. La utility di base
-            // `transition` copre solo il set curato di Tailwind (colori, opacity, box-shadow,
-            // transform, filter): dichiara l'intento (ease-glass) e si disattiva durante il drag,
-            // senza mai transizionare le due proprieta' vietate. Un vero scorrimento animato del
-            // riempimento richiederebbe un riempimento a `transform`, fuori dal perimetro di
-            // questo task. La lista esplicita sostituisce la utility di base `transition`
-            // (che porterebbe con se' anche `box-shadow`/`backdrop-filter`, vietate) con la
-            // sola proprieta' che questo nodo puo' davvero variare: il colore del riempimento.
+            // Il riempimento scatta, non anima: la sua unica proprieta' che varia e' l'inline
+            // `height`/`width` qui sotto (style, calcolato da `pct`), e la whitelist delle
+            // proprieta' animabili vieta di animare proprio `height`/`width` (forzano layout).
+            // `bg-(--tone)` e' l'unico altro stile su questo nodo ed e' statico per tutta la
+            // vita del componente: una `transition-[background-color]` non avrebbe mai avuto
+            // niente da animare, e infatti prima c'era solo per nome. Il vero movimento del
+            // Fader vive sul cappuccio qui sotto (`data-part="cap"`), che scala davvero.
             className={cn(
-              "absolute rounded-[2px] bg-(--tone) transition-[background-color] duration-(--dur-state) ease-glass group-data-[dragging=true]/fader:transition-none",
+              "absolute rounded-[2px] bg-(--tone)",
               vertical ? "inset-x-px bottom-px" : "inset-y-px left-px",
             )}
             style={vertical ? { height: pct } : { width: pct }}
