@@ -52,3 +52,24 @@ describe("Segmented", () => {
     expect(screen.getByRole("radio", { name: "HP" })).toBeDisabled();
   });
 });
+
+describe("Segmented motion", () => {
+  const options = [
+    { value: "a", label: "A" },
+    { value: "b", label: "B" },
+  ];
+
+  it("renders one sliding indicator instead of lighting each plate on its own", () => {
+    render(<Segmented value="a" onChange={() => {}} options={options} label="Mode" />);
+    const ind = screen.getByTestId("segmented-indicator");
+    expect(ind.className).toContain("transition-transform");
+    expect(ind.className).toContain("duration-(--dur-state)");
+    expect(ind.className).toContain("ease-glass");
+  });
+
+  it("hides the indicator until there is a layout to measure", () => {
+    render(<Segmented value="a" onChange={() => {}} options={options} label="Mode" />);
+    // jsdom non fa layout: larghezza 0, quindi l'indicatore non si vede.
+    expect(screen.getByTestId("segmented-indicator")).toHaveAttribute("data-measured", "false");
+  });
+});
