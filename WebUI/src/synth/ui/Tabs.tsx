@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Segmented, Tabs, Toggle, toneStyle } from "@xerum/ui";
+import { Segmented, Select, Tabs, Toggle, toneStyle } from "@xerum/ui";
 import { X } from "lucide-react";
 import { useBoolParam, useChoiceParam, useFloatParam, useMeterValue } from "../../juce/hooks";
 import { envPath, lfoPath } from "../curves";
@@ -215,16 +215,25 @@ export function ModTab() {
 export function FxTab() {
   const fx1On = useBoolParam("fx1On");
   const fx2On = useBoolParam("fx2On");
+  const fx3On = useBoolParam("fx3On");
+  const dlSync = useBoolParam("dlSync");
+  const dlPingPong = useBoolParam("dlPingPong");
+  const order = useChoiceParam("fxOrder");
   const dirty = useDirty();
-  const slot = (on: boolean, setOn: (v: boolean) => void, name: string, knobs: ReactNode) => (
-    <div className={`sx-fxslot flex flex-1 items-center gap-2.5 rounded-control bg-surface-1 px-2.5 py-1 shadow-[inset_0_0_0_1px_var(--color-edge-dark),inset_0_1px_0_var(--color-edge-light)] ${on ? "" : "[&_.fx-nm]:opacity-45 [&_[data-slot=knob]]:opacity-45"}`}>
-      <Toggle checked={on} onChange={dirty(setOn)} label={`${name} on`} className="[&_label]:sr-only" />
-      <span className="fx-nm w-18 text-2xs font-semibold tracking-widest text-(--tone) uppercase">{name}</span>
-      <div className={`${group} flex-1 justify-around gap-3`}>{knobs}</div>
+  // Tre colonne, una per effetto: toggle, nome, knob. Il plate e' alto 124 px: i knob `sm` in
+  // una riga ci stanno, tre righe no.
+  const slot = (on: boolean, setOn: (v: boolean) => void, name: string, knobs: ReactNode, extras?: ReactNode) => (
+    <div className={`sx-fxslot flex flex-1 flex-col gap-1 rounded-control bg-surface-1 px-2.5 py-1 shadow-[inset_0_0_0_1px_var(--color-edge-dark),inset_0_1px_0_var(--color-edge-light)] ${on ? "" : "[&_.fx-nm]:opacity-45 [&_[data-slot=knob]]:opacity-45"}`}>
+      <div className="flex items-center gap-2">
+        <Toggle checked={on} onChange={dirty(setOn)} label={`${name} on`} className="[&_label]:sr-only" />
+        <span className="fx-nm text-2xs font-semibold tracking-widest text-(--tone) uppercase">{name}</span>
+        {extras}
+      </div>
+      <div className={`${group} justify-around gap-2`}>{knobs}</div>
     </div>
   );
   return (
-    <div className={`${content} gap-2.5`} style={toneStyle("fx")}>
+    <div className={`${content} gap-2`} style={toneStyle("fx")}>
       {slot(fx1On.checked, fx1On.set, "Chorus", (
         <>
           <ParamKnob id="chRate" size="sm" />
@@ -232,6 +241,19 @@ export function FxTab() {
           <ParamKnob id="chFeedback" size="sm" />
           <ParamKnob id="chMix" size="sm" />
         </>
+      ))}
+      {slot(fx3On.checked, fx3On.set, "Delay", (
+        <>
+          <ParamKnob id="dlTime" size="sm" format={(v) => (dlSync.checked ? DIVISIONS[Math.min(5, Math.floor(v * 6))]! : formatValue(PARAM_SPECS.dlTime, v))} />
+          <ParamKnob id="dlFeedback" size="sm" />
+          <ParamKnob id="dlDamp" size="sm" />
+          <ParamKnob id="dlMix" size="sm" />
+        </>
+      ), (
+        <span className="ml-auto flex items-center gap-1.5">
+          <Toggle checked={dlSync.checked} onChange={dirty(dlSync.set)} label="Sync" />
+          <Toggle checked={dlPingPong.checked} onChange={dirty(dlPingPong.set)} label="Ping" />
+        </span>
       ))}
       {slot(fx2On.checked, fx2On.set, "Reverb", (
         <>
@@ -242,6 +264,10 @@ export function FxTab() {
           <ParamKnob id="rvMix" size="sm" />
         </>
       ))}
+      <div className="flex w-24 shrink-0 flex-col gap-1 self-start">
+        <span className="text-[9px] tracking-[0.14em] text-text-dim uppercase">Ordine</span>
+        <Select label="FX order" value={order.value} onChange={dirty(order.set)} options={order.options} />
+      </div>
     </div>
   );
 }

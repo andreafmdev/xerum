@@ -204,6 +204,26 @@ describe("SynthWindow on the bridge", () => {
     expect((await b.getState()).mods).toHaveLength(0);
   });
 
+  it("the FX tab shows three slots and the order select; Time reads a division when synced", async () => {
+    const b = mount(undefined, { initialTab: "fx" });
+    await act(async () => {});
+    expect(screen.getByRole("switch", { name: "Chorus on" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Delay on" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Reverb on" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "FX order" })).toHaveTextContent("Cho→Dly→Rev");
+
+    // 2000^0.78 ms = 375.6 -> arrotondato; la mappa e' della tabella, non del test.
+    expect(screen.getByRole("slider", { name: "Time" }).getAttribute("aria-valuetext")).toMatch(/^37\d ms$/);
+    await userEvent.click(screen.getByRole("switch", { name: "Sync" }));
+    expect(b.param("dlSync").get()).toBe(1);
+    // raw 0.78 -> floor(0.78 * 6) = 4 -> "1" (una battuta di quarti)
+    expect(screen.getByRole("slider", { name: "Time" })).toHaveAttribute("aria-valuetext", "1");
+
+    await userEvent.click(screen.getByRole("combobox", { name: "FX order" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Dly→Cho→Rev" }));
+    expect(b.param("fxOrder").get()).toBeCloseTo(0.5);
+  });
+
   it("external state change updates the matrix", async () => {
     const b = mount(undefined, { initialTab: "mod" });
     await act(async () => {});
