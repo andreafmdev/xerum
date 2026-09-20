@@ -131,6 +131,26 @@ In `WebUI/src/juce/juce-backend.ts` cambiano tre cose:
 `window.__JUCE__` **non si tocca**: è dichiarato da noi in `juce-backend.ts:13-20`, non viene
 dal pacchetto.
 
+### TypeScript: cosa cambia davvero e cosa no
+
+La WebUI è **già** interamente TypeScript, e lo era prima di questo branch: 138 file
+`.ts`/`.tsx` nostri, `tsc --noEmit` fra i cancelli. Ogni file JavaScript sotto `WebUI/` è
+output di build (`dist/`, `storybook-static/`) oppure uno dei due file dell'interop
+vendorizzato. **Quei due sono l'ultimo JavaScript che questo progetto si porta dietro**, e
+questo lavoro li cancella.
+
+Ciò che JUCE 9 aggiunge non è TypeScript nella WebUI — c'era già — ma TypeScript **al
+confine**: i tipi dell'interop smettono di essere una nostra dichiarazione a mano e
+diventano un artefatto mantenuto a monte, che cambia insieme al codice che descrive.
+
+**Si consuma `dist/`, non `src/`, e non è una scelta di comodo.** Il pacchetto spedisce
+entrambi (`files: ["dist", "src", ...]`), ma la sua `exports` map espone solo `.` →
+`dist/index.js` con i relativi tipi, più `./package.json`. Non esiste un sottopercorso per
+`src`: importare il sorgente TypeScript significherebbe scavalcare la superficie pubblica
+del pacchetto, appoggiandosi a un percorso che gli autori non garantiscono e che può
+sparire alla prossima versione — reintroducendo, in forma nuova, esattamente la fragilità
+che questo lavoro elimina. L'implementer non deve provarci.
+
 ### Due cose che possono mordere
 
 Entrambe vanno trattate nel piano come scoperta, con una via d'uscita già pensata.
