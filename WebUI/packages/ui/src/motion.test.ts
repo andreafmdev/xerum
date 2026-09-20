@@ -25,4 +25,21 @@ describe("motion tokens", () => {
   it("derives the layer exit from the enter with the glass asymmetry ratio", () => {
     expect(T.layerOut.duration).toBeCloseTo(T.layerIn.duration * EXIT_RATIO, 5);
   });
+
+  // Finding 3 (revisione di branch): il crossfade dei Tabs usa mode="wait", quindi la durata
+  // composta e' la somma di entrata e uscita, non la sola entrata. T.stateIn/stateOut derivano
+  // dallo stesso DUR.state (120ms) e dalla stessa asimmetria di T.layerIn/layerOut, non da un
+  // valore nuovo scritto a mano.
+  it("derives the state exit from the enter with the same asymmetry ratio", () => {
+    expect(T.stateOut.duration).toBeCloseTo(T.stateIn.duration * EXIT_RATIO, 5);
+  });
+
+  it("keeps the composed tab switch (mode=\"wait\": enter + exit in sequence) close to the indicator's own --dur-state instead of tripling it", () => {
+    const composedState = T.stateIn.duration + T.stateOut.duration;
+    const composedLayer = T.layerIn.duration + T.layerOut.duration;
+    // 320ms (layer + layer*0.6) era quasi il triplo dei 120ms dell'indicatore sotto; 192ms
+    // (state + state*0.6) ci resta vicino.
+    expect(composedState).toBeCloseTo((DUR.state + DUR.state * EXIT_RATIO) / 1000, 5);
+    expect(composedState).toBeLessThan(composedLayer);
+  });
 });

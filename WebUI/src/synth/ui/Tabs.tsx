@@ -36,14 +36,20 @@ export function TabArea({ tab, setTab, children }: { tab: TabId; setTab: (t: Tab
           ))}
         </div>
       </div>
+      {/* mode="wait" resta: le pagine sono in normal flow (nessuna position:absolute che le
+          sovrapponga), quindi farle coesistere impilerebbe una sopra l'altra invece di
+          incrociarsi. Con "wait" l'uscita e l'entrata sono percio' in sequenza, non un vero
+          crossfade sovrapposto — ma T.stateIn/stateOut (DUR.state, non DUR.layer) tengono la
+          somma delle due a 192ms invece di 320: vicina ai 120ms dell'indicatore sotto lo
+          stesso Tabs, non il suo triplo (vedi il commento su T.stateIn/stateOut in motion.ts). */}
       <AnimatePresence mode="wait" initial={false}>
         <m.div
           key={tab}
           data-testid="tab-page"
           className="flex min-h-0 flex-1 flex-col"
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1, transition: T.layerIn }}
-          exit={{ opacity: 0, transition: T.layerOut }}
+          animate={{ opacity: 1, transition: T.stateIn }}
+          exit={{ opacity: 0, transition: T.stateOut }}
         >
           {children}
         </m.div>

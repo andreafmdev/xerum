@@ -26,4 +26,14 @@ export type Transition = { duration: number; ease: Bezier };
 export const T = {
   layerIn: { duration: DUR.layer / 1000, ease: EASE.glass },
   layerOut: { duration: (DUR.layer * EXIT_RATIO) / 1000, ease: EASE.exit },
+  /** Crossfade del contenuto delle Tabs (src/synth/ui/Tabs.tsx): stessa asimmetria di
+      layerIn/layerOut, ma su DUR.state invece di DUR.layer. Con `AnimatePresence mode="wait"`
+      l'uscita e l'entrata sono in sequenza, non sovrapposte (le pagine sono in normal flow: farle
+      sovrapporre le impilerebbe), quindi la durata composta è la somma delle due — usare il
+      token del layer (200 + 120 = 320ms) la porta a quasi il triplo dei 120ms con cui scorre
+      l'indicatore sotto, lasciando un buco morto in mezzo. DUR.state è lo stesso token che guida
+      già quell'indicatore (vedi Tabs.tsx/Segmented.tsx in @xerum/ui): la somma resta 192ms, non
+      120, ma è vicina invece che tripla. */
+  stateIn: { duration: DUR.state / 1000, ease: EASE.glass },
+  stateOut: { duration: (DUR.state * EXIT_RATIO) / 1000, ease: EASE.exit },
 } as const satisfies Record<string, Transition>;
