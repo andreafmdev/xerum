@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_note": "Valori NORMALIZZATI 0..1, la stessa convenzione dell'APVTS. Riferimenti rapidi: cutoff (log 20..20 kHz) x = log10(f/20)/3; att/dec/rel (ms-squared 1..8001) x = sqrt((ms-1)/8000); res -> Q = 0.707 * 16.97^x (vedi ParamCollect.h); drive (ms-squared 0..24 dB) x = sqrt(dB/24). I choice (wtIndex, ftype, slope) si scrivono col nome dell'opzione come sta in parameters.json; gli altri parametri con il valore NORMALIZZATO 0..1, la stessa convenzione dell'APVTS. Ogni preset elenca esplicitamente level, drive e volume: sono i tre che decidono se clippa.",
+  "_note": "I choice (wtIndex, ftype, slope) si scrivono col nome dell'opzione come sta in parameters.json; tutti gli altri parametri sono valori NORMALIZZATI 0..1, la stessa convenzione dell'APVTS. Riferimenti rapidi: cutoff (log 20..20 kHz) x = log10(f/20)/3; att/dec/rel (ms-squared 1..8001) x = sqrt((ms-1)/8000); res -> Q = 0.707 * 16.97^x (vedi ParamCollect.h); drive (ms-squared 0..24 dB) x = sqrt(dB/24). Ogni preset elenca esplicitamente level, drive e volume: sono i tre che decidono se clippa.",
   "presets": [
     { "name": "Init", "cat": "User", "values": {} },
 
