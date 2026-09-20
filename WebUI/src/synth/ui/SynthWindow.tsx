@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import { useBoolParam, useBridgeState } from "../../juce/hooks";
 import type { ModSource } from "../../juce/backend";
 import type { ParamId } from "../params.generated";
@@ -178,7 +179,9 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
             {s.tab === "arp" && <ArpTab />}
           </TabArea>
           <BottomStrip />
-          {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
+          <AnimatePresence>
+            {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
+          </AnimatePresence>
         </SynthContext>
       </div>
     </div>

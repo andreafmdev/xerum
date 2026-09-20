@@ -161,10 +161,10 @@ const EXEMPT = new Set([
   "WebUI/packages/ui/src/components/ui/select.tsx",
 ]);
 
-// Deroghe temporanee: spariscono con la task 10 del piano di motion. Tabs.tsx:331 (quello sotto
-// WebUI/src/synth/ui/, NON la libreria @xerum/ui) ha ancora la violazione live (duration-100);
-// non è "già sistemata", solo grandfathered fino a quel punto del piano, come PresetOverlay.tsx.
-const GRANDFATHERED = new Set(["WebUI/src/synth/ui/Tabs.tsx", "WebUI/src/synth/ui/PresetOverlay.tsx"]);
+// Deroghe temporanee: la task 10 ha sistemato PresetOverlay.tsx (l'uscita in motion). Resta solo
+// Tabs.tsx:331 (quello sotto WebUI/src/synth/ui/, NON la libreria @xerum/ui), con la violazione
+// live (duration-100) che sparisce con la task 11.
+const GRANDFATHERED = new Set(["WebUI/src/synth/ui/Tabs.tsx"]);
 
 export function isDeroga(relPath) {
   return EXEMPT.has(relPath) || GRANDFATHERED.has(relPath);

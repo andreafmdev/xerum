@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitForElementToBeRemoved, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { domAnimation, LazyMotion } from "motion/react";
 import { FakeBackend } from "../../juce/fake-backend";
 import { ZERO_METERS } from "../../juce/backend";
 import { BridgeProvider } from "../../juce/provider";
@@ -265,5 +266,28 @@ describe("SynthWindow on the bridge", () => {
     // e farebbe fallire questa asserzione, a differenza di un /Acid Line/ non ancorato.
     expect(screen.getByRole("button", { name: /Acid Line$/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /\*/ })).not.toBeInTheDocument();
+  });
+});
+
+// L'app monta <LazyMotion> una sola volta, alla radice (App.tsx): qui, che monta SynthWindow da
+// solo, va rifatto a mano perché <m.div> senza un antenato <LazyMotion> non ha nessun renderer e
+// nessuna feature caricata, quindi l'uscita non verrebbe mai davvero rimandata (si veda il
+// commento di PresenceChild in framer-motion: "if there's no motion components to fire exit
+// animations, we want to remove this component immediately").
+describe("PresetOverlay exit", () => {
+  it("keeps the overlay mounted while it leaves, instead of cutting it", async () => {
+    render(
+      <LazyMotion features={domAnimation}>
+        <BridgeProvider backend={new FakeBackend()}>
+          <SynthWindow initialTab="env" />
+        </BridgeProvider>
+      </LazyMotion>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Init/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Presets" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Close presets" }));
+    // Il nodo è ancora lì: sta uscendo. Prima smontava dentro lo stesso tick.
+    expect(screen.queryByRole("dialog", { name: "Presets" })).toBeInTheDocument();
+    await waitForElementToBeRemoved(() => screen.queryByRole("dialog", { name: "Presets" }));
   });
 });

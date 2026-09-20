@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@xerum/ui";
+import { m } from "motion/react";
+import { Button, T } from "@xerum/ui";
 import { Search, X } from "lucide-react";
 import { canvas2d, cssColor } from "../canvas";
 import { tableSample } from "../curves";
@@ -31,11 +32,17 @@ export function PresetOverlay({ current, onPick, onClose }: Props) {
   const selWave = presetWave(sel);
   const loaded = sel.name === current.name;
   return (
-    <div
+    <m.div
       role="dialog"
       aria-label="Presets"
       onKeyDown={(e) => e.key === "Escape" && onClose()}
-      className="sx-ovl absolute inset-0 z-20 flex animate-in flex-col gap-3 rounded-[14px] bg-background/94 p-3.5 backdrop-blur-sm fade-in zoom-in-[0.99] duration-150"
+      // Il fondo sfocato c'è dal primo frame e resta fisso: solo l'opacità e la scala del
+      // pannello animano. Animarne il raggio sarebbe la sola cosa che questa WebView non può
+      // permettersi (vedi la whitelist nella spec).
+      className="sx-ovl absolute inset-0 z-20 flex flex-col gap-3 rounded-[14px] bg-background/94 p-3.5 backdrop-blur-sm"
+      initial={{ opacity: 0, scale: 0.99 }}
+      animate={{ opacity: 1, scale: 1, transition: T.layerIn }}
+      exit={{ opacity: 0, scale: 0.995, transition: T.layerOut }}
     >
       <div className="flex items-center gap-3">
         <Logo>PRESETS</Logo>
@@ -113,7 +120,7 @@ export function PresetOverlay({ current, onPick, onClose }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </m.div>
   );
 }
 
