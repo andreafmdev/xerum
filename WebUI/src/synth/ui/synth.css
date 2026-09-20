@@ -42,6 +42,14 @@
      lento è impercettibile, e la durata resta nel vocabolario. */
   transition: opacity var(--dur-layer);
 
+  /* Riposo dell'opacita': un solo proprietario. Il bypass (SynthWindow.tsx) scrive questa
+     custom property invece di un `opacity` inline, cosi' la keyframe di accensione qui sotto
+     puo' riferirla (`var(--chassis-opacity)`) invece di ripetere un letterale che, con bypass
+     gia' attivo alla prima apertura, non sarebbe stato il vero riposo — vedi la nota su
+     .sx-chassis[data-boot]. */
+  --chassis-opacity: 1;
+  opacity: var(--chassis-opacity);
+
   /* Effetti opzionali: attivi solo in `glow`. */
   --glow: none;
   --tglow: none;
@@ -606,22 +614,30 @@
    Una sequenza da 600 ms e' un effetto la prima volta e una tassa la decima, quindi la piena
    accensione (scala + dissolvenza) suona una sola volta per processo — vedi boot.ts — e ogni
    montaggio successivo ha solo una dissolvenza piu' corta. */
+/* Il keyframe finale referenzia --chassis-opacity invece di un letterale 1 (round 2 del fix):
+   il bypass e' stato session/host state prima ancora che la finestra si apra, quindi puo'
+   essere gia' attivo alla primissima accensione del processo. Con un letterale 1, per i 320 ms
+   dell'animazione lo chassis sarebbe apparso alla piena opacita' e poi scattato giu' a 0.9 non
+   appena l'animazione avesse ceduto il controllo — due proprietari (l'animazione e lo style
+   inline del bypass) che scrivono la stessa proprieta' senza un accordo su chi vince. Con
+   var(--chassis-opacity) c'e' un solo proprietario del riposo (la custom property, scritta da
+   SynthWindow.tsx), e la keyframe atterra su qualunque esso sia, bypass acceso o spento.
+   Verificato in un browser vero (Chromium headless via CDP): l'animazione interpola
+   correttamente verso il valore risolto di var(--chassis-opacity) e vi atterra senza scatti,
+   sia per l'accensione sia per la riapertura. */
 @keyframes sx-boot {
   from { opacity: 0; scale: 0.985; }
-  to   { opacity: 1; scale: 1; }
+  to   { opacity: var(--chassis-opacity); scale: 1; }
 }
 
 @keyframes sx-fade-in {
   from { opacity: 0; }
-  to   { opacity: 1; }
+  to   { opacity: var(--chassis-opacity); }
 }
 
-/* Niente `forwards`/`both`: lo chassis puo' finire l'accensione con bypass gia' attivo (opacity
-   0.9 via style inline, vedi SynthWindow.tsx), e un fill che tenesse l'opacity del keyframe (1)
-   sovrascriverebbe quello stato di riposo per sempre — lo stesso difetto di una keyframe che non
-   atterra sul riposo, qui sul fill-mode invece che sui valori. Senza fill, a fine animazione il
-   controllo torna alla cascata reale (1, o 0.9 se bypassato), e l'assenza di animation-delay fa
-   si' che non serva neanche `backwards` per evitare un flash iniziale. */
+/* Niente `forwards`/`both`: a fine animazione il controllo torna alla cascata reale (che ora,
+   grazie a var(--chassis-opacity) qui sopra, e' gia' il valore giusto), e l'assenza di
+   animation-delay fa si' che non serva neanche `backwards` per evitare un flash iniziale. */
 .sx-chassis[data-boot="first"] {
   animation: sx-boot var(--dur-scene) var(--ease-glass);
 }

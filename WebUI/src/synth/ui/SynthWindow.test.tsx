@@ -336,6 +336,24 @@ describe("SynthWindow boot sequence", () => {
     );
     expect(screen.getByTestId("chassis")).toHaveAttribute("data-boot", "again");
   });
+
+  it("gives the boot keyframe a resting opacity that already accounts for bypass, at the very first boot", () => {
+    // Il bypass e' stato di sessione/host, non qualcosa che si azzera quando la finestra si
+    // apre: puo' essere gia' attivo alla primissima accensione del processo. La keyframe
+    // sx-boot in synth.css atterra su var(--chassis-opacity), non su un letterale 1 — jsdom non
+    // esegue mai animazioni CSS (verificato invece con un browser vero, vedi il report), ma
+    // puo' dire se il valore di riposo che la keyframe legge e' gia' quello giusto fin dal
+    // primissimo render.
+    resetFirstBoot();
+    render(
+      <BridgeProvider backend={new FakeBackend({ values: { bypass: 1 } })}>
+        <SynthWindow variant="glass" initialTab="env" gutter={0} />
+      </BridgeProvider>,
+    );
+    const chassis = screen.getByTestId("chassis");
+    expect(chassis).toHaveAttribute("data-boot", "first");
+    expect(chassis.style.getPropertyValue("--chassis-opacity")).toBe("0.9");
+  });
 });
 
 // Il colpo di luce del caricamento preset (round 1 del fix): pilotato da element.animate(), non
@@ -381,25 +399,40 @@ describe("SynthWindow preset wipe", () => {
     await userEvent.click(screen.getByRole("button", { name: /Init/ }));
     const overlay = screen.getByRole("dialog", { name: "Presets" });
     // Nessuna ricerca ne' scelta di scheda: l'anteprima si apre gia' sul preset corrente
-    // (Init), quindi il tasto e' gia' "Caricato" e onPick riceve lo stesso riferimento di
-    // PRESETS che useSynth.ts tiene gia' in stato — React salta il render (Object.is bail-out)
-    // e l'effect del wipe non gira nemmeno una seconda volta.
+    // (Init), quindi il tasto e' gia' "Caricato" e onPick ricarica lo stesso preset. `pick`
+    // chiama comunque setPreset: e' la dipendenza dell'effect (s.preset.name, una stringa) a
+    // non cambiare — "Init" prima e dopo — quindi e' React a non rieseguire l'effect per il
+    // confronto sulle dipendenze, non un bail-out sull'identita' dell'oggetto preset.
     await userEvent.click(within(overlay).getByRole("button", { name: "Caricato" }));
     expect(animateSpy).not.toHaveBeenCalled();
   });
 
-  it("skips the animation when the system prefers reduced motion", async () => {
-    reducedMotion = true;
+  it("reads the reduced-motion preference live, not once at mount", async () => {
+    // Il round 1 alzava la preferenza PRIMA del mount e non la cambiava mai: un matchMedia
+    // catturato una sola volta all'apertura sarebbe passato lo stesso test. Qui la si cambia
+    // DENTRO un montaggio unico, fra un caricamento preset e l'altro, cosi' l'unico modo di
+    // passare e' leggerla dentro l'effect a ogni esecuzione, come fa davvero il codice.
+    reducedMotion = false;
     render(
       <BridgeProvider backend={new FakeBackend()}>
         <SynthWindow variant="glass" initialTab="env" gutter={0} />
       </BridgeProvider>,
     );
+
     await userEvent.click(screen.getByRole("button", { name: /Init/ }));
-    const overlay = screen.getByRole("dialog", { name: "Presets" });
-    await userEvent.type(within(overlay).getByRole("searchbox"), "acid");
-    await userEvent.click(within(overlay).getByRole("button", { name: /Acid Line/ }));
-    await userEvent.click(within(overlay).getByRole("button", { name: "Carica preset" }));
-    expect(animateSpy).not.toHaveBeenCalled();
+    await userEvent.type(within(screen.getByRole("dialog", { name: "Presets" })).getByRole("searchbox"), "acid");
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Presets" })).getByRole("button", { name: /Acid Line/ }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Presets" })).getByRole("button", { name: "Carica preset" }));
+    expect(animateSpy).toHaveBeenCalledTimes(1);
+
+    reducedMotion = true;
+    await userEvent.click(screen.getByRole("button", { name: /Acid Line/ }));
+    await userEvent.type(within(screen.getByRole("dialog", { name: "Presets" })).getByRole("searchbox"), "neon");
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Presets" })).getByRole("button", { name: /Neon Lead/ }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Presets" })).getByRole("button", { name: "Carica preset" }));
+    // Ancora 1, non 2: il secondo caricamento e' un vero cambio di preset (Acid Line -> Neon
+    // Lead), quindi l'effect gira di nuovo, ma la preferenza alzata nel frattempo deve fermarlo
+    // prima della chiamata ad animate().
+    expect(animateSpy).toHaveBeenCalledTimes(1);
   });
 });

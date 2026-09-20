@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence } from "motion/react";
 import { DUR, EASE, bezier } from "@xerum/ui";
 import { useBoolParam, useBridgeState } from "../../juce/hooks";
@@ -132,9 +132,11 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
   // Il primo giro di questo effect e' il preset gia' in piedi al mount (quello che l'host ha
   // ripristinato, non una scelta fatta qui): l'apertura (data-boot sopra) possiede gia' quel
   // momento, e sovrapporci anche il wipe darebbe un doppio lampo. Si anima solo dal secondo
-  // giro in poi, cioe' da un vero cambio di preset — e un preset ricaricato IDENTICO a quello
-  // corrente non arriva neppure fin qui, perche' `setPreset` in useSynth.ts riceve lo stesso
-  // riferimento dell'array PRESETS e React salta il render (Object.is bail-out).
+  // giro in poi, cioe' da un vero cambio di preset — e ricaricare lo STESSO preset non fa
+  // ripartire l'effect perche' la sua dipendenza qui sotto e' `s.preset.name`, una stringa: e'
+  // identica a se stessa fra un render e l'altro (es. "Init" prima e dopo), quindi e' il
+  // confronto delle dipendenze di questo useEffect a saltare il giro, non un bail-out di React
+  // sull'identita' dell'oggetto preset (che pure succede, ma piu' a monte, in useSynth.ts).
   const firstPresetRef = useRef(true);
   useEffect(() => {
     if (firstPresetRef.current) {
@@ -199,7 +201,15 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
         data-variant={variant}
         data-attached={gutter === 0 ? "" : undefined}
         data-boot={boot}
-        style={{ ...(mode === "zoom" ? { zoom: sc } : { transform: `scale(${sc})` }), opacity: bypass.checked ? 0.9 : 1 }}
+        // Il dimming del bypass passa da una custom property, non da `opacity` diretto: e' il
+        // riposo che la keyframe di accensione in synth.css legge (var(--chassis-opacity)).
+        // Un `opacity` inline qui vincerebbe la cascata ma perderebbe comunque contro
+        // l'animazione mentre gira, e bypass e' stato di sessione/host — puo' essere gia'
+        // attivo alla primissima apertura del processo, prima ancora che l'animazione parta.
+        style={{
+          ...(mode === "zoom" ? { zoom: sc } : { transform: `scale(${sc})` }),
+          "--chassis-opacity": bypass.checked ? 0.9 : 1,
+        } as unknown as CSSProperties}
       >
         <SynthContext value={ctx}>
           <Header
