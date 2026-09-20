@@ -51,6 +51,29 @@ export function BottomStrip() {
       return next >= LOWEST && next <= HIGHEST ? next : n;
     });
 
+  // La posizione della mod wheel vive nel processor (`uiModWheel_`) e sopravvive all'editor:
+  // alzarla, chiudere la finestra e riaprirla lasciava la rotella disegnata in fondo mentre la
+  // mod matrix era ancora pilotata al valore vecchio. Il frame `meters` porta gia' `mw`, cioe'
+  // la posizione corrente del motore: si prende dal PRIMO frame dopo il mount, una volta sola.
+  //
+  // Non in continuo — litigherebbe col trascinamento dell'utente — e non spingendo `0` al mount,
+  // che calpesterebbe un CC 1 arrivato da una rotella hardware. La pitch non c'entra: `springBack`
+  // la tiene comunque a 0.5.
+  useEffect(() => {
+    let seeded = false;
+    let off: (() => void) | undefined;
+    off = backend.onMeters((m) => {
+      if (seeded) return;
+      seeded = true;
+      setMod(m.mw);
+      off?.(); // un frame basta: staccarsi evita un callback a 30 Hz per il resto della vita
+      off = undefined;
+    });
+    // Se un backend richiamasse in modo sincrono, la riga sopra non aveva ancora `off`.
+    if (seeded) { off?.(); off = undefined; }
+    return () => off?.();
+  }, [backend]);
+
   const onPitch = useCallback((v: number) => { setPitch(v); void backend.setWheel("pitch", v); }, [backend]);
   const onMod = useCallback((v: number) => { setMod(v); void backend.setWheel("mod", v); }, [backend]);
 

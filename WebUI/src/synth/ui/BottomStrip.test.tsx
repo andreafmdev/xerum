@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { ZERO_METERS } from "../../juce/backend";
 import { FakeBackend } from "../../juce/fake-backend";
 import { BridgeProvider } from "../../juce/provider";
 import { MetersProvider } from "./MetersContext";
@@ -164,6 +165,37 @@ describe("BottomStrip", () => {
       unmountAll();
       press("KeyA");
       expect(noteOn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("la mod wheel disegnata e quella del motore", () => {
+    const mw = () => screen.getByRole("slider", { name: "MW" });
+    const frame = (value: number) => ({ ...ZERO_METERS, mw: value });
+
+    it("parte dalla posizione che il motore ha gia'", async () => {
+      // `uiModWheel_` sta nel processor e sopravvive all'editor: riaprendo la finestra con la
+      // rotella alzata, il primo frame `meters` dice dov'e' davvero.
+      const backend = mount();
+      expect(mw()).toHaveAttribute("aria-valuenow", "0");
+      act(() => backend.emitMeters(frame(0.7)));
+      expect(mw()).toHaveAttribute("aria-valuenow", "0.7");
+    });
+
+    it("solo il primo frame: dopo, i frame non toccano piu' la rotella", async () => {
+      // Se leggesse `mw` in continuo, ogni frame riporterebbe la rotella al valore del motore
+      // mentre l'utente la sta trascinando.
+      const backend = mount();
+      act(() => backend.emitMeters(frame(0.7)));
+      act(() => backend.emitMeters(frame(0.2)));
+      expect(mw()).toHaveAttribute("aria-valuenow", "0.7");
+    });
+
+    it("al mount non spinge niente al backend", async () => {
+      // Spingere `0` al mount calpesterebbe un CC 1 arrivato da una rotella hardware.
+      const backend = mount();
+      const setWheel = vi.spyOn(backend, "setWheel");
+      act(() => backend.emitMeters(frame(0.7)));
+      expect(setWheel).not.toHaveBeenCalled();
     });
   });
 
