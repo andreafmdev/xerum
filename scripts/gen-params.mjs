@@ -210,17 +210,34 @@ export function generate(json) {
 // preset contro l'insieme di id di parameters.json: un id sconosciuto o un valore
 // fuori range 0..1 fanno fallire subito la generazione, non a runtime nel plugin.
 export function generatePresets(presetsJson, paramsJson) {
-  const knownIds = new Set(paramsJson.params.map((p) => p.id));
+  const specById = new Map(paramsJson.params.map((p) => [p.id, p]));
   const presets = presetsJson.presets;
 
-  for (const p of presets) {
-    for (const [id, value] of Object.entries(p.values ?? {})) {
-      if (!knownIds.has(id))
-        throw new Error(`preset "${p.name}": parametro sconosciuto ${id}`);
-      if (typeof value !== "number" || value < 0 || value > 1)
-        throw new Error(`preset "${p.name}": valore fuori range 0..1 per ${id}: ${value}`);
+  // I choice si scrivono per nome dell'opzione, non per valore normalizzato: `indice /
+  // (numOpzioni - 1)` cambia sotto i piedi ogni volta che si aggiunge un'opzione, e un
+  // preset scritto ieri punterebbe in silenzio a un'altra wavetable. Il nome no.
+  const resolve_ = (presetName, id, value) => {
+    const spec = specById.get(id);
+    if (!spec) throw new Error(`preset "${presetName}": parametro sconosciuto ${id}`);
+
+    if (spec.kind === "choice") {
+      if (typeof value !== "string")
+        throw new Error(`preset "${presetName}": ${id} e' un choice e va scritto col nome dell'opzione, non con ${JSON.stringify(value)}`);
+      const index = spec.options.findIndex((o) => o.value === value);
+      if (index < 0)
+        throw new Error(`preset "${presetName}": ${id} non ha l'opzione "${value}" (ci sono: ${spec.options.map((o) => o.value).join(", ")})`);
+      return spec.options.length === 1 ? 0 : index / (spec.options.length - 1);
     }
-  }
+
+    if (typeof value !== "number" || value < 0 || value > 1)
+      throw new Error(`preset "${presetName}": valore fuori range 0..1 per ${id}: ${JSON.stringify(value)}`);
+    return value;
+  };
+
+  const resolved = presets.map((p) => ({
+    ...p,
+    values: Object.fromEntries(Object.entries(p.values ?? {}).map(([id, v]) => [id, resolve_(p.name, id, v)])),
+  }));
 
   const header = [
     "#pragma once",
@@ -244,15 +261,15 @@ export function generatePresets(presetsJson, paramsJson) {
     "    int numValues;",
     "};",
     "",
-    ...presets.map((p, i) => {
+    ...resolved.map((p, i) => {
       const entries = Object.entries(p.values ?? {});
       if (entries.length === 0) return `inline constexpr const PresetValue* kPreset${i}Values = nullptr;`;
       return `inline constexpr PresetValue kPreset${i}Values[] = { ${entries.map(([id, v]) => `{ ${cstr(id)}, ${f(v)} }`).join(", ")} };`;
     }),
     "",
-    `inline constexpr int kNumPresets = ${presets.length};`,
+    `inline constexpr int kNumPresets = ${resolved.length};`,
     "inline constexpr Preset kPresetTable[kNumPresets] = {",
-    ...presets.map((p, i) => {
+    ...resolved.map((p, i) => {
       const n = Object.entries(p.values ?? {}).length;
       return `    { ${cstr(p.name)}, ${cstr(p.cat)}, ${n === 0 ? "nullptr" : `kPreset${i}Values`}, ${n} },`;
     }),
@@ -269,7 +286,7 @@ export function generatePresets(presetsJson, paramsJson) {
     "export type Preset = { name: string; cat: string; values: Partial<Record<ParamId, number>> };",
     "",
     "export const PRESETS: Preset[] = [",
-    ...presets.map((p) => `  { name: ${JSON.stringify(p.name)}, cat: ${JSON.stringify(p.cat)}, values: ${JSON.stringify(p.values ?? {})} },`),
+    ...resolved.map((p) => `  { name: ${JSON.stringify(p.name)}, cat: ${JSON.stringify(p.cat)}, values: ${JSON.stringify(p.values ?? {})} },`),
     "];",
     "",
   ].join("\n");
