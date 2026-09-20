@@ -101,6 +101,7 @@ export async function createJuceBackend(): Promise<Backend> {
   // funzione di unsubscribe restituita rimuove davvero il callback.
   const fanOut = <T>(event: string) => {
     const subs = new Set<(p: T) => void>();
+    // Sicuro: fanOut e' chiamata solo qui dentro createJuceBackend(), quindi dopo hasJuce().
     juceGlobal()!.backend.addEventListener(event, (p) => { for (const cb of [...subs]) cb(p as T); });
     return (cb: (p: T) => void) => { subs.add(cb); return () => { subs.delete(cb); }; };
   };
