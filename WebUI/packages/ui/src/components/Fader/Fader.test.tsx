@@ -77,4 +77,14 @@ describe("Fader motion", () => {
     expect(thumb.getAttribute("class")).toContain("ease-snap");
     expect(thumb.getAttribute("class")).not.toContain("ease-glass");
   });
+
+  it("declares an explicit transition-property list on the fill, not Tailwind's bare default", () => {
+    // La utility di base `transition` copre di suo anche `box-shadow` e `backdrop-filter`,
+    // vietate dalla whitelist: qui l'unica proprieta' che varia davvero e' il colore del
+    // riempimento (`bg-(--tone)`), quindi la lista esplicita contiene solo quella.
+    render(<Fader value={0.3} onChange={() => {}} label="Level" />);
+    const cls = screen.getByTestId("fader-fill").getAttribute("class") ?? "";
+    expect(cls).toContain("transition-[background-color]");
+    expect(cls).not.toMatch(/(^|\s)transition(?=\s|$)/);
+  });
 });

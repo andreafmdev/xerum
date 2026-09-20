@@ -92,9 +92,11 @@ export function Fader({
             // transform, filter): dichiara l'intento (ease-glass) e si disattiva durante il drag,
             // senza mai transizionare le due proprieta' vietate. Un vero scorrimento animato del
             // riempimento richiederebbe un riempimento a `transform`, fuori dal perimetro di
-            // questo task.
+            // questo task. La lista esplicita sostituisce la utility di base `transition`
+            // (che porterebbe con se' anche `box-shadow`/`backdrop-filter`, vietate) con la
+            // sola proprieta' che questo nodo puo' davvero variare: il colore del riempimento.
             className={cn(
-              "absolute rounded-[2px] bg-(--tone) transition duration-(--dur-state) ease-glass group-data-[dragging=true]/fader:transition-none",
+              "absolute rounded-[2px] bg-(--tone) transition-[background-color] duration-(--dur-state) ease-glass group-data-[dragging=true]/fader:transition-none",
               vertical ? "inset-x-px bottom-px" : "inset-y-px left-px",
             )}
             style={vertical ? { height: pct } : { width: pct }}

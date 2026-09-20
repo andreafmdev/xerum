@@ -109,7 +109,10 @@ export function Wheel({
           // proprieta' vietate. Il ritorno al centro quindi scatta senza dissolvenza sul
           // posizionamento: un vero rimbalzo animato richiederebbe un riempimento a `transform`,
           // che qui e' stato deliberatamente escluso (vedi commento sopra "mai un transform").
-          className="absolute inset-x-px rounded-[2px] bg-(--tone) transition duration-(--dur-layer) ease-settle group-data-[dragging=true]/wheel:transition-none"
+          // La lista esplicita sostituisce la utility di base `transition` (che porterebbe con
+          // se' anche `box-shadow`/`backdrop-filter`, vietate) con la sola proprieta' che
+          // questo nodo puo' davvero variare: il colore del riempimento.
+          className="absolute inset-x-px rounded-[2px] bg-(--tone) transition-[background-color] duration-(--dur-layer) ease-settle group-data-[dragging=true]/wheel:transition-none"
           style={fill}
         />
         {/* Il segno della posizione, per chi preferisce una riga a un riempimento (una rotella a

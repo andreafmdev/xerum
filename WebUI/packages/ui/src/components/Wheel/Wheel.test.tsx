@@ -92,4 +92,15 @@ describe("Wheel motion", () => {
     expect(cls).toContain("ease-settle");
     expect(cls).toContain("group-data-[dragging=true]/wheel:transition-none");
   });
+
+  it("declares an explicit transition-property list on the fill, not Tailwind's bare default", () => {
+    // Come per il Fader: la sola proprieta' che varia davvero su questo nodo e' il colore
+    // del riempimento (`bg-(--tone)`); `bottom`/`height` restano fuori (inline style, mai
+    // transizionati) e la utility di base `transition` porterebbe con se' anche
+    // `box-shadow`/`backdrop-filter`, vietate dalla whitelist.
+    render(<Wheel value={0.5} onChange={() => {}} label="Pitch" />);
+    const cls = screen.getByTestId("wheel").querySelector('[data-part="fill"]')?.getAttribute("class") ?? "";
+    expect(cls).toContain("transition-[background-color]");
+    expect(cls).not.toMatch(/(^|\s)transition(?=\s|$)/);
+  });
 });
