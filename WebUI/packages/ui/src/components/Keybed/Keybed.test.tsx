@@ -50,6 +50,35 @@ describe("Keybed", () => {
     expect(onAllNotesOff).toHaveBeenCalled();
   });
 
+  it("pointerleave dal contenitore rilascia la nota premuta", () => {
+    const onNoteOff = vi.fn();
+    const { container } = render(
+      <Keybed firstNote={48} octaves={1} velocity={0.8} onNoteOn={noop} onNoteOff={onNoteOff} onAllNotesOff={noop} />,
+    );
+    const keybed = container.querySelector('[data-slot="keybed"]')!;
+    fireEvent.pointerDown(screen.getAllByTestId("key-white")[0], { button: 0, pointerId: 1 });
+    fireEvent.pointerLeave(keybed, { pointerId: 1 });
+    expect(onNoteOff).toHaveBeenCalledWith(48);
+  });
+
+  it("blur della finestra chiama onAllNotesOff, come pointercancel", () => {
+    const onAllNotesOff = vi.fn();
+    render(<Keybed firstNote={48} octaves={1} velocity={0.8} onNoteOn={noop} onNoteOff={noop} onAllNotesOff={onAllNotesOff} />);
+    fireEvent.pointerDown(screen.getAllByTestId("key-white")[0], { button: 0, pointerId: 1 });
+    fireEvent(window, new Event("blur"));
+    expect(onAllNotesOff).toHaveBeenCalled();
+  });
+
+  it("smontato, non ascolta piu' il blur della finestra", () => {
+    const onAllNotesOff = vi.fn();
+    const { unmount } = render(
+      <Keybed firstNote={48} octaves={1} velocity={0.8} onNoteOn={noop} onNoteOff={noop} onAllNotesOff={onAllNotesOff} />,
+    );
+    unmount();
+    fireEvent(window, new Event("blur"));
+    expect(onAllNotesOff).not.toHaveBeenCalled();
+  });
+
   it("accende i tasti dal mask senza rirenderizzare", () => {
     let emit: ((m: readonly [number, number, number, number]) => void) | null = null;
     const subscribeNotes = (cb: (m: readonly [number, number, number, number]) => void) => {

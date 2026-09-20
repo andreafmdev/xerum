@@ -85,9 +85,16 @@ export function Keybed({
     });
   }, [subscribeNotes]);
 
-  const register = useCallback((note: number) => (el: HTMLElement | null) => {
-    if (el) keys.current.set(note, el);
-    else keys.current.delete(note);
+  // Un solo callback ref stabile per tutti i tasti, invece di una fabbrica chiamata dentro il
+  // map: `ref={registerKey}` costruirebbe una funzione nuova a ogni render per ognuno dei
+  // 48 tasti, e React li scollegherebbe e riattaccherebbe tutti ad ogni render. La nota si legge
+  // da `data-note` all'attach; la funzione di cleanup restituita (React 19) chiude su quella
+  // stessa nota, non sulla prop del map.
+  const registerKey = useCallback((el: HTMLElement | null) => {
+    if (!el) return;
+    const note = Number(el.dataset.note);
+    keys.current.set(note, el);
+    return () => { keys.current.delete(note); };
   }, []);
 
   const whiteNotes: number[] = [];
@@ -115,7 +122,7 @@ export function Keybed({
       {whiteNotes.map((note) => (
         <div
           key={note}
-          ref={register(note)}
+          ref={registerKey}
           data-testid="key-white"
           data-note={note}
           data-active="false"
@@ -132,7 +139,7 @@ export function Keybed({
       {blackNotes.map(({ note, index }) => (
         <div
           key={note}
-          ref={register(note)}
+          ref={registerKey}
           data-testid="key-black"
           data-note={note}
           data-active="false"
