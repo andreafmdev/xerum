@@ -21,7 +21,19 @@ const OUT_POINTS = 256;
  * un'onda che non e' la sua.
  */
 export function buildPreview(frames, outFrames, outPoints) {
-  const stride = frames[0].length / outPoints;
+  const frameLength = frames[0].length;
+  if (frames.some((f) => f.length !== frameLength))
+    throw new Error(`buildPreview: i frame non hanno tutti la stessa lunghezza (atteso ${frameLength})`);
+
+  const stride = frameLength / outPoints;
+  // Con stride < 1 (piu' punti richiesti che campioni nel frame) `to` e `from` possono
+  // coincidere dopo l'arrotondamento: la media diventerebbe 0/0, cioe' NaN scritto senza
+  // errore in wavetables.generated.ts (il typecheck non lo vede, e' un numero valido a runtime).
+  if (stride < 1)
+    throw new Error(
+      `buildPreview: outPoints (${outPoints}) e' maggiore dei campioni per frame (${frameLength}); ridurre outPoints o usare frame piu' lunghi`,
+    );
+
   const out = [];
 
   for (let f = 0; f < outFrames; f++) {

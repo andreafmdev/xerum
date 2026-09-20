@@ -209,6 +209,9 @@ export function generate(json) {
 // Genera PresetTable.h e presets.generated.ts da presets.json, convalidando ogni
 // preset contro l'insieme di id di parameters.json: un id sconosciuto o un valore
 // fuori range 0..1 fanno fallire subito la generazione, non a runtime nel plugin.
+// I choice fanno eccezione al range 0..1: si scrivono col `value` dell'opzione (una
+// stringa, non un numero), e un nome che l'opzione non ha fa fallire la generazione
+// allo stesso modo — vedi resolve_ qui sotto.
 export function generatePresets(presetsJson, paramsJson) {
   const specById = new Map(paramsJson.params.map((p) => [p.id, p]));
   const presets = presetsJson.presets;
