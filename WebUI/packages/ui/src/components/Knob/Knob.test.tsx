@@ -192,4 +192,19 @@ describe("Knob motion", () => {
     await userEvent.pointer([{ keys: "[MouseLeft>]", target: screen.getByRole("slider") }]);
     expect(knob).toHaveAttribute("data-dragging", "true");
   });
+
+  it("lights the drop target on a transition, not on a cut", () => {
+    render(<Knob value={0.3} onChange={() => {}} label="Cutoff" onDropMod={() => {}} />);
+    const cls = screen.getByTestId("knob").className;
+    expect(cls).toContain("transition-[box-shadow]");
+    expect(cls).toContain("duration-(--dur-state)");
+    expect(cls).toContain("ease-glass");
+  });
+
+  it("grows the modulation ring from the arc when it appears", () => {
+    render(<Knob value={0.3} onChange={() => {}} label="Cutoff" mods={[{ tone: "lfo", depth: 0.2 }]} />);
+    const cls = screen.getByTestId("knob-mod-arc").getAttribute("class") ?? "";
+    expect(cls).toContain("origin-center");
+    expect(cls).toContain("motion-safe:animate-[sx-ring-in_var(--dur-state)_var(--ease-glass)]");
+  });
 });

@@ -13,7 +13,7 @@ export function ModChip({ src }: { src: ModSource }) {
         e.dataTransfer.setData(MOD_DRAG_TYPE, src);
         e.dataTransfer.effectAllowed = "copy";
       }}
-      className="sx-chip inline-flex h-4.5 cursor-grab items-center gap-1.5 rounded-full border border-edge-dark bg-linear-to-b from-cap-hi to-cap-lo pr-2 pl-1.5 text-2xs font-semibold tracking-wider text-(--tone) shadow-cap transition-transform hover:-translate-y-px active:cursor-grabbing [text-shadow:var(--tglow)]"
+      className="sx-chip inline-flex h-4.5 cursor-grab items-center gap-1.5 rounded-full border border-edge-dark bg-linear-to-b from-cap-hi to-cap-lo pr-2 pl-1.5 text-2xs font-semibold tracking-wider text-(--tone) shadow-cap transition-[transform,box-shadow] duration-(--dur-press) ease-snap hover:-translate-y-px active:cursor-grabbing [text-shadow:var(--tglow)]"
     >
       <i className="size-1.5 rounded-full bg-(--tone) shadow-[0_0_5px_var(--tone)]" />
       {SOURCE_LABEL[src]}

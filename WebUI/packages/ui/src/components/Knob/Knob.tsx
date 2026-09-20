@@ -162,7 +162,14 @@ export function Knob({
       // `group-data-[dragging=true]/knob:…` richiede l'attributo sullo STESSO elemento che porta
       // la classe `group/knob`, cioe' questo contenitore, non il quadrante interattivo.
       data-dragging={dragging}
-      className={cn("group/knob flex flex-col items-center gap-1.5", className)}
+      // La transizione e' dichiarata anche qui, alla radice: e' l'elemento che porta
+      // `data-drop-target` e la lettura del contratto (vedi Knob.test.tsx). Il box-shadow che
+      // cambia davvero vive sul quadrante qui sotto (stesso elemento del ring group-data-…),
+      // dove la stessa terna duration/ease e' ripetuta perche' e' li' che l'anello si accende.
+      className={cn(
+        "group/knob flex flex-col items-center gap-1.5 transition-[box-shadow] duration-(--dur-state) ease-glass",
+        className,
+      )}
       style={toneStyle(tone)}
       {...dropHandlers}
     >
@@ -184,6 +191,9 @@ export function Knob({
           "cursor-ns-resize focus-visible:ring-2 focus-visible:ring-(--tone) focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           // Bersaglio di drop: alone della sorgente attorno al cappuccio.
           "group-data-[drop-target=true]/knob:ring-2 group-data-[drop-target=true]/knob:ring-lfo",
+          // Il box-shadow del ring cambia su QUESTO elemento: la transizione deve stare qui,
+          // non solo alla radice, altrimenti l'alone scatta di netto invece di accendersi.
+          "transition-[box-shadow] duration-(--dur-state) ease-glass",
           disabled && "cursor-not-allowed",
         )}
         {...handlers}
@@ -215,7 +225,13 @@ export function Knob({
                 data-testid="knob-mod-arc"
                 data-range={`${lo},${hi}`}
                 d={arcPath(C, C, R + 4.5 + i * 2.2, KNOB_START + KNOB_SWEEP * lo, KNOB_START + KNOB_SWEEP * hi)}
-                className="fill-none opacity-80"
+                // `origin-center` risolve al centro del viewBox (20,20 su "0 0 40 40"), che qui
+                // coincide con C: e' il centro geometrico vero del knob, non l'angolo in alto a
+                // sinistra a cui scala() atterrerebbe di default su un elemento SVG. L'animazione
+                // e' un ingresso una tantum (nasce quando l'anello compare): niente `transition`
+                // qui, che altrimenti reinterpolerebbe ogni ri-render a 30 Hz insieme al valore
+                // (vedi il div del punto live piu' sotto, che per lo stesso motivo non ne ha).
+                className="fill-none opacity-80 origin-center motion-safe:animate-[sx-ring-in_var(--dur-state)_var(--ease-glass)]"
                 style={{ stroke: `var(--color-${m.tone})` }}
                 strokeWidth={1.6}
                 strokeLinecap="round"
