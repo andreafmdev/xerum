@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { deflateSync } from "node:zlib";
 import { parseFxp, splitZlibStreams, framesFromStream, SERUM_FRAME_SIZE } from "./serum-fxp.mjs";
+import { collectWavetables } from "./import-serum-wavetables.mjs";
 
 /** Un .fxp FPCh come lo scrive Serum: header big-endian, poi il chunk opaco. */
 function makeFxp({ pluginId = "XfsX", name = "TEST", chunk = Buffer.alloc(0), declaredLen = null } = {}) {
@@ -90,4 +91,21 @@ test("framesFromStream ricava i frame e ne conserva i valori", () => {
 test("framesFromStream restituisce null su stream vuoto o non allineato", () => {
   assert.equal(framesFromStream(Buffer.alloc(0), SERUM_FRAME_SIZE), null);
   assert.equal(framesFromStream(Buffer.alloc(13), SERUM_FRAME_SIZE), null);
+});
+
+test("collectWavetables deduplica per sha1 e scarta sotto la soglia", () => {
+  const big = deflateSync(rampStream(16));
+  const small = deflateSync(rampStream(4));
+  const state = deflateSync(Buffer.alloc(64));
+  const files = [
+    { name: "A.fxp", buffer: makeFxp({ name: "A", chunk: Buffer.concat([state, big]) }) },
+    { name: "B.fxp", buffer: makeFxp({ name: "B", chunk: Buffer.concat([state, big]) }) },
+    { name: "C.fxp", buffer: makeFxp({ name: "C", chunk: Buffer.concat([state, small]) }) },
+    { name: "D.fxp", buffer: makeFxp({ name: "D", chunk: state }) },
+  ];
+  const found = collectWavetables(files, 8);
+  assert.equal(found.size, 1);
+  const only = [...found.values()][0];
+  assert.equal(only.frames.length, 16);
+  assert.deepEqual(only.sources, ["A.fxp", "B.fxp"]);
 });
