@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Knob } from "./Knob";
 
 describe("Knob", () => {
@@ -157,5 +158,38 @@ describe("Knob modulation", () => {
     render(<Knob value={0.5} onChange={() => {}} label="Cutoff" hideValue />);
     expect(screen.queryByTestId("knob-readout")).not.toBeInTheDocument();
     expect(screen.getByRole("slider")).toHaveAttribute("aria-valuetext", "50%");
+  });
+});
+
+describe("Knob motion", () => {
+  it("animates the value arc only when the change did not come from the pointer", () => {
+    render(<Knob value={0.3} onChange={() => {}} label="Cutoff" />);
+    const arc = screen.getByTestId("knob-value-arc");
+    expect(arc.getAttribute("class")).toContain("transition-[d,stroke-dashoffset]");
+    // Durante il drag la transizione sparisce: il valore insegue il dito, non una curva.
+    expect(arc.getAttribute("class")).toContain("group-data-[dragging=true]/knob:transition-none");
+  });
+
+  it("settles the cap, never the value", () => {
+    render(<Knob value={0.3} onChange={() => {}} label="Cutoff" />);
+    expect(screen.getByTestId("knob").querySelector('[data-part="cap"]')?.getAttribute("class")).toContain("ease-settle");
+    expect(screen.getByTestId("knob-value-arc").getAttribute("class")).not.toContain("ease-settle");
+  });
+
+  it("never transitions the live value dot: it already arrives at 30 Hz", () => {
+    render(<Knob value={0.3} onChange={() => {}} label="Cutoff" mods={[{ tone: "lfo", depth: 0.2 }]} liveValue={0.4} />);
+    expect(screen.getByTestId("knob-live").getAttribute("class") ?? "").not.toContain("transition");
+  });
+
+  it("marks the drag on the root so CSS can switch the rule", async () => {
+    // Nota: si trascina sul quadrante (role=slider), non sul contenitore esterno con
+    // data-testid="knob" (che porta solo etichetta e readout) — ma e' il contenitore esterno
+    // a portare `group/knob`, quindi e' li' che `data-dragging` deve comparire perche' il
+    // selettore CSS `group-data-[dragging=true]/knob:…` lo trovi.
+    render(<Knob value={0.3} onChange={() => {}} label="Cutoff" />);
+    const knob = screen.getByTestId("knob");
+    expect(knob).toHaveAttribute("data-dragging", "false");
+    await userEvent.pointer([{ keys: "[MouseLeft>]", target: screen.getByRole("slider") }]);
+    expect(knob).toHaveAttribute("data-dragging", "true");
   });
 });

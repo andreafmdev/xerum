@@ -158,6 +158,10 @@ export function Knob({
       data-testid="knob"
       data-slot="knob"
       data-drop-target={onDropMod ? dropTarget : undefined}
+      // Duplicato rispetto a quello sul quadrante qui sotto: il selettore CSS
+      // `group-data-[dragging=true]/knob:…` richiede l'attributo sullo STESSO elemento che porta
+      // la classe `group/knob`, cioe' questo contenitore, non il quadrante interattivo.
+      data-dragging={dragging}
       className={cn("group/knob flex flex-col items-center gap-1.5", className)}
       style={toneStyle(tone)}
       {...dropHandlers}
@@ -222,7 +226,13 @@ export function Knob({
             data-testid="knob-value-arc"
             data-part="value"
             d={arcPath(C, C, R, start, end)}
-            className="fill-none stroke-(--tone) transition-[d] ease-snap [filter:var(--glow,none)]"
+            // `d` e' interpolabile qui: arcPath produce sempre "M x y A r r 0 large 1 x y" (stessi
+            // comandi, stesso numero di punti) per ogni valore 0..1, quindi i motori CSS
+            // interpolano le coordinate. L'unica eccezione e' il flag "large-arc" (0/1, discreto:
+            // non si anima, scatta di netto) quando il bipolar supera i 180°, un singolo istante
+            // e non un lag percepibile. Durante il drag la transizione sparisce del tutto: il
+            // valore deve seguire il dito, non una curva che lo insegue in ritardo.
+            className="fill-none stroke-(--tone) transition-[d,stroke-dashoffset] duration-(--dur-state) ease-glass group-data-[dragging=true]/knob:transition-none [filter:var(--glow,none)]"
             strokeWidth={2.5}
             strokeLinecap="round"
           />
@@ -244,7 +254,17 @@ export function Knob({
               compositing (WebKit) piu' di tutto il resto del disegno. */}
           <circle data-part="cap-shadow" cx={C} cy={C + 0.9} r={CAP_R + 0.7} className="fill-edge-dark opacity-70" />
           <circle data-part="cap-edge" cx={C} cy={C} r={CAP_R + 0.6} className="fill-none stroke-edge-dark" strokeWidth={1} />
-          <circle data-part="cap" cx={C} cy={C} r={CAP_R} fill={`url(#${capFill})`} />
+          <circle
+            data-part="cap"
+            cx={C}
+            cy={C}
+            r={CAP_R}
+            fill={`url(#${capFill})`}
+            // Il rimbalzo al rilascio vive solo qui, mai sull'arco del valore o sul puntatore:
+            // il cappuccio e' un oggetto fisico che puo' molleggiare, il valore e' un dato che non
+            // deve mai mostrare all'utente un numero diverso da quello che il motore ha davvero.
+            className="origin-center transition-transform duration-(--dur-press) ease-settle group-data-[dragging=true]/knob:scale-[0.985]"
+          />
           <circle
             data-part="rim"
             cx={C}
@@ -256,7 +276,11 @@ export function Knob({
           {GRIP_LINES}
 
           {/* Indicatore: solco scuro con il fondo lucido sopra. */}
-          <g data-part="pointer" transform={`rotate(${pointerDeg - 270} ${C} ${C})`}>
+          <g
+            data-part="pointer"
+            transform={`rotate(${pointerDeg - 270} ${C} ${C})`}
+            className="origin-center transition-transform duration-(--dur-state) ease-glass group-data-[dragging=true]/knob:transition-none"
+          >
             <line
               data-part="pointer-groove"
               x1={C}
