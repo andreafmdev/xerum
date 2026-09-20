@@ -8,8 +8,10 @@ import { render, screen } from "@testing-library/react";
 // il proprio `LazyMotion` locale senza mai toccare `App`. Qui si sostituisce `LazyMotion` con una
 // spia che renderizza un marker DOM che porta le props ricevute, cosi' da verificare il wrapper
 // vero — non solo la sua presenza nel documento, ma che lo chassis sia AL SUO INTERNO, e che
-// `strict`/`features` siano esattamente quelli attesi. Il resto del modulo (`domAnimation`, `m`,
-// `AnimatePresence`, `useReducedMotion`) resta quello vero: qui interessa solo la wrapping.
+// `strict`/`features` siano esattamente quelli attesi. Lo stesso vale per `MotionConfig`, sotto:
+// una seconda spia, stesso principio, per verificare che `reducedMotion="user"` sia davvero
+// applicato all'albero e non solo scritto nel sorgente. Il resto del modulo (`domAnimation`,
+// `m`, `AnimatePresence`, `useReducedMotion`) resta quello vero: qui interessa solo la wrapping.
 vi.mock("motion/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("motion/react")>();
   const LazyMotion = ({
@@ -29,12 +31,21 @@ vi.mock("motion/react", async (importOriginal) => {
       {children}
     </div>
   );
-  return { ...actual, LazyMotion };
+  const MotionConfig = ({ reducedMotion, children }: { reducedMotion?: string; children: ReactNode }) => (
+    <div data-testid="motionconfig-boundary" data-reduced-motion={String(reducedMotion)}>
+      {children}
+    </div>
+  );
+  return { ...actual, LazyMotion, MotionConfig };
 });
 
 const { default: App } = await import("./App");
 const { FakeBackend } = await import("./juce/fake-backend");
 const { BridgeProvider } = await import("./juce/provider");
+// Stesso stub condiviso di @xerum/ui (vedi packages/ui/src/test/setup.ts): qui serve per
+// dimostrare che il wrapper e' configurato per ascoltare la preferenza di sistema, non solo che
+// esiste nel sorgente — coerente con come il resto del piano di motion prova la regola CSS.
+const { setReducedMotion } = await import("../packages/ui/src/test/setup");
 
 function mount() {
   render(
@@ -59,5 +70,28 @@ describe("App wraps the chassis in LazyMotion", () => {
   it("passes the domAnimation feature set, not another one", () => {
     mount();
     expect(screen.getByTestId("lazymotion-boundary")).toHaveAttribute("data-features", "domAnimation");
+  });
+});
+
+describe("App configures MotionConfig so every m.* honours reduced motion", () => {
+  // matchMedia riporta "reduce" PRIMA del mount: se il wrapper mancasse, questo test non
+  // avrebbe nessun elemento da leggere (getByTestId lancia) — non passerebbe per caso con
+  // un'asserzione debole. Il valore di matchMedia non cambia cosa viene passato a MotionConfig
+  // (reducedMotion="user" e' statico, non condizionato dalla preferenza corrente): e' la libreria
+  // stessa a decidere, dentro, se applicarla o no. Il punto qui è che il wrapper è presente e
+  // configurato per ascoltarla anche quando la preferenza e' gia' attiva, non solo a preferenza
+  // di default.
+  it("wraps the chassis in MotionConfig with reducedMotion: 'user', with the system preference already set to reduce", () => {
+    setReducedMotion(true);
+    mount();
+    const boundary = screen.getByTestId("motionconfig-boundary");
+    expect(boundary).toContainElement(screen.getByTestId("chassis"));
+    expect(boundary).toHaveAttribute("data-reduced-motion", "user");
+  });
+
+  it("sits inside the LazyMotion boundary", () => {
+    setReducedMotion(true);
+    mount();
+    expect(screen.getByTestId("lazymotion-boundary")).toContainElement(screen.getByTestId("motionconfig-boundary"));
   });
 });

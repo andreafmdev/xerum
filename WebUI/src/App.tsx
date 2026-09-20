@@ -1,4 +1,4 @@
-import { LazyMotion, domAnimation } from "motion/react";
+import { LazyMotion, MotionConfig, domAnimation } from "motion/react";
 import { SynthWindow, type SynthVariant } from "./synth/ui/SynthWindow";
 import type { TabId } from "./synth/useSynth";
 
@@ -24,11 +24,23 @@ export default function App() {
     // `strict` fa fallire ogni `motion.*`: obbliga `m.*` e tiene il bundle sul solo
     // `domAnimation`, che di suo non contiene le layout animations (vietate dalla spec).
     <LazyMotion features={domAnimation} strict>
-      <SynthWindow
-        variant={fromQuery("variant", VARIANTS, "glass")}
-        initialTab={fromQuery("tab", TABS, "env")}
-        gutter={gutterFromQuery(16)}
-      />
+      {/* `reducedMotion="user"` fa si' che OGNI `m.*` di questo albero (il crossfade dei tab in
+          Tabs.tsx, l'enter/exit di PresetOverlay.tsx, e qualsiasi `m.*` una task futura
+          aggiunga) rispetti `prefers-reduced-motion` da solo, senza che ogni componente debba
+          ricordarsi di chiamare `useReducedMotion()`. E' l'equivalente, per la libreria, della
+          regola CSS globale in index.css: un solo punto che vale per tutto l'albero, presente e
+          futuro, invece di una deroga per componente. `LazyContext` (da LazyMotion, sopra) e
+          `MotionConfigContext` (da MotionConfig, qui sotto) sono due context React distinti e
+          indipendenti — nessuno dei due legge l'altro — quindi l'ordine di annidamento fra i due
+          provider non cambia il comportamento; MotionConfig sta dentro LazyMotion solo perche'
+          e' concettualmente piu' vicino all'albero che configura. */}
+      <MotionConfig reducedMotion="user">
+        <SynthWindow
+          variant={fromQuery("variant", VARIANTS, "glass")}
+          initialTab={fromQuery("tab", TABS, "env")}
+          gutter={gutterFromQuery(16)}
+        />
+      </MotionConfig>
     </LazyMotion>
   );
 }
