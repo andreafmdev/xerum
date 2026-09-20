@@ -1,19 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { FakeBackend } from "../../juce/fake-backend";
 import { BridgeProvider } from "../../juce/provider";
 import { MetersProvider } from "./MetersContext";
 import { BottomStrip } from "./BottomStrip";
 
+let unmountAll = () => {};
+
 function mount() {
   const backend = new FakeBackend();
-  render(
+  const view = render(
     <BridgeProvider backend={backend}>
       <MetersProvider>
         <BottomStrip />
       </MetersProvider>
     </BridgeProvider>,
   );
+  unmountAll = view.unmount;
   return backend;
 }
 
@@ -58,6 +61,110 @@ describe("BottomStrip", () => {
     // sempre un multiplo di 12 di distanza dal punto di partenza (36), altrimenti la tastiera
     // partirebbe da una nota che non e' un Do e i tasti neri finirebbero nel posto sbagliato.
     expect(Number(firstKey().getAttribute("data-note")) % 12).toBe(0);
+  });
+
+  describe("suonare dalla tastiera del computer", () => {
+    // La striscia nativa lo faceva con setKeyPressBaseOctave(5); qui e' un keydown sulla
+    // finestra. Gli eventi si sparano su document.body: bollono fino a window, che e' dove
+    // BottomStrip ascolta.
+    const press = (code: string, init: KeyboardEventInit = {}) =>
+      fireEvent.keyDown(document.body, { code, ...init });
+    const lift = (code: string) => fireEvent.keyUp(document.body, { code });
+
+    it("la fila bassa copre un'ottava dal primo tasto visibile", async () => {
+      const backend = mount();
+      press("KeyA");
+      await Promise.resolve();
+      expect([...backend.playing]).toEqual([36]);
+
+      lift("KeyA");
+      await Promise.resolve();
+      expect(backend.playing.size).toBe(0);
+    });
+
+    it("i diesis stanno sulla fila sopra, e la seconda fila continua oltre l'ottava", async () => {
+      const backend = mount();
+      press("KeyW"); // DO diesis
+      press("KeyK"); // il DO sopra
+      press("Semicolon"); // MI sopra
+      await Promise.resolve();
+      expect([...backend.playing].sort((a, b) => a - b)).toEqual([37, 48, 52]);
+    });
+
+    it("manda la velocity della barra, come il puntatore", async () => {
+      const backend = mount();
+      const noteOn = vi.spyOn(backend, "noteOn");
+      press("KeyA");
+      expect(noteOn).toHaveBeenCalledWith(36, 80 / 127);
+    });
+
+    it("un tasto tenuto manda una nota sola, auto-ripetizione compresa", async () => {
+      // Due forme dello stesso keydown di troppo: quello con `repeat` che manda il sistema
+      // mentre il tasto resta giu', e uno senza. Nessuno dei due deve ritriggerare.
+      const backend = mount();
+      const noteOn = vi.spyOn(backend, "noteOn");
+      press("KeyA");
+      press("KeyA", { repeat: true });
+      press("KeyA");
+      expect(noteOn).toHaveBeenCalledTimes(1);
+
+      lift("KeyA");
+      press("KeyA");
+      expect(noteOn).toHaveBeenCalledTimes(2);
+    });
+
+    it("scrivere in un campo di testo non suona", async () => {
+      const backend = mount();
+      const input = document.createElement("input");
+      document.body.appendChild(input);
+      fireEvent.keyDown(input, { code: "KeyA" });
+      await Promise.resolve();
+      expect(backend.playing.size).toBe(0);
+      input.remove();
+    });
+
+    it("le scorciatoie con modificatori non suonano", async () => {
+      const backend = mount();
+      press("KeyA", { metaKey: true });
+      press("KeyS", { ctrlKey: true });
+      await Promise.resolve();
+      expect(backend.playing.size).toBe(0);
+    });
+
+    it("il blur della finestra spegne tutto e libera i tasti tenuti", async () => {
+      const backend = mount();
+      press("KeyA");
+      await Promise.resolve();
+      expect(backend.playing.size).toBe(1);
+
+      // Il blur non manda keyup: senza `typed.clear()` la mappa resterebbe convinta che "A" sia
+      // ancora giu' e quel tasto non suonerebbe mai piu'. Il silenzio subito dopo il blur lo
+      // garantirebbe gia' il panic di Keybed, quindi e' la ripressione a essere la prova.
+      fireEvent(window, new Event("blur"));
+      await Promise.resolve();
+      expect(backend.playing.size).toBe(0);
+
+      press("KeyA");
+      await Promise.resolve();
+      expect([...backend.playing]).toEqual([36]);
+    });
+
+    it("cambiare ottava con un tasto premuto non lascia la nota appesa", async () => {
+      const backend = mount();
+      press("KeyA");
+      fireEvent.click(screen.getByRole("button", { name: "Octave up" }));
+      lift("KeyA");
+      await Promise.resolve();
+      expect(backend.playing.size).toBe(0);
+    });
+
+    it("smontata, la striscia non ascolta piu' la tastiera", async () => {
+      const backend = mount();
+      const noteOn = vi.spyOn(backend, "noteOn");
+      unmountAll();
+      press("KeyA");
+      expect(noteOn).not.toHaveBeenCalled();
+    });
   });
 
   it("muovere la mod wheel chiama setWheel", async () => {
