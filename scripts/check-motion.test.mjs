@@ -78,6 +78,19 @@ test("does not flag a comment that merely names the forbidden forms to explain w
   assert.deepEqual(rules(line), []);
 });
 
+// --- Fix round 3 / Finding: il filtro sul commento non deve poter essere ingannato da uno
+// schema URL. La versione scartata tagliava OGNI riga al primo "//", per OGNI regola: un
+// `href="http://…"` prima di una violazione vera sulla stessa riga la faceva sparire in
+// silenzio, per qualunque regola dell'elenco — non solo forbidden-transition-property. Questi
+// due casi sono esattamente quelli dimostrati dal reviewer con la funzione esportata.
+test("a URL scheme's // does not hide a forbidden-transition-property violation later on the line", () => {
+  assert.deepEqual(rules('<a href="http://x.com" className="transition-[height]" />'), ["forbidden-transition-property"]);
+});
+
+test("a URL scheme's // does not hide a hardcoded-duration violation later on the line", () => {
+  assert.deepEqual(rules('<a href="http://x.com" className="duration-[500ms]" />'), ["hardcoded-duration"]);
+});
+
 test("reports the offending line number", () => {
   const [v] = findViolations([{ path: "x.tsx", text: '\n\n<m.div layout />' }]);
   assert.equal(v.line, 3);

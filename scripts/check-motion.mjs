@@ -38,9 +38,16 @@ const LINE_RULES = [
   // possa confondersi con altro, è sempre e solo il nome letterale di una utility Tailwind.
   // `\b` sui confini basta anche per un token con trattini come grid-template-rows, perché il
   // trattino è un carattere "non di parola" tanto quanto la parentesi quadra o la virgola.
+  //
+  // `pre: beforeRealComment` è solo di questa regola, non un default globale: un commento che
+  // *nomina* un token vietato fra backtick per dire "non lo uso" (successo davvero su
+  // Fader.tsx) andrebbe letto come violazione senza questo filtro. Le altre regole di questo
+  // elenco continuano a leggere la riga intera — vedi il commento su beforeRealComment per il
+  // perché una troncatura generale per tutte le regole è stata scartata.
   {
     rule: "forbidden-transition-property",
     re: /\btransition-\[[^\]]*\b(?:height|width|top|left|grid-template-rows|backdrop-filter)\b[^\]]*\]/,
+    pre: beforeRealComment,
   },
 ];
 
@@ -75,17 +82,32 @@ function lineOf(text, index) {
   return line;
 }
 
-// Il testo di una riga fino al primo `//` incluso: le regole riga-per-riga non devono leggere la
-// prosa di un commento come se fosse codice vero. È capitato scrivendo la regola
-// forbidden-transition-property qui sotto: un commento che *spiega* perché quel nodo non usa
-// `transition-[height]`/`transition-[width]` (Fader.tsx, citandoli fra backtick per dire "non
-// questi") li nomina entrambi alla lettera, e la regola scattava sul commento anziché sul codice
-// — lo stesso genere di falso positivo appena sistemato per animated-blur, qui dentro una riga
-// sola invece che fra righe o blocchi diversi. In questo repo non ci sono URL con "://" nei file
-// scansionati (il solo caso in cui tagliare al primo "//" taglierebbe codice vero, non un
-// commento; verificato con una ricerca su WebUI/src e WebUI/packages/ui/src).
-function codeOnly(line) {
-  const i = line.indexOf("//");
+// Una troncatura al primo "//" applicata a TUTTE le regole riga-per-riga è stata provata e
+// scartata: un `//` dentro uno schema URL (`http://…`) non è un commento, e tagliare lì
+// avrebbe fatto sparire in silenzio una violazione vera più avanti sulla stessa riga, per
+// QUALSIASI regola — un fallimento silenzioso, il peggiore che un guardrail possa avere (nessuno
+// se ne accorgerebbe finché qualcuno non aggiunge un URL a un elemento con className). Le regole
+// di questo elenco leggono quindi la riga intera per default: solo forbidden-transition-property,
+// che ne ha bisogno per non scambiare un commento che *nomina* un token vietato per il token
+// stesso (successo davvero su Fader.tsx: `// niente transition-[height] qui`), usa il filtro
+// sotto — ed è scritto per non lasciarsi ingannare da un URL.
+//
+// "//" preceduto da ":" non è mai l'inizio di un commento: è la firma di uno schema URL
+// (http://, https://, …). È l'unico segnale che serve: uno schema URL ha sempre un ":" subito
+// prima delle due barre, un commento reale (dopo uno spazio, una graffa, l'inizio riga) mai.
+function realCommentIndex(line) {
+  let from = 0;
+  for (;;) {
+    const i = line.indexOf("//", from);
+    if (i === -1) return -1;
+    if (line[i - 1] !== ":") return i;
+    from = i + 2;
+  }
+}
+/** Il testo di una riga fino al suo commento `//` vero, se c'è. Solo per le regole che lo
+    richiedono esplicitamente (vedi sopra) — non è il default di tutto l'elenco. */
+function beforeRealComment(line) {
+  const i = realCommentIndex(line);
   return i === -1 ? line : line.slice(0, i);
 }
 
@@ -154,8 +176,7 @@ export function findViolations(files) {
     };
 
     text.split("\n").forEach((line, i) => {
-      const code = codeOnly(line);
-      for (const { rule, re } of LINE_RULES) if (re.test(code)) push(i + 1, rule);
+      for (const { rule, re, pre } of LINE_RULES) if (re.test(pre ? pre(line) : line)) push(i + 1, rule);
     });
 
     // Tutti i controlli di animated-blur guardano dentro blocchi `{ ... }`, ma solo nei file
