@@ -162,20 +162,14 @@ export function Knob({
       // `group-data-[dragging=true]/knob:…` richiede l'attributo sullo STESSO elemento che porta
       // la classe `group/knob`, cioe' questo contenitore, non il quadrante interattivo.
       data-dragging={dragging}
-      // La transizione e' dichiarata anche qui, alla radice: e' l'elemento che porta
-      // `data-drop-target` e la lettura del contratto (vedi Knob.test.tsx). Il box-shadow che
-      // cambia davvero vive sul quadrante qui sotto (stesso elemento del ring group-data-…),
-      // dove la stessa terna duration/ease e' ripetuta perche' e' li' che l'anello si accende.
-      className={cn(
-        "group/knob flex flex-col items-center gap-1.5 transition-[box-shadow] duration-(--dur-state) ease-glass",
-        className,
-      )}
+      className={cn("group/knob flex flex-col items-center gap-1.5", className)}
       style={toneStyle(tone)}
       {...dropHandlers}
     >
       <div
         ref={ref}
         id={id}
+        data-testid="knob-dial"
         role="slider"
         tabIndex={disabled ? -1 : 0}
         aria-label={label}
@@ -191,8 +185,8 @@ export function Knob({
           "cursor-ns-resize focus-visible:ring-2 focus-visible:ring-(--tone) focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           // Bersaglio di drop: alone della sorgente attorno al cappuccio.
           "group-data-[drop-target=true]/knob:ring-2 group-data-[drop-target=true]/knob:ring-lfo",
-          // Il box-shadow del ring cambia su QUESTO elemento: la transizione deve stare qui,
-          // non solo alla radice, altrimenti l'alone scatta di netto invece di accendersi.
+          // La transizione vive qui perche' e' qui, su questo stesso elemento, che il
+          // box-shadow del ring cambia davvero: altrove sarebbe CSS morto.
           "transition-[box-shadow] duration-(--dur-state) ease-glass",
           disabled && "cursor-not-allowed",
         )}

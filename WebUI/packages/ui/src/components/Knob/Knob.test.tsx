@@ -194,8 +194,12 @@ describe("Knob motion", () => {
   });
 
   it("lights the drop target on a transition, not on a cut", () => {
+    // Sul quadrante (`knob-dial`), non sul contenitore esterno (`knob`): e' li' che il ring
+    // `group-data-[drop-target=true]/knob:ring-2` mette davvero il box-shadow, quindi e' li'
+    // che la transizione deve stare perche' abbia un effetto — non un contratto sul testid
+    // sbagliato che passerebbe anche con CSS morto.
     render(<Knob value={0.3} onChange={() => {}} label="Cutoff" onDropMod={() => {}} />);
-    const cls = screen.getByTestId("knob").className;
+    const cls = screen.getByTestId("knob-dial").className;
     expect(cls).toContain("transition-[box-shadow]");
     expect(cls).toContain("duration-(--dur-state)");
     expect(cls).toContain("ease-glass");
