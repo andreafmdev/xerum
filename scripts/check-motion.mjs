@@ -29,6 +29,19 @@ const LINE_RULES = [
   // ammessa. Non tocca le dichiarazioni di custom property (--dur-state: 140ms), che non
   // contengono la sottostringa "duration-".
   { rule: "hardcoded-duration", re: /\bduration-(\[?\d*[1-9]\d*m?s?\]?)\b/ },
+  // Una transition-[...] con proprietà arbitraria di Tailwind che nomina una proprietà fuori
+  // whitelist: height/width/top/left forzano layout, grid-template-rows lo stesso, backdrop-filter
+  // è il caso già coperto per il CSS vero da "animated-blur" ma qui arriva come classe Tailwind,
+  // non come dichiarazione CSS — un contesto che "animated-blur" non guarda (per costruzione,
+  // dopo il fix del falso positivo su .tsx: quel controllo legge solo dentro blocchi .css). Vale
+  // ovunque compaia la stringa, .tsx o .css: non è un caso `transition:` di un oggetto JS che
+  // possa confondersi con altro, è sempre e solo il nome letterale di una utility Tailwind.
+  // `\b` sui confini basta anche per un token con trattini come grid-template-rows, perché il
+  // trattino è un carattere "non di parola" tanto quanto la parentesi quadra o la virgola.
+  {
+    rule: "forbidden-transition-property",
+    re: /\btransition-\[[^\]]*\b(?:height|width|top|left|grid-template-rows|backdrop-filter)\b[^\]]*\]/,
+  },
 ];
 
 // Righe tra un marker `<nome>:start` e il suo `<nome>:end` sono escluse da ogni regola. Ogni
@@ -60,6 +73,20 @@ function lineOf(text, index) {
   let line = 1;
   for (let i = 0; i < index && i < text.length; i++) if (text[i] === "\n") line++;
   return line;
+}
+
+// Il testo di una riga fino al primo `//` incluso: le regole riga-per-riga non devono leggere la
+// prosa di un commento come se fosse codice vero. È capitato scrivendo la regola
+// forbidden-transition-property qui sotto: un commento che *spiega* perché quel nodo non usa
+// `transition-[height]`/`transition-[width]` (Fader.tsx, citandoli fra backtick per dire "non
+// questi") li nomina entrambi alla lettera, e la regola scattava sul commento anziché sul codice
+// — lo stesso genere di falso positivo appena sistemato per animated-blur, qui dentro una riga
+// sola invece che fra righe o blocchi diversi. In questo repo non ci sono URL con "://" nei file
+// scansionati (il solo caso in cui tagliare al primo "//" taglierebbe codice vero, non un
+// commento; verificato con una ricerca su WebUI/src e WebUI/packages/ui/src).
+function codeOnly(line) {
+  const i = line.indexOf("//");
+  return i === -1 ? line : line.slice(0, i);
 }
 
 // ---- animated-blur: backdrop-filter o filter:blur() animati, in CSS vero. --------------------
@@ -127,7 +154,8 @@ export function findViolations(files) {
     };
 
     text.split("\n").forEach((line, i) => {
-      for (const { rule, re } of LINE_RULES) if (re.test(line)) push(i + 1, rule);
+      const code = codeOnly(line);
+      for (const { rule, re } of LINE_RULES) if (re.test(code)) push(i + 1, rule);
     });
 
     // Tutti i controlli di animated-blur guardano dentro blocchi `{ ... }`, ma solo nei file

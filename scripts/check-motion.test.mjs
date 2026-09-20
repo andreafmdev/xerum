@@ -45,6 +45,39 @@ test("accepts the token forms", () => {
   assert.deepEqual(rules(ok), []);
 });
 
+// --- forbidden-transition-property: transition-[...] arbitrario di Tailwind che nomina una
+// proprietà fuori whitelist (height/width/top/left/grid-template-rows forzano layout;
+// backdrop-filter è il caso "sfocatura animata" ma come classe, non come dichiarazione CSS). Vale
+// sia in .tsx sia in .css: è sempre il nome letterale di una utility, mai un caso che vada
+// disambiguato dal contesto.
+for (const prop of ["height", "width", "top", "left", "grid-template-rows", "backdrop-filter"]) {
+  test(`flags transition-[${prop}] as a forbidden-transition-property`, () => {
+    assert.deepEqual(rules(`<i className="transition-[${prop}]" />`), ["forbidden-transition-property"]);
+  });
+}
+
+test("still flags a forbidden property combined with an allowed one", () => {
+  assert.deepEqual(rules('<i className="transition-[height,opacity]" />'), ["forbidden-transition-property"]);
+});
+
+test("does not flag the allowed transition forms", () => {
+  const ok = [
+    '<m.div className="transition-transform" />',
+    '<m.div className="transition-opacity" />',
+    '<m.div className="transition-[transform,opacity]" />',
+    '<m.div className="transition-[background-color]" />',
+  ].join("\n");
+  assert.deepEqual(rules(ok), []);
+});
+
+test("does not flag a comment that merely names the forbidden forms to explain why they are NOT used", () => {
+  // Il caso reale, trovato su Fader.tsx: un commento che dice "qui non c'è nessun
+  // `transition-[height]`/`transition-[width]`" nomina i due token vietati alla lettera per
+  // spiegare che il codice non li usa. La regola guarda solo il codice prima di un `//`.
+  const line = "  // nessun `transition-[height]`/`transition-[width]` esplicito qui.";
+  assert.deepEqual(rules(line), []);
+});
+
 test("reports the offending line number", () => {
   const [v] = findViolations([{ path: "x.tsx", text: '\n\n<m.div layout />' }]);
   assert.equal(v.line, 3);

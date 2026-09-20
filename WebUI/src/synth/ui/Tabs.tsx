@@ -339,9 +339,17 @@ export function ArpTab() {
             className="relative h-full w-4 rounded-[2px] bg-surface-2"
           >
             <ArpPlayhead index={i} on={arpOn.checked} />
+            {/* Prima animava `height` (vietato dalla whitelist: forza layout). La barra riempie
+                sempre l'intera altezza del bottone e cresce dal basso scalando `scaleY`, che e'
+                il valore stesso 0..1 gia' in mano al componente — nessuna misura, nessuna
+                aritmetica di base come per Segmented/Wheel. `rounded-[2px]` e' sparito: sotto
+                scala verticale i quattro angoli diventano ellittici, e su una barra larga 4px
+                non lo nota nessuno. Il bagliore (`shadow`) invece resta sull'elemento scalato:
+                e' un alone sfumato, non uno spigolo netto, e alle scale tipiche di uno step
+                "on" (v parte da 0.8) la compressione verticale del blur e' impercettibile. */}
             <i
-              className={`absolute inset-x-0 bottom-0 rounded-[2px] bg-(--tone) transition-[height] duration-(--dur-press) ${v > 0 ? "opacity-100 shadow-[0_0_6px_color-mix(in_oklch,var(--tone)_60%,transparent)]" : "opacity-35"}`}
-              style={{ height: `${Math.max(8, v * 100)}%` }}
+              className={`absolute inset-x-0 bottom-0 h-full origin-bottom bg-(--tone) transition-transform duration-(--dur-press) ${v > 0 ? "opacity-100 shadow-[0_0_6px_color-mix(in_oklch,var(--tone)_60%,transparent)]" : "opacity-35"}`}
+              style={{ transform: `scaleY(${Math.max(0.08, v)})` }}
             />
           </button>
         ))}

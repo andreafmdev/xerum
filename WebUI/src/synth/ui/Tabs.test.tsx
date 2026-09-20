@@ -82,8 +82,13 @@ describe("TabArea", () => {
         </TabArea>
       </LazyMotion>,
     );
-    // mode="wait" tiene la pagina vecchia finche' non e' uscita: non devono mai coesisterne due
-    // gia' montate una accanto all'altra, ma almeno una resta sempre presente.
-    expect(screen.getAllByTestId("tab-page").length).toBeGreaterThanOrEqual(1);
+    // mode="wait" tiene una sola pagina montata alla volta: se regredisse al comportamento di
+    // default di AnimatePresence (entrata e uscita in corso insieme) qui ne comparirebbero due.
+    // >= 1 non lo avrebbe mai provato: sarebbe stato vero anche con due pagine coesistenti.
+    const pages = screen.getAllByTestId("tab-page");
+    expect(pages).toHaveLength(1);
+    // Ed è ancora la pagina vecchia, che sta uscendo: quella nuova non entra finché questa non è
+    // fuori del tutto.
+    expect(pages[0]).toHaveTextContent("ENV");
   });
 });
