@@ -360,7 +360,7 @@ static ParameterSeamTests parameterSeamTests;
 /**
  * L'altra giuntura: fra il file di progetto e l'APVTS.
  *
- * Non esercita SerumStyleSynthAudioProcessor::setStateInformation — XerumTests non compila
+ * Non esercita XerumAudioProcessor::setStateInformation — XerumTests non compila
  * Source/plugin — ma i due pezzi che quel metodo mette in fila, params::resetToDefaults e
  * state::schemaVersionOf, nello stesso ordine.
  */

@@ -3,7 +3,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
-class SerumStyleSynthAudioProcessor;
+class XerumAudioProcessor;
 
 namespace bridge
 {
@@ -22,14 +22,14 @@ namespace bridge
 class MidiChannel final
 {
 public:
-    MidiChannel (juce::MidiKeyboardState& keyboardState, SerumStyleSynthAudioProcessor& processor);
+    MidiChannel (juce::MidiKeyboardState& keyboardState, XerumAudioProcessor& processor);
 
     /** Registra le native function nelle Options. Va chiamata prima di costruire la WebView. */
     juce::WebBrowserComponent::Options applyTo (juce::WebBrowserComponent::Options options);
 
 private:
     juce::MidiKeyboardState& keyboardState_;
-    SerumStyleSynthAudioProcessor& processor_;
+    XerumAudioProcessor& processor_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiChannel)
 };

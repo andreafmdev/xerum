@@ -1,4 +1,4 @@
-# Build — SerumStyleSynth
+# Build — Xerum
 
 ## Prerequisites (macOS)
 
@@ -46,7 +46,7 @@ cmake --preset macos-release
 cmake --build --preset macos-release
 ```
 
-Artifacts land under `build/macos-debug/` (Xcode layout). With `COPY_PLUGIN_AFTER_BUILD`, AU/VST3 are also copied into the user plugin folders.
+Artifacts land under `build/macos-debug/Xerum_artefacts/` (Xcode layout). With `XERUM_COPY_PLUGIN` (default ON), AU/VST3 are also copied into the user plugin folders.
 
 Adding a new `.cpp` file to `Source/` needs a `cmake --preset ...` reconfigure to pick it up.
 
@@ -56,16 +56,22 @@ Vite serves `http://localhost:5173`. Debug builds of the editor navigate there a
 
 ## Unit tests
 
-`XerumTests` (`juce_add_console_app`, target defined in `CMakeLists.txt`) runs `juce::UnitTestRunner` over `Source/dsp` and `Source/engine` (`Tests/WavetableTests.cpp`, `Tests/EnvelopeFilterTests.cpp`, `Tests/EngineTests.cpp`). It links only `juce_dsp`/`juce_audio_basics` — no `juce_gui_extra`, no WebView — and does not compile `Source/bridge/*`, so `StateChannel::applyPreset` has no direct C++ test.
+`XerumTests` (`juce_add_console_app`, target defined in `CMakeLists.txt`) runs `juce::UnitTestRunner` over `Source/dsp`, `Source/engine` and `Source/parameters` (the suites in `Tests/`). It compiles the same `XerumCore` source list as the plugin, links `juce_dsp`/`juce_audio_basics`/`juce_audio_processors`/`juce_data_structures` — no `juce_gui_extra`, no WebView — and does not compile `Source/bridge/*` or `Source/plugin/*`, so `StateChannel::applyPreset` and the processor's state round-trip have no direct C++ test.
 
-Build and run:
+Build and run through ctest:
 
 ```bash
 cmake --build --preset macos-debug --target XerumTests
-build/macos-debug/XerumTests_artefacts/Debug/XerumTests
+ctest --preset macos-debug
 ```
 
-It prints one line per test and ends with `ALL TESTS PASSED` (or `TEST FAILURES`, with a non-zero exit code). Must pass before any commit that touches `Source/dsp` or `Source/engine`.
+or run the binary directly (`build/macos-debug/XerumTests_artefacts/Debug/XerumTests`): it prints one line per test and ends with `ALL TESTS PASSED` (or `TEST FAILURES`, with a non-zero exit code). Must pass before any commit that touches `Source/dsp`, `Source/engine` or `Source/parameters`.
+
+## Plugin identity
+
+The plugin is `Xerum` (`PRODUCT_NAME`, bundle `com.xerum.xerum`, manufacturer code `Xeru`, plugin code `Xrm1`). It was `SerumStyleSynth` with code `Ss01` until 2026-09-20: DAW sessions saved with the old identity do not find the new instrument and must be recreated (the parameter state itself is unchanged). The old bundles under `~/Library/Audio/Plug-Ins/{Components,VST3}/SerumStyleSynth.*` are not removed by the build: delete them by hand.
+
+`XERUM_COPY_PLUGIN=OFF` skips copying AU/VST3 into the user plugin folders (CI, test builds).
 
 ## Smoke checklist
 

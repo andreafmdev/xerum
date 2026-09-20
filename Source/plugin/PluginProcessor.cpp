@@ -8,7 +8,7 @@ namespace
 constexpr int kWavetablePollHz = 25;
 } // namespace
 
-SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
+XerumAudioProcessor::XerumAudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts_ (*this, nullptr, "PARAMS", params::createParameterLayout()),
@@ -51,7 +51,7 @@ SerumStyleSynthAudioProcessor::SerumStyleSynthAudioProcessor()
     startTimerHz (kWavetablePollHz);
 }
 
-SerumStyleSynthAudioProcessor::~SerumStyleSynthAudioProcessor()
+XerumAudioProcessor::~XerumAudioProcessor()
 {
     stopTimer();
     cancelPendingUpdate();
@@ -59,21 +59,21 @@ SerumStyleSynthAudioProcessor::~SerumStyleSynthAudioProcessor()
     apvts_.removeParameterListener ("wtIndex", this);
 }
 
-void SerumStyleSynthAudioProcessor::listenToState (juce::ValueTree root)
+void XerumAudioProcessor::listenToState (juce::ValueTree root)
 {
     listenedState_.removeListener (this);
     listenedState_ = std::move (root);
     listenedState_.addListener (this);
 }
 
-void SerumStyleSynthAudioProcessor::rebuildModSnapshot()
+void XerumAudioProcessor::rebuildModSnapshot()
 {
     engine::ModSnapshot snapshot;
     engine::buildModSnapshot (apvts_.state.getChildWithName (state::ids::MODS), snapshot);
     engine_->setMods (snapshot);
 }
 
-void SerumStyleSynthAudioProcessor::rebuildArpSnapshot()
+void XerumAudioProcessor::rebuildArpSnapshot()
 {
     engine::ArpSnapshot snapshot;
     engine::buildArpSnapshot (apvts_.state.getChildWithName (state::ids::ARP), snapshot);
@@ -83,19 +83,19 @@ void SerumStyleSynthAudioProcessor::rebuildArpSnapshot()
 // Il listener sta sulla radice dell'APVTS, quindi qui passa *ogni* proprietà dell'albero: ogni
 // movimento di ogni knob, che vive nei figli PARAM. Senza questo filtro ricostruiremmo lo
 // snapshot a ogni giro di automazione, per niente.
-void SerumStyleSynthAudioProcessor::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier&)
+void XerumAudioProcessor::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier&)
 {
     if (tree.hasType (state::ids::MOD) || tree.hasType (state::ids::MODS) || tree.hasType (state::ids::ARP))
         triggerAsyncUpdate();
 }
 
-void SerumStyleSynthAudioProcessor::valueTreeChildAdded (juce::ValueTree& parent, juce::ValueTree&)
+void XerumAudioProcessor::valueTreeChildAdded (juce::ValueTree& parent, juce::ValueTree&)
 {
     if (parent.hasType (state::ids::MODS))
         triggerAsyncUpdate();
 }
 
-void SerumStyleSynthAudioProcessor::valueTreeChildRemoved (juce::ValueTree& parent, juce::ValueTree&, int)
+void XerumAudioProcessor::valueTreeChildRemoved (juce::ValueTree& parent, juce::ValueTree&, int)
 {
     if (parent.hasType (state::ids::MODS))
         triggerAsyncUpdate();
@@ -108,7 +108,7 @@ void SerumStyleSynthAudioProcessor::valueTreeChildRemoved (juce::ValueTree& pare
 // sparisce per 128 campioni, che su level o pan è un click. Un solo rebuild per giro di message
 // loop pubblica soltanto lo stato finale. È la stessa ragione per cui bridge::StateChannel
 // coalizza il suo emitState.
-void SerumStyleSynthAudioProcessor::handleAsyncUpdate()
+void XerumAudioProcessor::handleAsyncUpdate()
 {
     // Tutti e due, senza guardare quale dei due nodi si sia mosso: ricostruirli costa una
     // manciata di confronti di stringhe e una tokenizzazione di sedici numeri, una volta per giro
@@ -118,7 +118,7 @@ void SerumStyleSynthAudioProcessor::handleAsyncUpdate()
     rebuildArpSnapshot();
 }
 
-int SerumStyleSynthAudioProcessor::wavetableIndexFromParam() const noexcept
+int XerumAudioProcessor::wavetableIndexFromParam() const noexcept
 {
     if (paramWtIndex_ == nullptr)
         return 0;
@@ -128,7 +128,7 @@ int SerumStyleSynthAudioProcessor::wavetableIndexFromParam() const noexcept
                          (int) paramWtIndex_->load (std::memory_order_relaxed));
 }
 
-engine::EngineParams SerumStyleSynthAudioProcessor::collectParams() const noexcept
+engine::EngineParams XerumAudioProcessor::collectParams() const noexcept
 {
     // Thin caller: tutta la denormalizzazione/arrotondamento vive in
     // params::collectEngineParams (ParamCollect.h), esercitata direttamente dai test con un
@@ -151,14 +151,14 @@ engine::EngineParams SerumStyleSynthAudioProcessor::collectParams() const noexce
         });
 }
 
-void SerumStyleSynthAudioProcessor::parameterChanged (const juce::String& id, float)
+void XerumAudioProcessor::parameterChanged (const juce::String& id, float)
 {
     // Può arrivare dal thread audio (automazione host): qui si marca soltanto.
     if (id == "wtIndex")
         wavetableDirty_.store (true, std::memory_order_release);
 }
 
-void SerumStyleSynthAudioProcessor::timerCallback()
+void XerumAudioProcessor::timerCallback()
 {
     if (! wavetableDirty_.exchange (false, std::memory_order_acquire))
         return;
@@ -188,7 +188,7 @@ void SerumStyleSynthAudioProcessor::timerCallback()
         engine_->setPendingWavetable (table);
 }
 
-void SerumStyleSynthAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void XerumAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     // Costruire la tavola alloca: qui è lecito, in processBlock no. Il thread audio non gira
     // ancora, quindi applicarla direttamente alle voci è sicuro. Il lock serializza solo con
@@ -215,13 +215,13 @@ void SerumStyleSynthAudioProcessor::prepareToPlay (double sampleRate, int sample
     lastSentModWheel_ = -1;
 }
 
-void SerumStyleSynthAudioProcessor::releaseResources()
+void XerumAudioProcessor::releaseResources()
 {
     keyboardState_.reset();
     engine_->reset();
 }
 
-bool SerumStyleSynthAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+bool XerumAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
         && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
@@ -230,7 +230,7 @@ bool SerumStyleSynthAudioProcessor::isBusesLayoutSupported (const BusesLayout& l
     return true;
 }
 
-void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
+void XerumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                                    juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -336,12 +336,12 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     engine::storePeak (meters_.vel,  engine_->getVelocityLevel());
 }
 
-juce::AudioProcessorEditor* SerumStyleSynthAudioProcessor::createEditor()
+juce::AudioProcessorEditor* XerumAudioProcessor::createEditor()
 {
-    return new SerumStyleSynthAudioProcessorEditor (*this);
+    return new XerumAudioProcessorEditor (*this);
 }
 
-void SerumStyleSynthAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+void XerumAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts_.copyState();
 
@@ -353,7 +353,7 @@ void SerumStyleSynthAudioProcessor::getStateInformation (juce::MemoryBlock& dest
         copyXmlToBinary (*xml, destData);
 }
 
-void SerumStyleSynthAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+void XerumAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts_.state.getType()))
@@ -412,5 +412,5 @@ void SerumStyleSynthAudioProcessor::setStateInformation (const void* data, int s
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new SerumStyleSynthAudioProcessor();
+    return new XerumAudioProcessor();
 }

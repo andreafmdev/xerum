@@ -9,17 +9,17 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
-class SerumStyleSynthAudioProcessorEditor final : public juce::AudioProcessorEditor
+class XerumAudioProcessorEditor final : public juce::AudioProcessorEditor
 {
 public:
-    explicit SerumStyleSynthAudioProcessorEditor (SerumStyleSynthAudioProcessor&);
-    ~SerumStyleSynthAudioProcessorEditor() override;
+    explicit XerumAudioProcessorEditor (XerumAudioProcessor&);
+    ~XerumAudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
-    SerumStyleSynthAudioProcessor& processorRef_;
+    XerumAudioProcessor& processorRef_;
 
     /** Relay dei parametri verso la WebView: dichiarati prima di webView_ perché le
         Options della WebView vengono costruite a partire da loro. */
@@ -41,5 +41,5 @@ private:
         alta dello chassis scalato e fra pannello e tastiera si apre una banda vuota. */
     std::unique_ptr<juce::ComponentBoundsConstrainer> constrainer_;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SerumStyleSynthAudioProcessorEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (XerumAudioProcessorEditor)
 };

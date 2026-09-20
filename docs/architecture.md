@@ -1,4 +1,4 @@
-# Architecture — SerumStyleSynth
+# Architecture — Xerum
 
 ## Principle
 

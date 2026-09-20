@@ -16,7 +16,7 @@ int noteArg (const juce::Array<juce::var>& args, int index)
 } // namespace
 
 MidiChannel::MidiChannel (juce::MidiKeyboardState& keyboardState,
-                          SerumStyleSynthAudioProcessor& processor)
+                          XerumAudioProcessor& processor)
     : keyboardState_ (keyboardState), processor_ (processor)
 {
 }

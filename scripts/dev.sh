@@ -37,9 +37,9 @@ fi
 
 cd "$ROOT"
 [ -d build/macos-debug ] || cmake --preset macos-debug
-cmake --build --preset macos-debug --target SerumStyleSynth_Standalone
+cmake --build --preset macos-debug --target Xerum_Standalone
 
-APP="$(ls -d build/macos-debug/SerumStyleSynth_artefacts/Debug/Standalone/*.app | head -1)"
+APP="$(ls -d build/macos-debug/Xerum_artefacts/Debug/Standalone/*.app | head -1)"
 echo "▶ Standalone: $APP"
 # Lancio il binario direttamente: `open` non passa l'ambiente, e l'editor legge
 # XERUM_WEBUI_URL per puntare a una porta diversa da 5173.

@@ -99,8 +99,8 @@ juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& rela
 }
 } // namespace
 
-SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
-    SerumStyleSynthAudioProcessor& p)
+XerumAudioProcessorEditor::XerumAudioProcessorEditor (
+    XerumAudioProcessor& p)
     : AudioProcessorEditor (&p),
       processorRef_ (p),
       stateChannel_ (p.getAPVTS(), p.getStateReplacedBroadcaster()),
@@ -155,18 +155,18 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
     }
 }
 
-SerumStyleSynthAudioProcessorEditor::~SerumStyleSynthAudioProcessorEditor()
+XerumAudioProcessorEditor::~XerumAudioProcessorEditor()
 {
     // stateChannel_ è distrutto dopo webView_ (è dichiarato prima): sgancia il puntatore qui.
     stateChannel_.setWebView (nullptr);
 }
 
-void SerumStyleSynthAudioProcessorEditor::paint (juce::Graphics& g)
+void XerumAudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff0e1016)); // --background (theme.css)
 }
 
-void SerumStyleSynthAudioProcessorEditor::resized()
+void XerumAudioProcessorEditor::resized()
 {
     webView_.setBounds (getLocalBounds());
 }

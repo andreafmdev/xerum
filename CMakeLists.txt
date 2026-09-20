@@ -1,7 +1,7 @@
-# SerumStyleSynth — Phase 1 scaffolding
+# Xerum — wavetable synth on JUCE 9, built as C++23.
 cmake_minimum_required(VERSION 3.22)
 
-project(SerumStyleSynth VERSION 0.1.0)
+project(Xerum VERSION 0.1.0 LANGUAGES C CXX)
 
 # C++23. JUCE 9 chiede cxx_std_17 come INTERFACE, cioe' un minimo per chi lo consuma e non un
 # tetto: alzare lo standard non lo viola. Misurato prima di adottarlo, con build pulite di tutti i
@@ -15,72 +15,18 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(XERUM_COPY_PLUGIN "Copia AU/VST3 nelle cartelle plugin dell'utente dopo la build" ON)
+option(XERUM_EMBED_WEBUI "Embed WebUI/dist into the plugin binary (Release)" OFF)
+
 # Avoid building JUCE extras / examples
 set(JUCE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(JUCE_BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
 
+# JUCE resta un submodule pinnato (9.0.2), non FetchContent: WebUI/package.json linka il package
+# webview-interop da dentro external/JUCE, quindi il checkout deve esistere prima di ogni configure.
 add_subdirectory(external/JUCE)
 
 include(cmake/CompilerWarnings.cmake)
-
-juce_add_plugin(SerumStyleSynth
-    COMPANY_NAME "Xerum"
-    BUNDLE_ID "com.xerum.serumstylesynth"
-    IS_SYNTH TRUE
-    NEEDS_MIDI_INPUT TRUE
-    NEEDS_MIDI_OUTPUT FALSE
-    IS_MIDI_EFFECT FALSE
-    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    COPY_PLUGIN_AFTER_BUILD TRUE
-    PLUGIN_MANUFACTURER_CODE Xeru
-    PLUGIN_CODE Ss01
-    FORMATS AU VST3 Standalone
-    PRODUCT_NAME "SerumStyleSynth"
-    # Icone di app e bundle dal marchio in Resources/branding (rigenerabili con build.mjs).
-    # JUCE compone da queste due l'.icns della Standalone e l'icona del bundle VST3/AU.
-    ICON_BIG "Resources/branding/icons/xerum.iconset/icon_512x512@2x.png"
-    ICON_SMALL "Resources/branding/icons/xerum-128.png"
-)
-
-target_sources(SerumStyleSynth
-    PRIVATE
-        Source/plugin/PluginProcessor.cpp
-        Source/plugin/PluginEditor.cpp
-        Source/bridge/StateChannel.cpp
-        Source/bridge/WebRelays.cpp
-        Source/bridge/MeterChannel.cpp
-        Source/bridge/MidiChannel.cpp
-        Source/bridge/WebAssets.cpp
-        Source/engine/SynthEngine.cpp
-        Source/engine/VoiceManager.cpp
-        Source/engine/SynthVoice.cpp
-        Source/engine/ModMatrix.cpp
-        Source/engine/Arpeggiator.cpp
-        Source/dsp/Lfo.cpp
-        Source/dsp/Chorus.cpp
-        Source/dsp/PlateReverb.cpp
-        Source/dsp/WavetableOscillator.cpp
-        Source/dsp/StateVariableFilter.cpp
-        Source/dsp/ADSREnvelope.cpp
-        Source/dsp/WavetableBlob.cpp
-        Source/dsp/MipTable.cpp
-        Source/dsp/WavetableStore.cpp
-        Source/parameters/ParameterLayout.cpp
-)
-
-target_include_directories(SerumStyleSynth
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/Source
-)
-
-target_compile_definitions(SerumStyleSynth
-    PUBLIC
-        JUCE_WEB_BROWSER=1
-        JUCE_USE_CURL=0
-        JUCE_VST3_CAN_REPLACE_VST2=0
-)
-
-serum_style_synth_set_warnings(SerumStyleSynth)
 
 # --- Wavetables ------------------------------------------------------------
 # Sempre incorporate (a differenza del bundle web, che è solo in Release):
@@ -92,11 +38,100 @@ endif()
 # HEADER_NAME esplicito: il default (BinaryData.h) collide con il target
 # WebUIAssets, che genera già un BinaryData.h proprio per l'embedding web.
 juce_add_binary_data(WavetableAssets SOURCES ${XERUM_WAVETABLES} NAMESPACE WavetableAssets HEADER_NAME WavetableData.h)
-target_link_libraries(SerumStyleSynth PRIVATE WavetableAssets)
+
+# --- Core: dsp/, engine/, parameters/ ----------------------------------------
+# Un solo elenco per il plugin e per i test. INTERFACE e non STATIC: i sorgenti si compilano
+# dentro ogni consumatore con i *suoi* flag JUCE (il plugin ha JUCE_WEB_BROWSER=1, i test 0), che
+# e' l'unico modo perche' i moduli JUCE inclusi dagli header vedano definizioni coerenti.
+add_library(XerumCore INTERFACE)
+set(XERUM_CORE_SOURCES
+    Source/dsp/ADSREnvelope.cpp
+    Source/dsp/Chorus.cpp
+    Source/dsp/Lfo.cpp
+    Source/dsp/MipTable.cpp
+    Source/dsp/PlateReverb.cpp
+    Source/dsp/StateVariableFilter.cpp
+    Source/dsp/WavetableBlob.cpp
+    Source/dsp/WavetableOscillator.cpp
+    Source/dsp/WavetableStore.cpp
+    Source/engine/Arpeggiator.cpp
+    Source/engine/ModMatrix.cpp
+    Source/engine/SynthEngine.cpp
+    Source/engine/SynthVoice.cpp
+    Source/engine/VoiceManager.cpp
+    Source/parameters/ParameterLayout.cpp
+)
+list(TRANSFORM XERUM_CORE_SOURCES PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/)
+target_sources(XerumCore INTERFACE ${XERUM_CORE_SOURCES})
+target_include_directories(XerumCore INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
+target_link_libraries(XerumCore
+    INTERFACE
+        juce::juce_audio_basics
+        juce::juce_audio_processors
+        juce::juce_data_structures
+        juce::juce_dsp
+        WavetableAssets)
+
+# --- Plugin ----------------------------------------------------------------
+# Identita' del plugin (BUNDLE_ID, codici AU/VST3, nome del bundle): cambiarli invalida le
+# sessioni DAW salvate, non lo stato dei parametri. Vedi docs/build.md.
+juce_add_plugin(Xerum
+    COMPANY_NAME "Xerum"
+    BUNDLE_ID "com.xerum.xerum"
+    IS_SYNTH TRUE
+    NEEDS_MIDI_INPUT TRUE
+    NEEDS_MIDI_OUTPUT FALSE
+    IS_MIDI_EFFECT FALSE
+    NEEDS_WEB_BROWSER TRUE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    COPY_PLUGIN_AFTER_BUILD ${XERUM_COPY_PLUGIN}
+    PLUGIN_MANUFACTURER_CODE Xeru
+    PLUGIN_CODE Xrm1
+    FORMATS AU VST3 Standalone
+    PRODUCT_NAME "Xerum"
+    # Icone di app e bundle dal marchio in Resources/branding (rigenerabili con build.mjs).
+    # JUCE compone da queste due l'.icns della Standalone e l'icona del bundle VST3/AU.
+    ICON_BIG "Resources/branding/icons/xerum.iconset/icon_512x512@2x.png"
+    ICON_SMALL "Resources/branding/icons/xerum-128.png"
+)
+
+target_sources(Xerum
+    PRIVATE
+        Source/plugin/PluginProcessor.cpp
+        Source/plugin/PluginEditor.cpp
+        Source/bridge/StateChannel.cpp
+        Source/bridge/WebRelays.cpp
+        Source/bridge/MeterChannel.cpp
+        Source/bridge/MidiChannel.cpp
+        Source/bridge/WebAssets.cpp
+)
+
+target_compile_definitions(Xerum
+    PUBLIC
+        JUCE_WEB_BROWSER=1
+        JUCE_USE_CURL=0
+        JUCE_VST3_CAN_REPLACE_VST2=0
+)
+
+xerum_set_warnings(Xerum)
+
+# I flag "recommended" restano PUBLIC di proposito: e' cosi' che li linka l'esempio ufficiale di
+# JUCE, perche' devono raggiungere anche i target di formato (VST3/AU/Standalone) generati da
+# juce_add_plugin, che compilano il codice dei wrapper.
+target_link_libraries(Xerum
+    PRIVATE
+        XerumCore
+        juce::juce_audio_utils
+        juce::juce_gui_extra
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags
+)
 
 # --- Unit tests -----------------------------------------------------------
-# Console app: gira juce::UnitTestRunner su dsp/ ed engine/. Non tocca la UI
-# né l'host, quindi niente juce_gui_extra e niente WebView.
+# Console app: gira juce::UnitTestRunner su dsp/, engine/ e parameters/. Non tocca la UI ne'
+# l'host, quindi niente juce_gui_extra e niente WebView.
 juce_add_console_app(XerumTests PRODUCT_NAME "XerumTests")
 
 target_sources(XerumTests
@@ -114,24 +149,7 @@ target_sources(XerumTests
         Tests/GlideVoiceModeTests.cpp
         Tests/ArpeggiatorTests.cpp
         Tests/PitchBendTests.cpp
-        Tests/SustainPedalTests.cpp
-        Source/dsp/WavetableBlob.cpp
-        Source/dsp/MipTable.cpp
-        Source/dsp/WavetableStore.cpp
-        Source/dsp/Lfo.cpp
-        Source/dsp/Chorus.cpp
-        Source/dsp/PlateReverb.cpp
-        Source/engine/ModMatrix.cpp
-        Source/engine/Arpeggiator.cpp
-        Source/dsp/WavetableOscillator.cpp
-        Source/dsp/ADSREnvelope.cpp
-        Source/dsp/StateVariableFilter.cpp
-        Source/engine/SynthEngine.cpp
-        Source/engine/VoiceManager.cpp
-        Source/engine/SynthVoice.cpp
-        Source/parameters/ParameterLayout.cpp)
-
-target_include_directories(XerumTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
+        Tests/SustainPedalTests.cpp)
 
 target_compile_definitions(XerumTests
     PRIVATE
@@ -140,48 +158,52 @@ target_compile_definitions(XerumTests
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0)
 
-serum_style_synth_set_warnings(XerumTests)
+xerum_set_warnings(XerumTests)
 
 target_link_libraries(XerumTests
     PRIVATE
-        juce::juce_dsp
-        juce::juce_audio_basics
-        juce::juce_data_structures
-        juce::juce_audio_processors
-        WavetableAssets
+        XerumCore
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
 
-target_link_libraries(SerumStyleSynth
-    PRIVATE
-        juce::juce_audio_utils
-        juce::juce_dsp
-        juce::juce_gui_extra
-    PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
-        juce::juce_recommended_warning_flags
-)
+enable_testing()
+add_test(NAME XerumTests COMMAND XerumTests)
 
-# --- Web UI embedding (Release) -------------------------------------------
-option(XERUM_EMBED_WEBUI "Embed WebUI/dist into the plugin binary (Release)" OFF)
+# --- Web UI bundle ---------------------------------------------------------
+# `webui` ricostruisce WebUI/dist quando cambiano i sorgenti web; in Release WebUIAssets ne
+# dipende, cosi' il binario incorpora sempre l'ultima UI.
+set(XERUM_WEBUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/WebUI)
+set(XERUM_WEBUI_DIST ${XERUM_WEBUI_DIR}/dist)
 
 find_program(XERUM_PNPM pnpm)
 if(XERUM_PNPM)
-    add_custom_target(webui
-        COMMAND ${XERUM_PNPM} --dir ${CMAKE_CURRENT_SOURCE_DIR}/WebUI ui:build
-        COMMAND ${XERUM_PNPM} --dir ${CMAKE_CURRENT_SOURCE_DIR}/WebUI build
-        COMMENT "Building the Web UI bundle (WebUI/dist)")
+    file(GLOB_RECURSE XERUM_WEBUI_SOURCES CONFIGURE_DEPENDS
+        ${XERUM_WEBUI_DIR}/src/*
+        ${XERUM_WEBUI_DIR}/packages/ui/src/*
+        ${XERUM_WEBUI_DIR}/index.html
+        ${XERUM_WEBUI_DIR}/package.json)
+    add_custom_command(
+        OUTPUT ${XERUM_WEBUI_DIST}/index.html
+        COMMAND ${XERUM_PNPM} --dir ${XERUM_WEBUI_DIR} ui:build
+        COMMAND ${XERUM_PNPM} --dir ${XERUM_WEBUI_DIR} build
+        DEPENDS ${XERUM_WEBUI_SOURCES}
+        COMMENT "Building the Web UI bundle (WebUI/dist)"
+        VERBATIM)
+    add_custom_target(webui DEPENDS ${XERUM_WEBUI_DIST}/index.html)
 endif()
 
 if(XERUM_EMBED_WEBUI)
-    set(XERUM_WEBUI_DIST ${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist)
+    # L'elenco dei file va conosciuto a configure (juce_add_binary_data): la prima build della UI
+    # resta a carico di chi configura, poi il target webui la tiene aggiornata.
     if(NOT EXISTS ${XERUM_WEBUI_DIST}/index.html)
         message(FATAL_ERROR "XERUM_EMBED_WEBUI=ON but ${XERUM_WEBUI_DIST}/index.html is missing.\nBuild it first: cd WebUI && pnpm ui:build && pnpm build   (or: cmake --build --preset macos-debug --target webui)")
     endif()
     file(GLOB_RECURSE XERUM_WEBUI_FILES CONFIGURE_DEPENDS ${XERUM_WEBUI_DIST}/*)
     juce_add_binary_data(WebUIAssets SOURCES ${XERUM_WEBUI_FILES} NAMESPACE WebUIAssets)
-    target_link_libraries(SerumStyleSynth PRIVATE WebUIAssets)
-    target_compile_definitions(SerumStyleSynth PRIVATE XERUM_EMBED_WEBUI=1)
+    if(TARGET webui)
+        add_dependencies(WebUIAssets webui)
+    endif()
+    target_link_libraries(Xerum PRIVATE WebUIAssets)
+    target_compile_definitions(Xerum PRIVATE XERUM_EMBED_WEBUI=1)
 endif()

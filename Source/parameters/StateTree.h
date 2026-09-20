@@ -18,7 +18,7 @@ inline constexpr int kArpSteps = 16;
 
 /**
  * La versione del *formato* dello stato salvato, scritta sulla radice da
- * SerumStyleSynthAudioProcessor::getStateInformation e riletta da setStateInformation.
+ * XerumAudioProcessor::getStateInformation e riletta da setStateInformation.
  *
  * Non e' la versione del plugin e non e' state::kVersion, che descrive il solo figlio MODS: e'
  * il numero da cui una migrazione futura puo' ramificare, e l'unico posto dove puo' stare e' la

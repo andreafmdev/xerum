@@ -16,15 +16,15 @@
 #include <atomic>
 #include <memory>
 
-class SerumStyleSynthAudioProcessor final : public juce::AudioProcessor,
+class XerumAudioProcessor final : public juce::AudioProcessor,
                                              private juce::AudioProcessorValueTreeState::Listener,
                                              private juce::ValueTree::Listener,
                                              private juce::AsyncUpdater,
                                              private juce::Timer
 {
 public:
-    SerumStyleSynthAudioProcessor();
-    ~SerumStyleSynthAudioProcessor() override;
+    XerumAudioProcessor();
+    ~XerumAudioProcessor() override;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
@@ -182,5 +182,5 @@ private:
     // marcare il flag. Il timer (message thread) fa il lavoro vero, che alloca.
     std::atomic<bool> wavetableDirty_ { false };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SerumStyleSynthAudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (XerumAudioProcessor)
 };
