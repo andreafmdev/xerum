@@ -115,6 +115,11 @@ export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixed
 
   return (
     <div className="sx-root" ref={rootRef}>
+      {/* data-attached non ha piu' nessun consumatore CSS: la regola .sx-chassis[data-attached] che
+          squadrava gli angoli bassi per la striscia nativa e' sparita con la striscia. E non e'
+          lui a togliere il margine — quello lo fa `gutter` dentro il calcolo del fit, qui sopra.
+          Resta come segnale "questo chassis sta riempiendo una WebView", per chi dovesse volerlo
+          leggere; un test lo blocca perche' non sparisca per distrazione. */}
       <div data-testid="chassis" className="sx-chassis" data-variant={variant} data-attached={gutter === 0 ? "" : undefined} style={{ transform: `scale(${sc})`, opacity: bypass.checked ? 0.9 : 1 }}>
         <SynthContext.Provider value={ctx}>
           <MetersProvider>
