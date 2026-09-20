@@ -28,3 +28,27 @@ describe("Button", () => {
     expect(screen.getByRole("button")).toBeDisabled();
   });
 });
+
+describe("Button motion", () => {
+  it("transitions a named list of properties, never all of them", () => {
+    render(<Button>Load</Button>);
+    const el = screen.getByRole("button", { name: "Load" });
+    expect(el).not.toHaveClass("transition-all");
+    expect(el.className).toContain("transition-[transform,box-shadow,background-color,border-color]");
+  });
+
+  it("presses instantly and releases on the press duration", () => {
+    render(<Button>Load</Button>);
+    const el = screen.getByRole("button", { name: "Load" });
+    // Il dito è più veloce della molla: la discesa non ha durata, la risalita sì.
+    expect(el.className).toContain("duration-(--dur-press)");
+    expect(el.className).toContain("active:duration-0");
+    expect(el.className).toContain("ease-snap");
+  });
+
+  it("gives the focus ring its own entrance on the state duration", () => {
+    render(<Button>Load</Button>);
+    const el = screen.getByRole("button", { name: "Load" });
+    expect(el.className).toContain("focus-visible:duration-(--dur-state)");
+  });
+});
