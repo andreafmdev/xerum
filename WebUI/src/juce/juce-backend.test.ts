@@ -25,7 +25,7 @@ function installJuceStub() {
         listeners.get("__juce__complete")?.forEach((fn) => fn({ promiseId: p.resultId, result: { version: 1, mods: [], arpSteps: new Array(16).fill(0) } }));
     },
   };
-  (window as any).__JUCE__ = { backend, initialisationData: { __juce__sliders: ["cutoff", "oct"], __juce__toggles: ["filtOn"], __juce__comboBoxes: ["slope"], __juce__functions: ["getState", "setMods", "setArpSteps"] } };
+  (window as any).__JUCE__ = { backend, initialisationData: { __juce__sliders: ["cutoff", "oct"], __juce__toggles: ["filtOn"], __juce__comboBoxes: ["slope"], __juce__functions: ["getState", "setMods", "setArpSteps", "noteOn", "noteOff", "allNotesOff", "setWheel"] } };
   return { listeners, emitted };
 }
 
@@ -159,5 +159,40 @@ describe("JuceBackend", () => {
     expect(hasJuce()).toBe(true);
     delete (window as any).__JUCE__;
     expect(hasJuce()).toBe(false);
+  });
+
+  // Il contratto con Source/bridge/MidiChannel.cpp (task 6): ordine e numero
+  // degli argomenti devono coincidere esattamente, altrimenti l'errore resta
+  // invisibile finché qualcuno non suona una nota a mano.
+  it("noteOn invoca la native function con nota e velocity", async () => {
+    const { createJuceBackend } = await import("./juce-backend");
+    const b = await createJuceBackend();
+    void b.noteOn(60, 0.8);
+    const call = stub.emitted.find((e) => e.id === "__juce__invoke" && e.p.name === "noteOn")!;
+    expect(call.p.params).toEqual([60, 0.8]);
+  });
+
+  it("noteOff invoca la native function con la sola nota", async () => {
+    const { createJuceBackend } = await import("./juce-backend");
+    const b = await createJuceBackend();
+    void b.noteOff(60);
+    const call = stub.emitted.find((e) => e.id === "__juce__invoke" && e.p.name === "noteOff")!;
+    expect(call.p.params).toEqual([60]);
+  });
+
+  it("allNotesOff invoca la native function senza argomenti", async () => {
+    const { createJuceBackend } = await import("./juce-backend");
+    const b = await createJuceBackend();
+    void b.allNotesOff();
+    const call = stub.emitted.find((e) => e.id === "__juce__invoke" && e.p.name === "allNotesOff")!;
+    expect(call.p.params).toEqual([]);
+  });
+
+  it("setWheel invoca la native function con kind e value", async () => {
+    const { createJuceBackend } = await import("./juce-backend");
+    const b = await createJuceBackend();
+    void b.setWheel("pitch", 0.5);
+    const call = stub.emitted.find((e) => e.id === "__juce__invoke" && e.p.name === "setWheel")!;
+    expect(call.p.params).toEqual(["pitch", 0.5]);
   });
 });

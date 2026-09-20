@@ -40,10 +40,24 @@ export type MeterFrame = {
   vel: number;
   mw: number;
   arpStep: number;
+  /**
+   * Quali note stanno suonando, un bit per nota MIDI: `n0` copre 0..31, `n3` copre 96..127.
+   *
+   * Quattro parole da 32 bit e non due da 64 perché un uint64 non entra esatto nella mantissa di
+   * un double, e il frame viaggia come JSON. Il contratto sta in Source/engine/MeterFrame.h e in
+   * Source/bridge/MeterChannel.cpp.
+   */
+  n0: number;
+  n1: number;
+  n2: number;
+  n3: number;
 };
 
 /** Frame a zero: valore iniziale di useMeters e base da cui i test costruiscono i loro frame. */
-export const ZERO_METERS: MeterFrame = { in: 0, out: 0, lfo: 0, env: 0, env2: 0, vel: 0, mw: 0, arpStep: 0 };
+export const ZERO_METERS: MeterFrame = {
+  in: 0, out: 0, lfo: 0, env: 0, env2: 0, vel: 0, mw: 0, arpStep: 0,
+  n0: 0, n1: 0, n2: 0, n3: 0,
+};
 
 /** Un singolo parametro, come esposto all'UI: lettura/scrittura normalizzata 0..1 e gesture per l'automazione host. */
 export interface ParamHandle {
@@ -64,6 +78,14 @@ export interface Backend {
   loadPreset(index: number): Promise<void>;
   onStateChanged(cb: (s: BridgeState & { origin: string }) => void): () => void;
   onMeters(cb: (m: MeterFrame) => void): () => void;
+  /** Note suonate dentro la UI. Finiscono nel MidiKeyboardState del processor: dal punto di vista
+      del motore sono indistinguibili da quelle dell'host. `velocity` è 0..1. */
+  noteOn(note: number, velocity: number): Promise<void>;
+  noteOff(note: number): Promise<void>;
+  /** Da chiamare su pointercancel, blur e smontaggio: senza, una nota può restare appesa. */
+  allNotesOff(): Promise<void>;
+  /** Posizione di una rotella, 0..1. `pitch` ha il centro a 0.5. */
+  setWheel(kind: "pitch" | "mod", value: number): Promise<void>;
 }
 
 /** Default normalizzato di uno spec (float: già 0..1; bool: 0/1; int: mappato; choice: indice mappato). */
@@ -76,3 +98,14 @@ export function defaultNormalised(spec: ParamSpec): number {
   }
 }
 export const specOf = (id: ParamId): ParamSpec => PARAM_SPECS[id];
+
+/** Le quattro parole del mask, nell'ordine `n0..n3` di MeterFrame. */
+export type NoteMask = readonly [number, number, number, number];
+
+export const noteMaskOf = (m: MeterFrame): NoteMask => [m.n0, m.n1, m.n2, m.n3];
+
+/** Il bit della nota. Gli operatori bit a bit di JS lavorano su int32: una parola oltre 2^31
+    arriva qui come numero positivo grande e viene riconvertita a int32 dall'`&`, quindi il
+    confronto resta corretto anche per il bit più alto. */
+export const isNoteActive = (mask: NoteMask, note: number): boolean =>
+  ((mask[note >> 5] ?? 0) & (1 << (note & 31))) !== 0;

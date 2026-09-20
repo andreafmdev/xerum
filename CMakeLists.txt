@@ -37,6 +37,7 @@ target_sources(SerumStyleSynth
         Source/bridge/StateChannel.cpp
         Source/bridge/WebRelays.cpp
         Source/bridge/MeterChannel.cpp
+        Source/bridge/MidiChannel.cpp
         Source/bridge/WebAssets.cpp
         Source/engine/SynthEngine.cpp
         Source/engine/VoiceManager.cpp
@@ -53,7 +54,6 @@ target_sources(SerumStyleSynth
         Source/dsp/MipTable.cpp
         Source/dsp/WavetableStore.cpp
         Source/parameters/ParameterLayout.cpp
-        Source/ui/XerumKeyboard.cpp
 )
 
 target_include_directories(SerumStyleSynth
@@ -101,6 +101,7 @@ target_sources(XerumTests
         Tests/ReverbTests.cpp
         Tests/GlideVoiceModeTests.cpp
         Tests/ArpeggiatorTests.cpp
+        Tests/PitchBendTests.cpp
         Source/dsp/WavetableBlob.cpp
         Source/dsp/MipTable.cpp
         Source/dsp/WavetableStore.cpp

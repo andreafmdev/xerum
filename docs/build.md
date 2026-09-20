@@ -66,7 +66,7 @@ It prints one line per test and ends with `ALL TESTS PASSED` (or `TEST FAILURES`
 3. Open Standalone or load in a DAW as an **instrument**
 4. Send MIDI — a note is audible, no crash
 5. Automate **Master Gain** from the host
-6. With `pnpm dev` (see "Web UI" below), open the editor and confirm the React placeholder
+6. With `pnpm dev` (see "Web UI" below), open the editor and confirm the whole synth window renders inside it — panel, tabs and the bottom strip (wheels, performance bar, on-screen keys) are all WebView content now; there is no separate native keyboard underneath to check
 7. Pick a preset (header arrows or the preset overlay) and confirm the sound changes
 8. Automate `cutoff` from the host through a sweep — audible, no zipper/stepping
 9. Save the session with a non-default wavetable selected, reload it, and confirm the same table is still the one playing

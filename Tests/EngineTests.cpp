@@ -1,3 +1,5 @@
+#include "EngineHarness.h"
+
 #include "dsp/MipTable.h"
 #include "dsp/PlateReverb.h"
 #include "dsp/WavetableBlob.h"
@@ -25,34 +27,9 @@
 
 namespace
 {
-/** Parametri di base per far suonare una nota senza sorprese: attacco/rilascio brevi,
-    filtro spalancato, niente pan/drive/keytrack. I singoli test alterano solo ciò che
-    vogliono osservare. */
-engine::EngineParams defaultParams()
-{
-    engine::EngineParams p;
-    p.oscOn = true;
-    p.framePosition = 0.0f;
-    p.octave = 0;
-    p.semitones = 0;
-    p.fineCents = 0.0f;
-    p.level = 1.0f;
-    p.filterOn = true;
-    p.filterType = dsp::StateVariableFilter::Type::lowPass;
-    p.filterStages = 2;
-    p.cutoffHz = 8000.0f;
-    p.resonanceQ = 0.707f;
-    p.driveGain = 1.0f;
-    p.keyTrack = 0.0f;
-    p.attackSeconds = 0.001f;
-    p.decaySeconds = 0.01f;
-    p.sustain = 1.0f;
-    p.releaseSeconds = 0.05f;
-    p.velocityAmount = 0.0f;
-    p.pan = 0.0f;
-    p.bypass = false;
-    return p;
-}
+using harness::defaultParams;
+using harness::measureFundamentalHz;
+using harness::prepareEngine;
 
 /** Fa girare `numBlocks` blocchi da 128 campioni senza MIDI e ritorna il picco assoluto
     misurato su tutti i canali. Controlla anche che l'uscita resti finita: un bug di
@@ -106,18 +83,6 @@ float renderRms (engine::SynthEngine& synth, int numBlocks)
     return count > 0 ? (float) std::sqrt (sumSquares / count) : 0.0f;
 }
 
-/** SynthEngine tiene un std::atomic (la mailbox della wavetable): non e' copiabile ne'
-    spostabile, quindi si prepara sul posto invece di ritornarlo per valore. */
-void prepareEngine (engine::SynthEngine& synth, dsp::WavetableStore& store)
-{
-    engine::EngineSpec spec;
-    spec.sampleRate = 48000.0;
-    spec.maximumBlockSize = 128;
-    spec.numChannels = 2;
-    synth.prepare (spec);
-    synth.setWavetable (store.active());
-}
-
 /** Stessa formula del ramo Map::Linear di params::denormalise (Source/parameters/
     ParameterMapping.h), copiata qui invece di inclusa: quell'header porta dentro
     juce_audio_processors, che XerumTests non linka (nessun bisogno degli AudioParameter*
@@ -126,48 +91,6 @@ void prepareEngine (engine::SynthEngine& synth, dsp::WavetableStore& store)
 float denormaliseLinear (const params::Spec& s, float x) noexcept
 {
     return s.min + x * (s.max - s.min);
-}
-
-/** Fa girare `settleSamples` di scarto (attacco/transiente) poi conta gli attraversamenti
-    dello zero (da negativo a positivo) su `measureSamples`, per stimare la fondamentale senza
-    dipendere dalla stessa formula usata internamente dal motore (altrimenti il test non
-    proverebbe niente: userebbe la formula sbagliata per verificare se stessa). */
-float measureFundamentalHz (engine::SynthEngine& synth, double sampleRate, int settleSamples, int measureSamples)
-{
-    juce::MidiBuffer noMidi;
-    float prevSample = 0.0f;
-    int consumed = 0;
-
-    while (consumed < settleSamples)
-    {
-        juce::AudioBuffer<float> buffer (2, 128);
-        buffer.clear();
-        synth.process (buffer, noMidi);
-        consumed += buffer.getNumSamples();
-        prevSample = buffer.getSample (0, buffer.getNumSamples() - 1);
-    }
-
-    int crossings = 0;
-    int measured = 0;
-
-    while (measured < measureSamples)
-    {
-        juce::AudioBuffer<float> buffer (2, 128);
-        buffer.clear();
-        synth.process (buffer, noMidi);
-        const auto* data = buffer.getReadPointer (0);
-
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
-        {
-            if (prevSample < 0.0f && data[i] >= 0.0f)
-                ++crossings;
-            prevSample = data[i];
-        }
-
-        measured += buffer.getNumSamples();
-    }
-
-    return measured > 0 ? (float) crossings * (float) sampleRate / (float) measured : 0.0f;
 }
 
 /**
@@ -945,6 +868,62 @@ struct EngineRobustnessTests final : juce::UnitTest
                 synth.process (buffer, midi);
                 renderPeak (synth, 4, *this); // scarica la coda prima della prossima variante
             }
+        }
+
+        beginTest ("il mask delle note segue cio' che il motore sta suonando");
+        {
+            engine::SynthEngine synth;
+            prepareEngine (synth, store);
+            synth.setParams (defaultParams());
+
+            const auto bitOf = [] (const engine::SynthEngine& s, int note)
+            {
+                const auto mask = note < 64 ? s.getActiveNotesLo() : s.getActiveNotesHi();
+                return (mask & (juce::uint64 (1) << (note % 64))) != 0;
+            };
+
+            juce::AudioBuffer<float> buffer (2, 128);
+
+            juce::MidiBuffer on;
+            on.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            on.addEvent (juce::MidiMessage::noteOn (1, 100, 1.0f), 0);
+            buffer.clear();
+            synth.process (buffer, on);
+
+            expect (bitOf (synth, 60), "il DO centrale deve risultare acceso");
+            expect (bitOf (synth, 100), "una nota sopra il 64 finisce nella meta' alta");
+            expect (! bitOf (synth, 61), "una nota mai suonata resta spenta");
+
+            juce::MidiBuffer off;
+            off.addEvent (juce::MidiMessage::noteOff (1, 60), 0);
+            buffer.clear();
+            synth.process (buffer, off);
+
+            expect (! bitOf (synth, 60), "il note-off deve spegnere il bit");
+            expect (bitOf (synth, 100), "e non deve toccare le altre note");
+
+            // Il 60 si ripreme prima del panico: senza, al momento dell'all-notes-off l'unica
+            // nota accesa starebbe nella meta' alta e le asserzioni sulla meta' bassa non
+            // potrebbero fallire comunque. Cosi' entrambe le parole hanno un bit da spegnere.
+            juce::MidiBuffer again;
+            again.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            buffer.clear();
+            synth.process (buffer, again);
+            expect (bitOf (synth, 60), "il 60 ripremuto deve tornare acceso");
+
+            juce::MidiBuffer panic;
+            panic.addEvent (juce::MidiMessage::allNotesOff (1), 0);
+            buffer.clear();
+            synth.process (buffer, panic);
+
+            // Non `expectEquals ((int) ...)`: il cast a int di un juce::uint64 tiene solo i 32 bit
+            // bassi, quindi il bit 60 di Lo e il bit 36 di Hi — le due note usate qui — sparivano
+            // nel troncamento e le due asserzioni passavano anche col mask mai pulito. Si guarda
+            // quindi bit per bit con lo stesso bitOf del resto del test, e poi la parola intera.
+            expect (! bitOf (synth, 60), "all notes off deve spegnere il bit della meta' bassa");
+            expect (! bitOf (synth, 100), "all notes off deve spegnere il bit della meta' alta");
+            expect (synth.getActiveNotesLo() == 0, "all notes off pulisce la meta' bassa per intero");
+            expect (synth.getActiveNotesHi() == 0, "all notes off pulisce la meta' alta per intero");
         }
     }
 };

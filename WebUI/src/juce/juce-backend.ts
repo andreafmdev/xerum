@@ -109,5 +109,9 @@ export async function createJuceBackend(): Promise<Backend> {
     loadPreset: (index: number) => call("loadPreset")(index).then(() => {}),
     onStateChanged,
     onMeters,
+    async noteOn(note, velocity) { await call("noteOn")(note, velocity); },
+    async noteOff(note) { await call("noteOff")(note); },
+    async allNotesOff() { await call("allNotesOff")(); },
+    async setWheel(kind, value) { await call("setWheel")(kind, value); },
   };
 }

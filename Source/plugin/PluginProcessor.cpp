@@ -206,6 +206,13 @@ void SerumStyleSynthAudioProcessor::prepareToPlay (double sampleRate, int sample
     spec.maximumBlockSize = samplesPerBlock;
     spec.numChannels = getTotalNumOutputChannels();
     engine_->prepare (spec);
+
+    // Ogni riavvio dello stream riparte "vergine": un valore gia' visto in una sessione
+    // precedente non deve essere considerato "gia' mandato" in questa, altrimenti la prima
+    // posizione della rotella dopo un riavvio (identica all'ultima prima dello stop) non
+    // verrebbe mai iniettata nel buffer.
+    lastSentPitchBend_ = -1;
+    lastSentModWheel_ = -1;
 }
 
 void SerumStyleSynthAudioProcessor::releaseResources()
@@ -269,6 +276,22 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         engine_->setMasterGainLinear (v <= 0.0f ? 0.0f : v);
     }
 
+    // Le rotelle della UI diventano messaggi veri, e solo quando cambiano: mandarli a ogni blocco
+    // riscriverebbe di continuo sopra un controller hardware che sta mandando gli stessi CC.
+    if (const auto bend = uiPitchBend_.load (std::memory_order_relaxed);
+        bend >= 0 && bend != lastSentPitchBend_)
+    {
+        midi.addEvent (juce::MidiMessage::pitchWheel (1, bend), 0);
+        lastSentPitchBend_ = bend;
+    }
+
+    if (const auto mw = uiModWheel_.load (std::memory_order_relaxed);
+        mw >= 0 && mw != lastSentModWheel_)
+    {
+        midi.addEvent (juce::MidiMessage::controllerEvent (1, 1, mw), 0);
+        lastSentModWheel_ = mw;
+    }
+
     // Merge notes played on the editor's on-screen keyboard into the host MIDI stream.
     // MidiKeyboardState takes a brief CriticalSection internally (JUCE's standard pattern);
     // contention only happens on UI note on/off, never on the steady-state path.
@@ -300,6 +323,10 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     // L'indice di griglia dell'arp: è ciò che accende il riquadro sul passo in riproduzione nel
     // tab Arp. Istantaneo come i due sopra — è una posizione dentro il pattern, non un picco.
     meters_.arpStep.store (engine_->getArpStep(), std::memory_order_relaxed);
+
+    // Quali note stanno suonando: e' cio' che accende i tasti nella striscia della UI.
+    meters_.notesLo.store (engine_->getActiveNotesLo(), std::memory_order_relaxed);
+    meters_.notesHi.store (engine_->getActiveNotesHi(), std::memory_order_relaxed);
 
     // Unipolari e più veloci di un frame del meter: si accumula il massimo, come per i picchi
     // audio, e il lettore lo azzera. Il motore ha già preso il massimo sulle sotto-fette di

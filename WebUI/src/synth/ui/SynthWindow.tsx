@@ -3,7 +3,7 @@ import { useBoolParam, useBridgeState, useChoiceParam, useFloatParam } from "../
 import type { ModSource } from "../../juce/backend";
 import type { ParamId } from "../params.generated";
 import { useSynth, type TabId } from "../useSynth";
-import { Footer } from "./Footer";
+import { BottomStrip } from "./BottomStrip";
 import { Header } from "./Header";
 import { MetersProvider } from "./MetersContext";
 import { FilterPanel, MasterPanel, OscPanel } from "./Panels";
@@ -22,13 +22,28 @@ export type SynthWindowProps = {
   /** Scala fissa invece dell'adattamento al contenitore. */
   scale?: number;
   /** Margine totale (px) lasciato attorno allo chassis dall'adattamento.
-      L'host JUCE passa 0: lo chassis riempie la WebView e la tastiera nativa
-      si attacca senza stacco sotto il bordo inferiore. */
+      L'host JUCE passa 0: lo chassis riempie la WebView senza margine. */
   gutter?: number;
 };
 
 const W = 900;
-const H = 600;
+// 680 = i 670 px che i figli dello chassis occupano davvero, piu' 10 px di respiro in fondo.
+//
+// I figli sono tutti `shrink-0` e si sommano: padding verticale 20 + Header 40 + WaveDisplay 130
+// + i tre pannelli 224 + TabArea 124 + BottomStrip 108 + quattro gap da 6 = 670. Gli stessi 10 px
+// di respiro c'erano prima della striscia bassa, quando la somma faceva 590 dentro una scatola
+// da 600.
+//
+// Il primo numero scelto era 708, giustificato come "600 di pannello invariato piu' 108 di
+// striscia": premessa falsa, perche' quei 600 contenevano gia' il Footer da 28 px che
+// BottomStrip ha sostituito. 708 lasciava 38 px vuoti in fondo, e la finestra del plugin
+// ereditava l'errore a ogni scala.
+//
+// E' il numero da cui dipende tutta la geometria dell'editor: la regola .sx-chassis in synth.css
+// deve restare uguale a questo valore (il test in SynthWindow.test.tsx controlla che non
+// divergano), e anche kChassisHeight in PluginEditor.cpp. Esportata perche' e' quella verita',
+// non il testo del CSS, a dover guidare chi la legge.
+export const H = 680;
 
 // Lo chassis si scala con `transform`, non con `zoom`.
 //
@@ -45,7 +60,7 @@ const H = 600;
 // Il <canvas> di WaveDisplay ha comunque bisogno di conoscere la scala: `transform` non
 // tocca il backing store, quindi lo schermo dell'onda restava a risoluzione 1x anche quando
 // tutto il resto era ingrandito. Lo ricava da getBoundingClientRect (vedi WaveDisplay.tsx).
-/** Finestra del plugin: 900×600 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
+/** Finestra del plugin: 900×680 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
 export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixedScale, gutter = 16 }: SynthWindowProps) {
   const s = useSynth(initialTab);
   // Unica istanza dello stato condiviso: i tab lo leggono dal contesto, così non
@@ -100,6 +115,11 @@ export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixed
 
   return (
     <div className="sx-root" ref={rootRef}>
+      {/* data-attached non ha piu' nessun consumatore CSS: la regola .sx-chassis[data-attached] che
+          squadrava gli angoli bassi per la striscia nativa e' sparita con la striscia. E non e'
+          lui a togliere il margine — quello lo fa `gutter` dentro il calcolo del fit, qui sopra.
+          Resta come segnale "questo chassis sta riempiendo una WebView", per chi dovesse volerlo
+          leggere; un test lo blocca perche' non sparisca per distrazione. */}
       <div data-testid="chassis" className="sx-chassis" data-variant={variant} data-attached={gutter === 0 ? "" : undefined} style={{ transform: `scale(${sc})`, opacity: bypass.checked ? 0.9 : 1 }}>
         <SynthContext.Provider value={ctx}>
           <MetersProvider>
@@ -123,7 +143,7 @@ export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixed
               {s.tab === "fx" && <FxTab />}
               {s.tab === "arp" && <ArpTab />}
             </TabArea>
-            <Footer />
+            <BottomStrip />
             {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
           </MetersProvider>
         </SynthContext.Provider>

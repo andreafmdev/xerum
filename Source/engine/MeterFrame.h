@@ -1,4 +1,6 @@
 #pragma once
+#include <juce_core/juce_core.h>
+
 #include <atomic>
 
 namespace engine
@@ -40,6 +42,11 @@ struct MeterFrame
     std::atomic<float> mw   { 0.0f };      // 0..1, istantaneo
 
     std::atomic<int>   arpStep { 0 };      // 0..15, zero finché l'arp non esiste
+
+    /** Un bit per nota MIDI: 0..63 in `notesLo`, 64..127 in `notesHi`. Istantanei come `lfo` e
+        `mw` — il lettore fa load(), non exchange(0) — perche' una nota tenuta e' uno stato. */
+    std::atomic<juce::uint64> notesLo { 0 };
+    std::atomic<juce::uint64> notesHi { 0 };
 };
 
 /**

@@ -123,6 +123,8 @@ void SynthEngine::reset() noexcept
     voices_.reset();
     arp_.reset();
     arpStep_.store (0, std::memory_order_relaxed);
+    activeNotesLo_.store (0, std::memory_order_relaxed);
+    activeNotesHi_.store (0, std::memory_order_relaxed);
     chorusMix_.reset();
     reverbMix_.reset();
     stopFx();
@@ -198,21 +200,52 @@ void SynthEngine::handleMidiEvent (const juce::MidiMessage& message) noexcept
         return;
     }
 
+    if (message.isPitchWheel())
+    {
+        // -1..1 attorno a 8192, che e' il centro della corsa a 14 bit. Come modWheel_: campo del
+        // solo thread audio, letto una volta per blocco in process().
+        pitchBend_ = ((float) message.getPitchWheelValue() - 8192.0f) / 8192.0f;
+        return;
+    }
+
+    // Un bit per nota MIDI in activeNotesLo_/activeNotesHi_, per SynthEngine::getActiveNotesLo/Hi.
+    // A valle dell'arpeggiatore come tutto il resto di questa funzione: vedi il commento dei
+    // getter in SynthEngine.h.
+    const auto setNoteBit = [this] (int note, bool on) noexcept
+    {
+        auto& slot = note < 64 ? activeNotesLo_ : activeNotesHi_;
+        const auto bit = juce::uint64 (1) << (note % 64);
+        const auto current = slot.load (std::memory_order_relaxed);
+        slot.store (on ? (current | bit) : (current & ~bit), std::memory_order_relaxed);
+    };
+
+    // Il panico (all-notes-off e all-sound-off) azzera il mask per intero: gemella di
+    // setNoteBit, condivisa fra i due rami sotto perche' e' lo stesso azzeramento.
+    const auto clearNoteMask = [this]() noexcept
+    {
+        activeNotesLo_.store (0, std::memory_order_relaxed);
+        activeNotesHi_.store (0, std::memory_order_relaxed);
+    };
+
     if (message.isNoteOn())
     {
         voices_.noteOn (message.getNoteNumber(), message.getFloatVelocity());
+        setNoteBit (message.getNoteNumber(), true);
     }
     else if (message.isNoteOff())
     {
         voices_.noteOff (message.getNoteNumber());
+        setNoteBit (message.getNoteNumber(), false);
     }
     else if (message.isAllNotesOff())
     {
         voices_.allNotesOff();
+        clearNoteMask();
     }
     else if (message.isAllSoundOff())
     {
         voices_.allSoundOff();
+        clearNoteMask();
     }
 }
 
@@ -582,6 +615,7 @@ void SynthEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& m
         params_.mods = published;
 
     params_.modWheel = modWheel_;
+    params_.pitchBend = pitchBend_;
 
     // Stesso trattamento delle mod, e per la stessa ragione: se il message thread non ha ancora
     // pubblicato niente si tiene il puntatore arrivato con setParams(), che e' nullptr in

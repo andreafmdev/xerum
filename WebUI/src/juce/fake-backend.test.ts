@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { FakeBackend } from "./fake-backend";
-import { ZERO_METERS } from "./backend";
+import { isNoteActive, noteMaskOf, ZERO_METERS } from "./backend";
 import { PARAM_SPECS } from "../synth/params.generated";
 import { PRESETS } from "../synth/presets.generated";
 
@@ -87,5 +87,71 @@ describe("FakeBackend loadPreset", () => {
     b.param("cutoff").set(0.1);
     await b.loadPreset(9999);
     expect(b.param("cutoff").get()).toBe(0.1);
+  });
+});
+
+describe("mask delle note", () => {
+  it("legge il bit giusto in ognuna delle quattro parole", () => {
+    const frame = { ...ZERO_METERS, n0: 1 << 5, n1: 1 << 0, n2: 1 << 31, n3: 1 << 7 };
+    const mask = noteMaskOf(frame);
+    expect(isNoteActive(mask, 5)).toBe(true);
+    expect(isNoteActive(mask, 32)).toBe(true);
+    expect(isNoteActive(mask, 95)).toBe(true);
+    expect(isNoteActive(mask, 103)).toBe(true);
+    expect(isNoteActive(mask, 6)).toBe(false);
+    expect(isNoteActive(mask, 127)).toBe(false);
+  });
+
+  it("un frame a zero non ha note accese", () => {
+    const mask = noteMaskOf(ZERO_METERS);
+    for (let n = 0; n < 128; n++) expect(isNoteActive(mask, n)).toBe(false);
+  });
+
+  it("il bit più alto di ognuna delle quattro parole è vero: 31, 63, 95, 127", () => {
+    // Ognuna delle quattro parole con solo il proprio bit 31 acceso: qui `1 << 31` è negativo
+    // (coercizione a int32 di JS) in tutte e quattro le posizioni, non solo in una.
+    const frame = { ...ZERO_METERS, n0: 1 << 31, n1: 1 << 31, n2: 1 << 31, n3: 1 << 31 };
+    const mask = noteMaskOf(frame);
+    expect(isNoteActive(mask, 31)).toBe(true);
+    expect(isNoteActive(mask, 63)).toBe(true);
+    expect(isNoteActive(mask, 95)).toBe(true);
+    expect(isNoteActive(mask, 127)).toBe(true);
+  });
+
+  it("il confine 63/64 fra n1 e n2 cade dalla parte giusta in entrambe le direzioni", () => {
+    // Solo il bit più alto di n1 (nota 63): 63 vero, 64 falso.
+    const onlyN1Top = noteMaskOf({ ...ZERO_METERS, n1: 1 << 31 });
+    expect(isNoteActive(onlyN1Top, 63)).toBe(true);
+    expect(isNoteActive(onlyN1Top, 64)).toBe(false);
+
+    // Solo il bit più basso di n2 (nota 64): 64 vero, 63 falso.
+    const onlyN2Bottom = noteMaskOf({ ...ZERO_METERS, n2: 1 << 0 });
+    expect(isNoteActive(onlyN2Bottom, 64)).toBe(true);
+    expect(isNoteActive(onlyN2Bottom, 63)).toBe(false);
+  });
+});
+
+describe("note e rotelle", () => {
+  it("registra le note suonate dalla UI", async () => {
+    const b = new FakeBackend();
+    await b.noteOn(60, 0.8);
+    await b.noteOn(64, 0.8);
+    await b.noteOff(60);
+    expect([...b.playing]).toEqual([64]);
+  });
+
+  it("allNotesOff svuota tutto", async () => {
+    const b = new FakeBackend();
+    await b.noteOn(60, 0.8);
+    await b.noteOn(64, 0.8);
+    await b.allNotesOff();
+    expect(b.playing.size).toBe(0);
+  });
+
+  it("le rotelle restano dove le si lascia", async () => {
+    const b = new FakeBackend();
+    await b.setWheel("mod", 0.25);
+    await b.setWheel("pitch", 0.75);
+    expect(b.wheels).toEqual({ pitch: 0.75, mod: 0.25 });
   });
 });

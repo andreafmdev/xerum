@@ -1,10 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FakeBackend } from "../../juce/fake-backend";
 import { ZERO_METERS } from "../../juce/backend";
 import { BridgeProvider } from "../../juce/provider";
-import { SynthWindow } from "./SynthWindow";
+import { H, SynthWindow } from "./SynthWindow";
 
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement["getContext"];
 
@@ -21,9 +23,46 @@ describe("SynthWindow on the bridge", () => {
     expect(screen.getByRole("meter", { name: "Output" })).toBeInTheDocument();
   });
 
-  it("gutter=0 squares the chassis bottom so the native keyboard can attach to it", async () => {
+  it("gutter=0 lets the chassis fill the whole WebView", async () => {
+    // Il nome di prima diceva "so the native keyboard can attach to it": la striscia era una
+    // MidiKeyboardComponent montata sotto la WebView, e lo chassis doveva squadrare il proprio
+    // fondo perché i due leggessero come un corpo solo. Adesso i tasti sono dentro lo chassis,
+    // l'angolo arrotondato è tornato (vedi synth.css) e data-attached serve solo a togliere il
+    // margine.
     mount(undefined, { gutter: 0 });
     expect(screen.getByTestId("chassis")).toHaveAttribute("data-attached");
+  });
+
+  it("H è 680: i 670 px dei figli più 10 di respiro, il numero che PluginEditor.cpp deve ricalcare", async () => {
+    // Non un numero nel test: H e' il valore che guida davvero la scala dello chassis. I figli
+    // in flusso sono tutti shrink-0 e si sommano a 670 (padding 20 + Header 40 + WaveDisplay 130
+    // + pannelli 224 + TabArea 124 + BottomStrip 108 + quattro gap da 6): l'aritmetica sta nel
+    // commento di H in SynthWindow.tsx. Il 708 di prima veniva da "600 di pannello invariato piu'
+    // 108 di striscia", ma quei 600 contenevano gia' il Footer da 28 che BottomStrip ha
+    // sostituito, e lasciavano 38 px vuoti in fondo.
+    //
+    // Un fix precedente controllava solo il testo del CSS — cambiare H e lasciare synth.css
+    // intatto avrebbe fatto passare quel test con una UI rotta. Anche kChassisHeight in
+    // PluginEditor.cpp deve restare uguale a questo numero: tre posti, una sola sorgente di
+    // verita'.
+    expect(H).toBe(680);
+  });
+
+  it("la regola .sx-chassis in synth.css non diverge da H", async () => {
+    // toHaveStyle non basta: `test.css: false` in vitest.config.ts fa sì che l'import di
+    // synth.css sia stubbato, quindi in jsdom la regola .sx-chassis non viene mai applicata e
+    // getComputedStyle non la vedrebbe comunque. Si legge quindi la regola sorgente e si
+    // confronta con H, non con un letterale: cosi' le due copie non possono divergere in
+    // silenzio, che era il difetto vero da chiudere.
+    const css = readFileSync(join(process.cwd(), "src/synth/ui/synth.css"), "utf8");
+    const chassisRule = css.match(/\.sx-chassis\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(chassisRule).toMatch(new RegExp(`height:\\s*${H}px`));
+  });
+
+  it("monta la striscia bassa al posto del footer", async () => {
+    mount();
+    expect(screen.getAllByTestId("key-white").length).toBeGreaterThan(0);
+    expect(screen.getByRole("slider", { name: "PB" })).toBeInTheDocument();
   });
 
   it("by default the chassis keeps its margin and stays detached", async () => {

@@ -13,7 +13,7 @@
  * tasto premuto.
  *
  * Questo file costruisce il layout vero, legge i puntatori veri e verifica la conversione. Non
- * su otto parametri scelti a mano ma su tutti e 52, ciclando su params::kTable: i controlli
+ * su otto parametri scelti a mano ma su tutti e 56, ciclando su params::kTable: i controlli
  * generali stanno nei tre cicli in fondo ("ogni parametro...", "andata e ritorno...",
  * "l'APVTS vero restituisce..."), quelli scritti a mano sopra restano perche' nominano il
  * sintomo — un test che dice "lo strumento non traspone" si legge, uno che dice
@@ -168,6 +168,23 @@ struct ParameterSeamTests final : juce::UnitTest
             setNatural (processor, "semi", 0.0f);
         }
 
+        beginTest ("il range del pitch bend arriva in semitoni, non normalizzato");
+        {
+            // Stessa forma di oct e semi: AudioParameterInt, quindi getRawParameterValue
+            // restituisce 0..24 e non 0..1. Denormalizzarlo come float darebbe 0 semitoni al
+            // default, cioe' una rotella inerte, e 24 a fondo corsa qualunque cosa dica l'utente.
+            expectEquals (params::collectEngineParams (raw).pitchBendRangeSemitones, 2,
+                          "al default il range deve essere 2 semitoni");
+
+            for (int semi : { 0, 1, 2, 7, 12, 24 })
+            {
+                setNatural (processor, "pbRange", (float) semi);
+                expectEquals (params::collectEngineParams (raw).pitchBendRangeSemitones, semi,
+                              "pbRange naturale " + juce::String (semi));
+            }
+            setNatural (processor, "pbRange", 2.0f);
+        }
+
         beginTest ("i float restano normalizzati e si denormalizzano come sempre");
         {
             // I Kind::Float sono creati con NormalisableRange {0, 1}: naturale e normalizzato
@@ -207,7 +224,7 @@ struct ParameterSeamTests final : juce::UnitTest
             expect (params::collectEngineParams (raw).filterOn);
         }
 
-        // --- da qui in giu': cicli su tutti e 52 i parametri, non su otto scelti a mano -----
+        // --- da qui in giu': cicli su tutti e 56 i parametri, non su otto scelti a mano -----
 
         beginTest ("ogni slot e' cablato sul parametro giusto");
         {
@@ -388,7 +405,7 @@ struct StateSeamTests final : juce::UnitTest
                                        "res non era nel file: deve tornare al suo default, non restare a 0.1");
         }
 
-        beginTest ("resetToDefaults riporta tutti e 52 i parametri al default dichiarato");
+        beginTest ("resetToDefaults riporta tutti e 56 i parametri al default dichiarato");
         {
             DummyProcessor p;
 

@@ -58,6 +58,14 @@ Dalla ricerca del 18 set 2026 su UI web nei plugin audio
 2. **Pointer capture** per il glissando usa lo stesso meccanismo di `useDragValue.ts:78`, che sul
    forum JUCE risulta rotto dentro la web view. Non è un rischio nuovo: se è rotto sono già rotte
    tutte le manopole. Ma i tasti ci si appoggiano, e da qui viene l'obbligo di `allNotesOff()`.
+
+   > **Emendamento (review di fine ramo, 20 set 2026).** `Keybed` **non** usa pointer capture, e
+   > non è un dettaglio d'implementazione: per la spec Pointer Events, finché un elemento tiene
+   > la cattura, `pointerover`/`enter`/`out`/`leave` arrivano solo al target della cattura e i
+   > discendenti sotto il puntatore non ricevono nulla. Il glissando vive sul `pointerenter` dei
+   > singoli tasti, quindi con la cattura sul contenitore in una WebView vera si suonava il primo
+   > tasto e poi silenzio. La sicurezza resta: `onPointerLeave` del contenitore rilascia la nota
+   > tenuta, e `allNotesOff()` su `pointercancel` e `blur`.
 3. **Latenza click → nota**: oggi zero, in web passa per una native function asincrona. Mai
    misurata su WKWebView in questo progetto.
 
@@ -69,6 +77,14 @@ Il verso opposto — nota in arrivo che accende il tasto — non è a rischio: v
 Lo chassis passa da `900×600` a **`900×708`**: 600 di pannello invariato più 108 di striscia. Il
 rapporto 900:708 diventa il vincolo del `ChassisConstrainer`; `kMinScale 0.72` e `kMaxScale 1.5`
 restano. A scala 1 la finestra è più alta di 30 px rispetto a oggi (708 contro 678).
+
+> **Emendamento (review di fine ramo, 20 set 2026) — l'altezza è 680, non 708.** La premessa
+> "600 di pannello invariato" è falsa: quei 600 contenevano già il `Footer` da 28 px che
+> `BottomStrip` ha sostituito. I figli dello chassis, tutti `shrink-0`, sommano 670 (padding 20 +
+> Header 40 + WaveDisplay 130 + pannelli 224 + TabArea 124 + BottomStrip 108 + quattro gap da 6);
+> prima del ramo la stessa somma faceva 590 dentro una scatola da 600, cioè 10 px di respiro in
+> fondo. `H = 680` conserva quei 10; `708` ne lasciava 38. Il rapporto del `ChassisConstrainer`
+> diventa 900:680.
 
 La striscia non è due righe su tutta la larghezza: le wheel hanno bisogno di corsa verticale.
 

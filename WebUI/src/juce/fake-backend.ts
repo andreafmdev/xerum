@@ -32,6 +32,9 @@ export class FakeBackend implements Backend {
   private stateSubs = new Set<(s: BridgeState & { origin: string }) => void>();
   private meterSubs = new Set<(m: MeterFrame) => void>();
   private raf = 0;
+  /** Le note che la UI sta tenendo premute. Pubblico: è ciò su cui i test guardano. */
+  readonly playing = new Set<number>();
+  wheels = { pitch: 0.5, mod: 0 };
 
   constructor(opts: { demo?: boolean; state?: Partial<BridgeState>; values?: Partial<Record<ParamId, number>> } = {}) {
     this.state = { version: 1, mods: [], arpSteps: [0.8, 0, 0.6, 0.9, 0, 0.7, 0, 0.5, 0.8, 0, 0.6, 0, 0.9, 0.4, 0, 0.7], ...opts.state };
@@ -62,6 +65,11 @@ export class FakeBackend implements Backend {
   emitStateChanged(s: BridgeState, origin: string) { for (const cb of this.stateSubs) cb({ ...structuredClone(s), origin }); }
   emitMeters(m: MeterFrame) { for (const cb of this.meterSubs) cb(m); }
 
+  async noteOn(note: number, _velocity: number) { this.playing.add(note); }
+  async noteOff(note: number) { this.playing.delete(note); }
+  async allNotesOff() { this.playing.clear(); }
+  async setWheel(kind: "pitch" | "mod", value: number) { this.wheels = { ...this.wheels, [kind]: value }; }
+
   /**
    * Clock finto per browser/Storybook: LFO, meter che respirano, step arp e i livelli delle
    * cinque sorgenti del mod matrix.
@@ -86,6 +94,17 @@ export class FakeBackend implements Backend {
         const env = since < 0.08 ? since / 0.08 : 0.35 + 0.65 * Math.exp(-6 * (since - 0.08));
         const env2 = Math.sin(Math.min(1, since * 1.4) * Math.PI * 0.5);
 
+        // La stessa nota finta che muove env/vel accende il suo bit: senza, in Storybook la
+        // tastiera resterebbe spenta mentre tutto il resto respira. Questo clock non conosce un
+        // "rilascio" — le note finte si susseguono senza pause — quindi la nota corrente e'
+        // sempre accesa, non solo durante l'attacco.
+        const fakeNote = 48 + (note % 12);
+        const bits = [0, 0, 0, 0];
+        bits[fakeNote >> 5] |= 1 << (fakeNote & 31);
+        // Le note premute dalla UI (click sulla tastiera in Storybook) si aggiungono
+        // a quella finta del clock, non la sostituiscono.
+        for (const n of this.playing) bits[n >> 5] |= 1 << (n & 31);
+
         this.emitMeters({
           in: audio * this.param("level").get(),
           out: audio * this.param("volume").get(),
@@ -95,6 +114,7 @@ export class FakeBackend implements Backend {
           vel: 0.55 + 0.4 * Math.sin(note * 2.1),
           mw: 0.5 + 0.5 * Math.sin(t * 0.3),
           arpStep: Math.floor(t * 8) % 16,
+          n0: bits[0]!, n1: bits[1]!, n2: bits[2]!, n3: bits[3]!,
         });
       }
       this.raf = requestAnimationFrame(tick);

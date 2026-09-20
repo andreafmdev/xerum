@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "_ordering": "Ordine della tabella: vince il RAGGRUPPAMENTO, non la stabilita' dell'indice posizionale. pbRange e' stato inserito a meta' tabella, dentro il gruppo osc dove appartiene, spostando l'indice posizionale di 46 parametri. Non si rompe niente: VST3 e AU legano l'automazione all'id stringa (hashato), e lo stato salvato di questo progetto usa gli id dei parametri, non le posizioni. Che att2..rel2 e i parametri di chorus e riverbero stiano in fondo, fuori dall'ordine di gruppo, e' il residuo della convenzione opposta — quelle aggiunte furono accodate apposta per tenere fermi gli indici. Da qui in avanti non serve piu': un parametro nuovo va nel suo gruppo. Riordinare quelli gia' fuori posto e' un'altra decisione, e non e' stata presa.",
   "groups": { "osc": "Osc", "filter": "Filter", "master": "Master", "env": "Env", "lfo": "LFO", "fx1": "Chorus", "fx2": "Reverb", "arp": "Arp", "env2": "Env 2" },
   "params": [
     { "id": "oscOn",   "name": "Oscillator on", "group": "osc", "kind": "bool", "slot": true, "default": true },
@@ -13,6 +14,7 @@
     { "id": "warp",    "name": "Warp", "group": "osc", "kind": "float", "slot": false, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.1, "unit": "%", "decimals": 0 },
     { "id": "detune",  "name": "Detune", "group": "osc", "kind": "float", "slot": true, "map": { "type": "linear", "min": 0, "max": 100 }, "default": 0.18, "unit": "ct", "decimals": 0 },
     { "id": "fine",    "name": "Fine", "group": "osc", "kind": "float", "slot": true, "map": { "type": "linear", "min": -100, "max": 100 }, "default": 0.5, "unit": "ct", "decimals": 0, "bipolar": true },
+    { "id": "pbRange", "name": "Pitch bend range", "group": "osc", "kind": "int", "slot": true, "map": { "type": "linear", "min": 0, "max": 24 }, "default": 2, "unit": "SEMI" },
     { "id": "level",   "name": "Level", "group": "osc", "kind": "float", "slot": true, "map": { "type": "db", "min": 0, "max": 1 }, "default": 0.85, "unit": "dB", "decimals": 1 },
 
     { "id": "filtOn",  "name": "Filter on", "group": "filter", "kind": "bool", "slot": true, "default": true },

@@ -203,6 +203,12 @@ engine::EngineParams collectEngineParams (RawAccessor&& rawFor) noexcept
 
     p.octave = juce::roundToInt (naturalFromRaw (specOct, rawFor (ParamSlot::oct)));
     p.semitones = juce::roundToInt (naturalFromRaw (specSemi, rawFor (ParamSlot::semi)));
+
+    // Stessa trappola di oct e semi, stessa difesa: Kind::Int vive nel suo range naturale.
+    constexpr auto& specPbRange = specForSlot (ParamSlot::pbRange);
+    static_assert (specPbRange.kind == Kind::Int,
+                   "pbRange deve restare Kind::Int: da Float la conversione qui sotto cambierebbe");
+    p.pitchBendRangeSemitones = juce::roundToInt (naturalFromRaw (specPbRange, rawFor (ParamSlot::pbRange)));
     p.fineCents = fineCentsFromRaw (rawFor (ParamSlot::fine));
     p.level = levelGainFromRaw (rawFor (ParamSlot::level));
     p.unisonVoices = unisonVoicesFromChoice (rawFor (ParamSlot::unison));

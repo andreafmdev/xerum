@@ -59,6 +59,15 @@
   --color-tick: #4d5568;
   --color-led-off: #262b3a;
 
+  /* Tasti della tastiera: avorio ed ebano, il materiale fisico dei tasti, non un tono
+     applicativo — per questo restano fuori dalla palette osc/filter/env/lfo/fx/master. */
+  --color-key-ivory-hi: #e9edf3;
+  --color-key-ivory-lo: #b9c0cc;
+  --color-key-ivory-active-lo: #8f96a4;
+  --color-key-ebony-hi: #2a2f3c;
+  --color-key-ebony-lo: #0d0f15;
+  --color-key-ebony-active-lo: #1b1e27;
+
   --shadow-control: 0 1px 2px rgb(0 0 0 / 0.6), 0 3px 6px rgb(0 0 0 / 0.45);
   --shadow-cap: 0 1px 0 rgb(255 255 255 / 0.06) inset, 0 2px 4px rgb(0 0 0 / 0.55);
   --shadow-well: inset 0 1px 3px rgb(0 0 0 / 0.7), inset 0 0 0 1px rgb(0 0 0 / 0.35);

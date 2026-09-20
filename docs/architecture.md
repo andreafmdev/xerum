@@ -12,7 +12,7 @@
 | Parameters | `Source/parameters/` | Single source of parameter IDs + layout |
 | Engine | `Source/engine/` | MIDI dispatch, arpeggiator, voice pool, block render, mod matrix snapshot |
 | DSP | `Source/dsp/` | Wavetable oscillator + mipmaps, TPT filter, ADSR envelope, LFO, `WavetableStore` |
-| Web UI | `WebUI/` | App shell React + Vite (dev server → WebView): finestra plugin `src/synth/` (900×600, stato, mod matrix, preset) costruita con `@xerum/ui` |
+| Web UI | `WebUI/` | App shell React + Vite (dev server → WebView): finestra plugin `src/synth/` (900×680, stato, mod matrix, preset) costruita con `@xerum/ui` |
 | UI library | `WebUI/packages/ui/` | `@xerum/ui`: componenti synth (Tailwind v4, shadcn base-nova), Storybook, test |
 | Bridge | `Source/bridge/` | Web relays, state channel, meters, embedded assets (message thread only) |
 
@@ -21,8 +21,10 @@ DAW MIDI ──► PluginProcessor ──► SynthEngine ──► VoiceManager 
                     │                                      │
                  APVTS                              dsp:: oscillator/filter/envelope
                     │
-             PluginEditor ─┬─ WebView ◄── React (localhost:5173 / fallback HTML)
-                           └─ MidiKeyboardComponent (native strip) ──► MidiKeyboardState ──► processBlock MIDI
+             PluginEditor ─── WebView ◄── React (localhost:5173 / fallback HTML)
+                                 │
+                       bridge::MidiChannel: noteOn/noteOff/allNotesOff ──► MidiKeyboardState ──┐
+                                 setWheel(pitch|mod) ──► atomics ──► real MIDI events ──────────┴─► processBlock MIDI
 ```
 
 ## Real-time rules
@@ -38,7 +40,7 @@ Cross-thread assets (wavetables, presets) must use lock-free handoff — double 
 
 ## Plugin window (WebUI/src/synth)
 
-The front panel is `SynthWindow` (`WebUI/src/synth/ui/`): a fixed 900×600 chassis scaled to fit the WebView, laid out as header → wavetable display → Oscillator / Filter / Master plates → tab strip (Envelope, LFO, Mod matrix, Effects, Arpeggiator) → footer meters, plus a preset overlay. It is the implementation of the Claude Design template `templates/synth-window/SynthWindow.dc.html` of the Xerum Synth UI project.
+The front panel is `SynthWindow` (`WebUI/src/synth/ui/`): a fixed 900×680 chassis scaled to fit the WebView, laid out as header → wavetable display → Oscillator / Filter / Master plates → tab strip (Envelope, LFO, Mod matrix, Effects, Arpeggiator) → bottom strip (pitch/mod wheels, performance bar, on-screen keyboard — see **Keyboard, wheels and MIDI bridge** below), plus a preset overlay. It is the implementation of the Claude Design template `templates/synth-window/SynthWindow.dc.html` of the Xerum Synth UI project.
 
 - Pure logic lives beside it and is unit-tested: `params.ts` (defaults, labels), `format.ts` (value → text), `mod.ts` (LFO shapes, live modulated values, assignments), `curves.ts` (wave morph, filter/envelope/LFO paths, spectrum), `presets.ts`.
 - `useSynth` holds the window state (params, mod matrix, preset, tab, bypass, dirty); `useClock` drives LFO/meter/arp animation. Values are normalised `0..1`.
@@ -51,30 +53,36 @@ The front panel is `SynthWindow` (`WebUI/src/synth/ui/`): a fixed 900×600 chass
 - **Known divergence:** `WaveDisplay` (`WebUI/src/synth/ui/WaveDisplay.tsx`) draws a procedural curve from `WebUI/src/synth/curves.ts`, not the real `.xwt` table data — deliberate, not an oversight.
 - **Known gap:** the twelve factory presets (`Source/parameters/presets.json`) have been recalibrated against the current gain staging — each one now states `level`, `drive` and `volume` explicitly, the three that decide whether it clips — but they still have not been auditioned by ear, and the preset browser (`PresetOverlay`) has not been clicked through end to end in the Standalone.
 
-## On-screen keyboard
+## Keyboard, wheels and MIDI bridge
 
-The editor is a `WebBrowserComponent` with a native keyboard strip underneath, Serum/Vital style. It drives a `MidiKeyboardState` owned by the processor, merged into the host MIDI buffer at the top of `processBlock` (`processNextMidiBuffer`). QWERTY mapping (A W S E D F T G Y H U J K …) plays from middle C; click height sets velocity. The keyboard is plugin chrome, not part of `@xerum/ui`, so it does not go through design-sync.
+There is no native component next to the WebView any more — the editor is a bare `WebBrowserComponent` that fills the whole window. The keys, the pitch/mod wheels and the octave/velocity controls all moved inside the chassis, as its bottom strip: `BottomStrip` (`WebUI/src/synth/ui/BottomStrip.tsx`) lays the two `@xerum/ui` `Wheel`s (`PB`, `MW`) beside a column holding `PerformanceBar` — octave shift, velocity, a MIDI-activity dot, the two meters — over `Keybed` (`WebUI/packages/ui/src/components/Keybed/`), the four-octave key strip itself. None of it is JUCE chrome any more; it is `@xerum/ui`, same as every other control in the window, and it goes through design-sync like the rest.
 
-**Skin** — `ui::XerumKeyboard` (`Source/ui/`) subclasses `juce::MidiKeyboardComponent` and overrides `drawWhiteNote` / `drawBlackNote` / `paintOverChildren`: gradient keys, accent `#6ee7c5` on press, octave labels, bottom corners rounded like `.sx-chassis`. Its palette mirrors `WebUI/packages/ui/src/theme.css` and lives in `XerumKeyboard.cpp`; the editor no longer sets the base `ColourId`s, except the three the `final` `drawKeyboardBackground` reads (set in the keyboard's own constructor).
+**Bridge** — `bridge::MidiChannel` (`Source/bridge/MidiChannel.{h,cpp}`) is what the strip plays through: four native functions, `noteOn(note, velocity)`, `noteOff(note)`, `allNotesOff()`, `setWheel(kind, value)`. Notes land in the processor's `MidiKeyboardState` (`PluginProcessor::getKeyboardState()`), the very same one `processBlock` already merges into the host MIDI buffer — a note played from the UI is indistinguishable from one played on a DAW track, and nothing downstream needs to know the difference. Wheels can't travel that way — `MidiKeyboardState` only carries notes — so `setWheel` instead writes into two atomics on the processor (`uiPitchBend_`, `uiModWheel_`, `-1` meaning "untouched"), which `processBlock` turns into real MIDI pitch-bend / CC1 messages prepended to the block; from there down, the arpeggiator, the engine and the mod matrix have no way of telling a drawn wheel from a physical one. Those atomics outlive the editor, so the drawn `MW` has to be told where the engine already is: `BottomStrip` seeds its mod position from `mw` in the **first** `meters` frame after mount and then unsubscribes — once, not continuously, which would fight a drag in progress — and it pushes nothing on mount, which would stomp a CC 1 that came from real hardware. `PB` needs none of this: `springBack` puts it at centre anyway. There is no event back to the UI to say a note is sounding — the strip reads that off the note mask carried in the `meters` frame instead (below), the same 30 Hz channel that already carries meter and mod levels.
 
-**Layout contract** — the window's *width* is the only free variable. The editor derives everything from it (`PluginEditor.cpp`):
+**Computer keyboard** — `BottomStrip` also plays from QWERTY, which is what the deleted native strip did with `setKeyPressBaseOctave (5)`. Window-level `keydown`/`keyup` listeners map the two standard rows onto semitones above the strip's current lowest C — `A W S E D F T G Y H U J` for one octave, `K O L P ;` continuing above — and feed the very same note-on/note-off path as the pointer, at the performance bar's velocity. It reads `event.code`, not `event.key`, so the rows stay under the same fingers on a non-QWERTY layout. System auto-repeat is ignored, a keydown while a text field has focus is ignored, `keyup` releases the note the `keydown` actually started (so shifting the octave mid-press cannot hang one), and window `blur` panics and forgets everything held — without a `keyup` the map would otherwise believe that key were still down. The caveat is the one the spec already recorded: it only works while the WebView has keyboard focus, and hosts that swallow key events from web views (FL Studio 25 as of Sept 2026) will swallow these too.
 
-| | |
-|---|---|
-| scale | `width / 900`, clamped to `0.72 … 1.5` (same ceiling as the web fit) |
-| WebView | full width × `ceil(600 × scale)` |
-| keyboard | full width × `round(78 × scale)`, right below |
-| window height | the sum of the two, enforced by `ChassisConstrainer` |
+**Note mask** — `engine::SynthEngine::getActiveNotesLo()`/`getActiveNotesHi()` publish one bit per MIDI note (0..63 in `notesLo`, 64..127 in `notesHi`) into `engine::MeterFrame`. The audio thread writes them, and the reader takes them as an instantaneous state rather than a peak — like `lfo`/`mw`, loaded rather than exchanged to zero — because a held note is a state, not a transient. `bridge::MeterChannel` can't hand a `uint64` to JSON as-is (a double's mantissa doesn't hold 64 bits exactly), so each word is split into two 32-bit properties on the `meters` event — `n0`/`n1` from `notesLo`, `n2`/`n3` from `notesHi` — alongside `in`/`out`/`lfo`/`env`/`env2`/`vel`/`mw`/`arpStep`. `WebUI/src/juce/backend.ts` reassembles them (`noteMaskOf`) into four 32-bit words, and `Keybed` checks `isNoteActive` against them to light a key without going through React state — the mask is applied by mutating `data-active` through a ref at 30 Hz, the same reason `BottomStrip` reads the frame directly instead of through `useMeterFrame`.
 
-The editor loads the UI with `?gutter=0`, which tells `SynthWindow` to fit the chassis with no margin (default `16`) and marks it `data-attached` so its bottom corners go square. Chassis and keyboard then share the same width and touch, with no dead band between them. Changing either side of this contract (the 900×600 chassis, the `gutter` default, the fit formula) desyncs the two: keep `SynthWindow.tsx` and `PluginEditor.cpp` in step.
+**Pitch bend** — `pbRange` (`parameters.json`) sets `EngineParams::pitchBendRangeSemitones`; the `PB` wheel's live position (0..1, 0.5 = center) becomes a real pitch-bend MIDI message as described above, and `SynthEngine::pitchBend_` bends every sounding voice — arpeggiated notes included — by up to that many semitones at full deflection, springing back to the centre on release (`Wheel`'s own `springBack`, set on the `PB` wheel in `BottomStrip.tsx`, not anything the bridge does).
+
+**Layout** — the strip is inside the chassis now, not a `PluginEditor` layout concern. The window's *width* is still the only free variable the editor derives everything from (`PluginEditor.cpp`): scale = `width / 900`, clamped to `0.72 … 1.5` (same ceiling as the web fit), and the WebView — the whole editor — is `ceil(H × scale)` tall, enforced by `ChassisConstrainer`. `H` is `680` — the 670 px its `shrink-0` children actually occupy (20 padding + 40 header + 130 wave display + 224 panels + 124 tab area + 108 bottom strip + four 6 px gaps) plus 10 px of breathing room at the bottom, the same 10 the pre-strip 600 box had. It is exported from `WebUI/src/synth/ui/SynthWindow.tsx` as the one source of truth; `.sx-chassis` in `synth.css` and `kChassisHeight` in `PluginEditor.cpp` both carry a comment pointing back at it, and a web test (`SynthWindow.test.tsx`) pins the CSS copy against it. The editor still loads the UI with `?gutter=0`, which tells `SynthWindow` to fit the chassis with no side margin (default `16`) and mark it `data-attached`. That attribute used to square the chassis's bottom corners, back when the native keyboard strip needed to butt flush against them from underneath; now that the strip lives inside the chassis, that CSS rule is gone and the corners stay rounded in every state. `data-attached` therefore has **no CSS consumer at all** today — it does not drop the margin either, `gutter` does that itself inside the fit computation. It is kept only as a host-detection hook ("this chassis is filling a WebView") for anything that later wants to read it, and a test pins it so it is not lost by accident. Changing either side of the geometry contract (`H`, the `gutter` default, the fit formula) desyncs `SynthWindow.tsx` and `PluginEditor.cpp`: keep the three copies of `H` in step.
 
 ## Phase 1 behaviour
 
 - Instrument plugin: AU + VST3 + Standalone
 - MIDI note on/off allocates voices (16 simultaneous, a 19-slot pool, quietest-releasing steal with a fade)
-- The engine is audible: a wavetable oscillator with band-limited mipmaps (`dsp::WavetableOscillator` / `dsp::MipTable`) feeds an exponential ADSR (`dsp::ADSREnvelope`) into a TPT state-variable filter (`dsp::StateVariableFilter`, 1 or 2 stages). 34 parameters are wired end to end: `oscOn`, `wtIndex`, `wtpos`, `oct`, `semi`, `fine`, `level`, `filtOn`, `ftype`, `slope`, `cutoff`, `res`, `drive`, `keytrk`, `att`, `dec`, `sus`, `rel`, `envVel`, `volume`, `pan`, `bypass`, plus the six LFO parameters `lshape`, `lrate`, `lsync`, `lphase`, `lfade`, `lretrig`, `unison` / `detune`, and the second envelope's `att2` / `dec2` / `sus2` / `rel2`
+- The engine is audible: a wavetable oscillator with band-limited mipmaps (`dsp::WavetableOscillator` / `dsp::MipTable`) feeds an exponential ADSR (`dsp::ADSREnvelope`) into a TPT state-variable filter (`dsp::StateVariableFilter`, 1 or 2 stages), then the chorus and the plate reverb. 54 of the 56 parameters in `parameters.json` are wired end to end — all of them but the two listed as inert below:
+  - **Osc** — `oscOn`, `wtIndex`, `unison`, `oct`, `semi`, `wtpos`, `detune`, `fine`, `pbRange`, `level`
+  - **Filter** — `filtOn`, `ftype`, `slope`, `cutoff`, `res`, `drive`, `keytrk`
+  - **Master** — `voiceMode`, `pan`, `glide`, `volume`, `bypass`
+  - **Env** — `att`, `dec`, `sus`, `rel`, `envVel`, and the second envelope's `att2`, `dec2`, `sus2`, `rel2`
+  - **LFO** — `lshape`, `lsync`, `lretrig`, `lrate`, `lphase`, `lfade`
+  - **Chorus** — `fx1On`, `chRate`, `chDepth`, `chMix`, `chFeedback`; **Reverb** — `fx2On`, `rvSize`, `rvDamp`, `rvMix`, `rvPredelay`, `rvDecay`
+  - **Arp** — `arpOn`, `arpMode`, `arpRate`, `arpGate`, `arpOct`, `arpSwing`
+
+  `pbRange` is the only one of the 54 with no control in the window: it is how many semitones the `PB` wheel bends at full deflection, default 2 — see **Keyboard, wheels and MIDI bridge** above
 - The mod matrix is live: five sources (`lfo`, `env`, `env2`, `vel`, `mw`) onto seven targets (`cutoff`, `res`, `wtpos`, `level`, `pan`, `fine`, `drive`), at control rate — see **Modulation** below
-- Still inert (accepted by the APVTS, no effect on sound yet): `envCurve`, `glide`, `voiceMode`, `warp`, every `arp*`
+- Still inert: `warp` (accepted by the APVTS and drawn by `WaveDisplay`, but nothing in the engine reads it) and `envCurve` (accepted and nothing reads it at all)
 
 ## Parameter mapping
 
@@ -82,7 +90,7 @@ The editor loads the UI with `?gutter=0`, which tells `SynthWindow` to fit the c
 
 This split exists because of a bug: an early version cast a denormalised `oct`/`semi` value with `(int)` instead of `juce::roundToInt`, truncating toward zero and landing on the wrong note for several settings (`denormalise()` can return a hair under the true integer, e.g. `7.999998`). The regression test written against that bug reimplemented the `Map::Linear` formula by hand, because at the time the real conversion lived inside `PluginProcessor.cpp`, which pulls in `juce_audio_processors` — a library `XerumTests` doesn't link — so the test verified its own copy of the arithmetic, not the code that ships. `ParamCollect.h` was carved out precisely so a test could call the real `collectEngineParams` (`Tests/EngineTests.cpp`, `ParamCollectTests`): if the truncating cast came back, that test would catch it; the earlier, hand-rolled one would not. Don't collapse this back into `PluginProcessor` for the sake of one fewer header.
 
-**`getRawParameterValue` returns natural units, not normalised ones — and that is not the same thing for every `Kind`.** `Kind::Float` parameters are created with `NormalisableRange {0, 1}` (`ParameterMapping.h`), so for them natural and normalised coincide and `denormalise()` is the right conversion. `Kind::Choice` arrives as the option index, and `Kind::Bool` as 0 or 1; both are consumed as such. `Kind::Int` — only `oct` and `semi` — is created as a `juce::AudioParameterInt` over its own range, so the accessor hands over −3..3 and −12..12 directly. They must be rounded, never denormalised.
+**`getRawParameterValue` returns natural units, not normalised ones — and that is not the same thing for every `Kind`.** `Kind::Float` parameters are created with `NormalisableRange {0, 1}` (`ParameterMapping.h`), so for them natural and normalised coincide and `denormalise()` is the right conversion. `Kind::Choice` arrives as the option index, and `Kind::Bool` as 0 or 1; both are consumed as such. `Kind::Int` — `oct`, `semi` and `pbRange` — is created as a `juce::AudioParameterInt` over its own range, so the accessor hands over −3..3, −12..12 and 0..24 directly. They must be rounded, never denormalised.
 
 Denormalising them was a real bug that shipped for months. At the factory default of 0 and 0 it produced −3 octaves and −12 semitones, so **every note sounded four octaves below the key played** — a middle C came out at 16 Hz, below the fundamental being audible at all, which reads as a dirty, broken tone rather than as a transposition. Worse, `denormalise()` clamps its input to 0..1, so the octave knob could only ever produce the two extremes of its range: natural ≤ 0 gave −3, natural ≥ 1 gave +3, and no position gave 0.
 
