@@ -130,3 +130,28 @@ describe("mask delle note", () => {
     expect(isNoteActive(onlyN2Bottom, 63)).toBe(false);
   });
 });
+
+describe("note e rotelle", () => {
+  it("registra le note suonate dalla UI", async () => {
+    const b = new FakeBackend();
+    await b.noteOn(60, 0.8);
+    await b.noteOn(64, 0.8);
+    await b.noteOff(60);
+    expect([...b.playing]).toEqual([64]);
+  });
+
+  it("allNotesOff svuota tutto", async () => {
+    const b = new FakeBackend();
+    await b.noteOn(60, 0.8);
+    await b.noteOn(64, 0.8);
+    await b.allNotesOff();
+    expect(b.playing.size).toBe(0);
+  });
+
+  it("le rotelle restano dove le si lascia", async () => {
+    const b = new FakeBackend();
+    await b.setWheel("mod", 0.25);
+    await b.setWheel("pitch", 0.75);
+    expect(b.wheels).toEqual({ pitch: 0.75, mod: 0.25 });
+  });
+});

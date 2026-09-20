@@ -78,6 +78,14 @@ export interface Backend {
   loadPreset(index: number): Promise<void>;
   onStateChanged(cb: (s: BridgeState & { origin: string }) => void): () => void;
   onMeters(cb: (m: MeterFrame) => void): () => void;
+  /** Note suonate dentro la UI. Finiscono nel MidiKeyboardState del processor: dal punto di vista
+      del motore sono indistinguibili da quelle dell'host. `velocity` è 0..1. */
+  noteOn(note: number, velocity: number): Promise<void>;
+  noteOff(note: number): Promise<void>;
+  /** Da chiamare su pointercancel, blur e smontaggio: senza, una nota può restare appesa. */
+  allNotesOff(): Promise<void>;
+  /** Posizione di una rotella, 0..1. `pitch` ha il centro a 0.5. */
+  setWheel(kind: "pitch" | "mod", value: number): Promise<void>;
 }
 
 /** Default normalizzato di uno spec (float: già 0..1; bool: 0/1; int: mappato; choice: indice mappato). */

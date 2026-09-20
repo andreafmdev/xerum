@@ -25,7 +25,7 @@ function installJuceStub() {
         listeners.get("__juce__complete")?.forEach((fn) => fn({ promiseId: p.resultId, result: { version: 1, mods: [], arpSteps: new Array(16).fill(0) } }));
     },
   };
-  (window as any).__JUCE__ = { backend, initialisationData: { __juce__sliders: ["cutoff", "oct"], __juce__toggles: ["filtOn"], __juce__comboBoxes: ["slope"], __juce__functions: ["getState", "setMods", "setArpSteps"] } };
+  (window as any).__JUCE__ = { backend, initialisationData: { __juce__sliders: ["cutoff", "oct"], __juce__toggles: ["filtOn"], __juce__comboBoxes: ["slope"], __juce__functions: ["getState", "setMods", "setArpSteps", "noteOn", "noteOff", "allNotesOff", "setWheel"] } };
   return { listeners, emitted };
 }
 
