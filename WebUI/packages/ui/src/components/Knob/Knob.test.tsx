@@ -165,7 +165,10 @@ describe("Knob motion", () => {
   it("animates the value arc only when the change did not come from the pointer", () => {
     render(<Knob value={0.3} onChange={() => {}} label="Cutoff" />);
     const arc = screen.getByTestId("knob-value-arc");
-    expect(arc.getAttribute("class")).toContain("transition-[d,stroke-dashoffset]");
+    // `stroke-dashoffset` non compare più: nessun path del knob imposta mai stroke-dasharray/
+    // stroke-dashoffset, quindi transizionarlo era CSS morto pinnato da un test (Finding 5).
+    expect(arc.getAttribute("class")).toContain("transition-[d]");
+    expect(arc.getAttribute("class")).not.toContain("stroke-dashoffset");
     // Durante il drag la transizione sparisce: il valore insegue il dito, non una curva.
     expect(arc.getAttribute("class")).toContain("group-data-[dragging=true]/knob:transition-none");
   });

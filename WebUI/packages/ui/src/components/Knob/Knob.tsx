@@ -242,7 +242,7 @@ export function Knob({
             // non si anima, scatta di netto) quando il bipolar supera i 180°, un singolo istante
             // e non un lag percepibile. Durante il drag la transizione sparisce del tutto: il
             // valore deve seguire il dito, non una curva che lo insegue in ritardo.
-            className="fill-none stroke-(--tone) transition-[d,stroke-dashoffset] duration-(--dur-state) ease-glass group-data-[dragging=true]/knob:transition-none [filter:var(--glow,none)]"
+            className="fill-none stroke-(--tone) transition-[d] duration-(--dur-state) ease-glass group-data-[dragging=true]/knob:transition-none [filter:var(--glow,none)]"
             strokeWidth={2.5}
             strokeLinecap="round"
           />
