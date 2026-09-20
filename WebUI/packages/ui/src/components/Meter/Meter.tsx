@@ -32,7 +32,8 @@ const zonesFor = (n: number): Zone[] => {
   }
   return z;
 };
-const LED = "h-2 w-1 rounded-[1px] transition-colors duration-75";
+// 70ms (il token press) invece di 75: impercettibile su un LED, ed è un valore del vocabolario.
+const LED = "h-2 w-1 rounded-[1px] transition-colors duration-(--dur-press)";
 const LED_OFF = `${LED} bg-led-off`;
 const LED_ON: Record<Zone, string> = {
   ok: `${LED} bg-(--tone) shadow-[0_0_4px_var(--tone)]`,
