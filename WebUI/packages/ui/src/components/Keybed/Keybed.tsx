@@ -52,23 +52,41 @@ export function Keybed({
   const latest = useRef({ velocity, onNoteOn, onNoteOff, onAllNotesOff });
   latest.current = { velocity, onNoteOn, onNoteOff, onAllNotesOff };
 
+  // `data-pressed` e' l'UNICO attributo che pilota l'animazione del tasto (transform + filter),
+  // ed e' alimentato da due fonti che non devono mai divergere: il puntatore qui sotto (feedback
+  // immediato, senza aspettare il motore) e la mask di `subscribeNotes` piu' in basso (una nota
+  // arrivata via MIDI). Se i due percorsi scrivessero attributi diversi, un tasto suonato dal
+  // vivo e uno suonato col mouse potrebbero apparire diversi senza che nessun test se ne accorga.
+  // `data-active` resta separato apposta: quello conferma che il motore sta davvero suonando la
+  // nota (puo' non arrivare mai, per voice stealing), `data-pressed` e' solo il feedback tattile.
+  const setPressed = useCallback((note: number, pressed: boolean) => {
+    const el = keys.current.get(note);
+    if (el) el.dataset.pressed = String(pressed);
+  }, []);
+
   const press = useCallback((note: number) => {
     if (held.current === note) return;
-    if (held.current !== null) latest.current.onNoteOff(held.current);
+    if (held.current !== null) {
+      latest.current.onNoteOff(held.current);
+      setPressed(held.current, false);
+    }
     held.current = note;
     latest.current.onNoteOn(note, latest.current.velocity);
-  }, []);
+    setPressed(note, true);
+  }, [setPressed]);
 
   const release = useCallback(() => {
     if (held.current === null) return;
     latest.current.onNoteOff(held.current);
+    setPressed(held.current, false);
     held.current = null;
-  }, []);
+  }, [setPressed]);
 
   const panic = useCallback(() => {
+    if (held.current !== null) setPressed(held.current, false);
     held.current = null;
     latest.current.onAllNotesOff();
-  }, []);
+  }, [setPressed]);
 
   // Una nota appesa non e' un difetto estetico: suona per sempre. Il puntatore puo' sparire
   // senza pointerup — cambio di finestra, pointercancel della WebView — quindi si chiude anche
@@ -81,7 +99,11 @@ export function Keybed({
   useEffect(() => {
     if (!subscribeNotes) return;
     return subscribeNotes((mask) => {
-      for (const [note, el] of keys.current) el.dataset.active = String(bitOf(mask, note));
+      for (const [note, el] of keys.current) {
+        const on = String(bitOf(mask, note));
+        el.dataset.active = on;
+        el.dataset.pressed = on;
+      }
     });
   }, [subscribeNotes]);
 
@@ -135,10 +157,17 @@ export function Keybed({
           data-key="white"
           data-note={note}
           data-active="false"
+          data-pressed="false"
           className={cn(
             "relative flex h-full flex-1 items-end justify-center rounded-b-[3px] border-r border-edge-dark pb-1 last:border-r-0",
             "bg-linear-to-b from-key-ivory-hi to-key-ivory-lo",
             "data-[active=true]:from-(--tone) data-[active=true]:to-key-ivory-active-lo",
+            // Un tasto premuto dal mouse e una nota arrivata via MIDI passano per lo stesso
+            // attributo (vedi `setPressed`/subscribeNotes sopra): la stessa transizione, quindi,
+            // vale identica per entrambi i percorsi, senza che i due possano divergere in modo
+            // visibile solo mettendoli a confronto.
+            "transition-[transform,filter] duration-(--dur-press) ease-snap",
+            "data-[pressed=true]:translate-y-px data-[pressed=true]:brightness-90",
           )}
           onPointerDown={(e) => { if (e.button === 0) press(note); }}
           onPointerEnter={(e) => { if (e.buttons === 1) press(note); }}
@@ -161,10 +190,13 @@ export function Keybed({
           data-key="black"
           data-note={note}
           data-active="false"
+          data-pressed="false"
           className={cn(
             "absolute top-0 z-10 h-[62%] rounded-b-[3px] shadow-cap",
             "bg-linear-to-b from-key-ebony-hi to-key-ebony-lo",
             "data-[active=true]:from-(--tone) data-[active=true]:to-key-ebony-active-lo",
+            "transition-[transform,filter] duration-(--dur-press) ease-snap",
+            "data-[pressed=true]:translate-y-px data-[pressed=true]:brightness-90",
           )}
           style={{ left: `${index * unit - unit * 0.3}%`, width: `${unit * 0.6}%` }}
           onPointerDown={(e) => { if (e.button === 0) press(note); }}

@@ -84,17 +84,28 @@ export function Fader({
         >
           <div
             data-testid="fader-fill"
+            data-part="fill"
+            // Stessa scelta del riempimento della rotella: `height`/`width` restano fuori dalla
+            // whitelist delle proprieta' animabili (layout, non compositing), quindi qui non c'e'
+            // nessun `transition-[height]`/`transition-[width]` esplicito. La utility di base
+            // `transition` copre solo il set curato di Tailwind (colori, opacity, box-shadow,
+            // transform, filter): dichiara l'intento (ease-glass) e si disattiva durante il drag,
+            // senza mai transizionare le due proprieta' vietate. Un vero scorrimento animato del
+            // riempimento richiederebbe un riempimento a `transform`, fuori dal perimetro di
+            // questo task.
             className={cn(
-              "absolute rounded-[2px] bg-(--tone)",
+              "absolute rounded-[2px] bg-(--tone) transition duration-(--dur-state) ease-glass group-data-[dragging=true]/fader:transition-none",
               vertical ? "inset-x-px bottom-px" : "inset-y-px left-px",
             )}
             style={vertical ? { height: pct } : { width: pct }}
           />
           {/* Cappuccio rettangolare con la riga centrale incisa. */}
           <div
+            data-testid="fader-thumb"
             data-slot="fader-thumb"
+            data-part="cap"
             className={cn(
-              "absolute flex items-center justify-center rounded-[2px] border border-edge-dark bg-linear-to-b from-cap-hi to-cap-lo shadow-cap transition-transform ease-snap group-data-[dragging=true]/fader:scale-105",
+              "absolute flex items-center justify-center rounded-[2px] border border-edge-dark bg-linear-to-b from-cap-hi to-cap-lo shadow-cap transition-transform duration-(--dur-press) ease-snap group-data-[dragging=true]/fader:scale-105",
               vertical ? "left-1/2 h-3 w-5 -translate-x-1/2 translate-y-1/2" : "top-1/2 h-5 w-3 -translate-x-1/2 -translate-y-1/2",
             )}
             style={vertical ? { bottom: pct } : { left: pct }}

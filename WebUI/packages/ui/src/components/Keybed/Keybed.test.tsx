@@ -137,3 +137,36 @@ describe("Keybed", () => {
     expect(keys[0]).toHaveAttribute("data-active", "false");
   });
 });
+
+describe("Keybed motion", () => {
+  // KeybedProps non ha una prop "active": la maschera arriva via `subscribeNotes`, un
+  // callback a cui il componente si iscrive una volta (non una prop rirenderizzata a 30 Hz,
+  // vedi il commento su KeybedProps). Il test adatta quindi l'API del brief a quella reale,
+  // ma verifica esattamente la stessa cosa: un tasto premuto dal mouse e la stessa nota
+  // annunciata dal motore via mask finiscono sullo stesso attributo, con lo stesso valore.
+  it("presses a key the same way for a click and for an incoming MIDI note", () => {
+    let emit: ((m: readonly [number, number, number, number]) => void) | null = null;
+    const subscribeNotes = (cb: (m: readonly [number, number, number, number]) => void) => {
+      emit = cb;
+      return () => { emit = null; };
+    };
+    render(
+      <Keybed firstNote={48} octaves={1} velocity={0.8} onNoteOn={noop} onNoteOff={noop}
+              onAllNotesOff={noop} subscribeNotes={subscribeNotes} />,
+    );
+    const key = screen.getAllByTestId("key-white")[0]!;
+    expect(key).toHaveAttribute("data-pressed", "false");
+
+    // Premuto col mouse: feedback immediato, senza aspettare l'eco del motore.
+    fireEvent.pointerDown(key, { button: 0, pointerId: 1 });
+    const pressedByPointer = key.getAttribute("data-pressed");
+    expect(pressedByPointer).toBe("true");
+    fireEvent.pointerUp(key, { pointerId: 1 });
+    expect(key).toHaveAttribute("data-pressed", "false");
+
+    // Stessa nota (48), questa volta annunciata dal motore via mask: stesso attributo,
+    // stesso valore di quando l'aveva premuta il puntatore.
+    emit!([0, 1 << 16, 0, 0]);
+    expect(key.getAttribute("data-pressed")).toBe(pressedByPointer);
+  });
+});

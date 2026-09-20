@@ -61,3 +61,20 @@ describe("Fader", () => {
     expect(root).toHaveAttribute("data-dragging", "false");
   });
 });
+
+describe("Fader motion", () => {
+  it("animates the fill only when the change did not come from the pointer", () => {
+    render(<Fader value={0.3} onChange={() => {}} label="Level" />);
+    const fill = screen.getByTestId("fader-fill");
+    expect(fill.getAttribute("class")).toContain("ease-glass");
+    // Durante il drag la transizione sparisce: il riempimento insegue il dito, non una curva.
+    expect(fill.getAttribute("class")).toContain("group-data-[dragging=true]/fader:transition-none");
+  });
+
+  it("never disables the thumb's own press feedback while settling", () => {
+    render(<Fader value={0.3} onChange={() => {}} label="Level" />);
+    const thumb = screen.getByTestId("fader-thumb");
+    expect(thumb.getAttribute("class")).toContain("ease-snap");
+    expect(thumb.getAttribute("class")).not.toContain("ease-glass");
+  });
+});

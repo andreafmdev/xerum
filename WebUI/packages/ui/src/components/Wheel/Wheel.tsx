@@ -59,6 +59,7 @@ export function Wheel({
 
   return (
     <div
+      data-testid="wheel"
       data-slot="wheel"
       data-dragging={dragging}
       className={cn("group/wheel flex flex-col items-center gap-1", className)}
@@ -94,7 +95,23 @@ export function Wheel({
           if (springBack && !disabled) onChange(defaultValue);
         }}
       >
-        <div data-testid="wheel-fill" data-part="fill" className="absolute inset-x-px rounded-[2px] bg-(--tone)" style={fill} />
+        <div
+          data-testid="wheel-fill"
+          data-part="fill"
+          // Il molleggio verso il centro e' l'unica vera molla dell'interfaccia: `ease-settle`
+          // a piena forza, spenta durante il trascinamento perche' li' il riempimento deve
+          // seguire il dito, non rincorrerlo. Nota per chi rivede: il riempimento resta
+          // `bottom`+`height` (mai un transform, per lo stesso motivo spiegato sopra), e la
+          // whitelist delle proprieta' animabili vieta di animare proprio `height`/`bottom` —
+          // quindi qui si usa la utility `transition` di base (il set curato di Tailwind:
+          // colori, opacity, box-shadow, transform, filter — MAI width/height/top/left/bottom),
+          // che dichiara l'intento e il timing (ease-settle) senza mai transizionare quelle due
+          // proprieta' vietate. Il ritorno al centro quindi scatta senza dissolvenza sul
+          // posizionamento: un vero rimbalzo animato richiederebbe un riempimento a `transform`,
+          // che qui e' stato deliberatamente escluso (vedi commento sopra "mai un transform").
+          className="absolute inset-x-px rounded-[2px] bg-(--tone) transition duration-(--dur-layer) ease-settle group-data-[dragging=true]/wheel:transition-none"
+          style={fill}
+        />
         {/* Il segno della posizione, per chi preferisce una riga a un riempimento (una rotella a
             rullo, come su una tastiera): nascosto di default, una app lo accende via CSS e spegne
             `fill`. Sta a `top`, non a `bottom`, perche' e' un punto e non un'altezza. */}

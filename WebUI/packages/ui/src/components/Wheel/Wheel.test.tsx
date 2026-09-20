@@ -84,3 +84,12 @@ describe("Wheel", () => {
     expect(onChange).toHaveBeenLastCalledWith(0.5);
   });
 });
+
+describe("Wheel motion", () => {
+  it("returns to centre on the settle curve: it is the one real spring here", () => {
+    render(<Wheel value={0.5} onChange={() => {}} label="Pitch" />);
+    const cls = screen.getByTestId("wheel").querySelector('[data-part="fill"]')?.getAttribute("class") ?? "";
+    expect(cls).toContain("ease-settle");
+    expect(cls).toContain("group-data-[dragging=true]/wheel:transition-none");
+  });
+});
