@@ -1,8 +1,38 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { Keybed } from "./Keybed";
 
 const noop = () => {};
+
+// jsdom non implementa affatto la cattura del puntatore: setPointerCapture non esiste, e
+// fireEvent.pointerEnter spara l'evento sintetico sul nodo che gli si passa, senza hit testing.
+// Il glissando pero' vive proprio li': i tasti chiamano press() da onPointerEnter con
+// buttons === 1. Per la spec Pointer Events, finche' un elemento tiene la cattura
+// pointerover/enter/out/leave arrivano SOLO al target della cattura, e i discendenti sotto il
+// puntatore non ricevono nulla — cioe' un setPointerCapture rimesso sul contenitore ucciderebbe
+// il glissando nella WebView vera senza che un test "sintetico" se ne accorga.
+//
+// Quindi qui la cattura si modella a mano: uno stub che registra chi la prende, e un drag che
+// consegna il pointerenter al target della cattura quando ce n'e' uno, esattamente come farebbe
+// un browser. Se qualcuno reintroduce la cattura, il test sotto fallisce.
+let captured: Element | null = null;
+
+beforeEach(() => {
+  captured = null;
+  Element.prototype.setPointerCapture = function (this: Element) { captured = this; };
+  Element.prototype.releasePointerCapture = function () { captured = null; };
+  Element.prototype.hasPointerCapture = function (this: Element) { return captured === this; };
+});
+
+afterEach(() => {
+  delete (Element.prototype as Partial<Element>).setPointerCapture;
+  delete (Element.prototype as Partial<Element>).releasePointerCapture;
+  delete (Element.prototype as Partial<Element>).hasPointerCapture;
+});
+
+/** Il puntatore entra in `key` col tasto premuto, ritargettato sulla cattura come da spec. */
+const glideOnto = (key: Element, pointerId = 1) =>
+  fireEvent.pointerEnter(captured ?? key, { buttons: 1, pointerId });
 
 describe("Keybed", () => {
   it("disegna sette tasti bianchi e cinque neri per ottava", () => {
@@ -38,9 +68,19 @@ describe("Keybed", () => {
     render(<Keybed firstNote={48} octaves={1} velocity={0.8} onNoteOn={onNoteOn} onNoteOff={onNoteOff} onAllNotesOff={noop} />);
     const keys = screen.getAllByTestId("key-white");
     fireEvent.pointerDown(keys[0], { button: 0, pointerId: 1 });
-    fireEvent.pointerEnter(keys[1], { buttons: 1, pointerId: 1 });
+
+    // Nessuno deve aver preso la cattura: se l'avesse presa il contenitore, glideOnto
+    // consegnerebbe il pointerenter a lui (che non ha handler) e le due attese sotto
+    // fallirebbero — che e' il punto.
+    expect(captured).toBeNull();
+    glideOnto(keys[1]);
     expect(onNoteOff).toHaveBeenCalledWith(48);
     expect(onNoteOn).toHaveBeenLastCalledWith(50, 0.8);
+
+    // E il glissando continua: terzo tasto, sempre senza un nuovo pointerdown.
+    glideOnto(keys[2]);
+    expect(onNoteOff).toHaveBeenCalledWith(50);
+    expect(onNoteOn).toHaveBeenLastCalledWith(52, 0.8);
   });
 
   it("pointercancel chiama onAllNotesOff", () => {

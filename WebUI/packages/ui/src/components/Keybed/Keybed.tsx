@@ -111,10 +111,15 @@ export function Keybed({
     <div
       data-slot="keybed"
       className={cn("relative flex h-full w-full select-none touch-none", className)}
-      onPointerDown={(e) => {
-        if (e.button !== 0) return;
-        e.currentTarget.setPointerCapture?.(e.pointerId);
-      }}
+      // Niente setPointerCapture qui, ed e' una scelta, non una dimenticanza. Il glissando vive
+      // sui pointerenter dei singoli tasti, e per la spec Pointer Events finche' un elemento
+      // tiene la cattura pointerover/enter/out/leave arrivano SOLO al target della cattura: i
+      // discendenti sotto il puntatore non ricevono piu' nulla. Nella WebView vera, con la
+      // cattura sul contenitore, trascinare suonava il primo tasto e poi silenzio.
+      //
+      // La sicurezza che la cattura voleva dare — non lasciare una nota appesa se il puntatore
+      // se ne va — la da' gia' onPointerLeave qui sotto, e senza cattura un puntatore che
+      // rientra nella striscia col tasto premuto riprende a suonare invece di essere ignorato.
       onPointerUp={release}
       onPointerLeave={release}
       onPointerCancel={panic}
