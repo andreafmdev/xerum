@@ -1,4 +1,4 @@
-/* Finestra plugin: chassis 900×600 scalato nel contenitore, tre varianti di materiale.
+/* Finestra plugin: chassis 900×708 scalato nel contenitore, tre varianti di materiale.
    Le varianti ridefiniscono i token hardware di @xerum/ui sul chassis, così ogni
    primitiva (Knob, Segmented, Button…) cambia pelle senza prop aggiuntive. */
 
@@ -16,7 +16,7 @@
 
 .sx-chassis {
   width: 900px;
-  height: 600px;
+  height: 708px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -35,14 +35,6 @@
   /* Effetti opzionali: attivi solo in `glow`. */
   --glow: none;
   --tglow: none;
-}
-
-/* Agganciata alla tastiera nativa JUCE (gutter=0): il bordo inferiore diventa
-   squadrato, così chassis e tastiera leggono come un corpo solo. La tastiera
-   ridisegna lei i propri angoli inferiori arrotondati. */
-.sx-chassis[data-attached] {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
 }
 
 /* soft = token di libreria così come sono. */

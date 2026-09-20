@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -21,9 +23,30 @@ describe("SynthWindow on the bridge", () => {
     expect(screen.getByRole("meter", { name: "Output" })).toBeInTheDocument();
   });
 
-  it("gutter=0 squares the chassis bottom so the native keyboard can attach to it", async () => {
+  it("gutter=0 lets the chassis fill the whole WebView", async () => {
+    // Il nome di prima diceva "so the native keyboard can attach to it": la striscia era una
+    // MidiKeyboardComponent montata sotto la WebView, e lo chassis doveva squadrare il proprio
+    // fondo perché i due leggessero come un corpo solo. Adesso i tasti sono dentro lo chassis,
+    // l'angolo arrotondato è tornato (vedi synth.css) e data-attached serve solo a togliere il
+    // margine.
     mount(undefined, { gutter: 0 });
     expect(screen.getByTestId("chassis")).toHaveAttribute("data-attached");
+  });
+
+  it("il chassis è alto 708: 600 di pannello più 108 di striscia", async () => {
+    // toHaveStyle non basta: `test.css: false` in vitest.config.ts fa sì che l'import di
+    // synth.css sia stubbato, quindi in jsdom la regola .sx-chassis non viene mai applicata
+    // e getComputedStyle non la vedrebbe comunque. Si legge quindi la regola sorgente: è lì,
+    // non a runtime, che vive il numero da cui dipende tutta la geometria dell'editor.
+    const css = readFileSync(join(process.cwd(), "src/synth/ui/synth.css"), "utf8");
+    const chassisRule = css.match(/\.sx-chassis\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(chassisRule).toMatch(/height:\s*708px/);
+  });
+
+  it("monta la striscia bassa al posto del footer", async () => {
+    mount();
+    expect(screen.getAllByTestId("key-white").length).toBeGreaterThan(0);
+    expect(screen.getByRole("slider", { name: "PB" })).toBeInTheDocument();
   });
 
   it("by default the chassis keeps its margin and stays detached", async () => {

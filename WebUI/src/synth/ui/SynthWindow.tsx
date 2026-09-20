@@ -3,7 +3,7 @@ import { useBoolParam, useBridgeState, useChoiceParam, useFloatParam } from "../
 import type { ModSource } from "../../juce/backend";
 import type { ParamId } from "../params.generated";
 import { useSynth, type TabId } from "../useSynth";
-import { Footer } from "./Footer";
+import { BottomStrip } from "./BottomStrip";
 import { Header } from "./Header";
 import { MetersProvider } from "./MetersContext";
 import { FilterPanel, MasterPanel, OscPanel } from "./Panels";
@@ -22,13 +22,12 @@ export type SynthWindowProps = {
   /** Scala fissa invece dell'adattamento al contenitore. */
   scale?: number;
   /** Margine totale (px) lasciato attorno allo chassis dall'adattamento.
-      L'host JUCE passa 0: lo chassis riempie la WebView e la tastiera nativa
-      si attacca senza stacco sotto il bordo inferiore. */
+      L'host JUCE passa 0: lo chassis riempie la WebView senza margine. */
   gutter?: number;
 };
 
 const W = 900;
-const H = 600;
+const H = 708;
 
 // Lo chassis si scala con `transform`, non con `zoom`.
 //
@@ -45,7 +44,7 @@ const H = 600;
 // Il <canvas> di WaveDisplay ha comunque bisogno di conoscere la scala: `transform` non
 // tocca il backing store, quindi lo schermo dell'onda restava a risoluzione 1x anche quando
 // tutto il resto era ingrandito. Lo ricava da getBoundingClientRect (vedi WaveDisplay.tsx).
-/** Finestra del plugin: 900×600 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
+/** Finestra del plugin: 900×708 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
 export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixedScale, gutter = 16 }: SynthWindowProps) {
   const s = useSynth(initialTab);
   // Unica istanza dello stato condiviso: i tab lo leggono dal contesto, così non
@@ -123,7 +122,7 @@ export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixed
               {s.tab === "fx" && <FxTab />}
               {s.tab === "arp" && <ArpTab />}
             </TabArea>
-            <Footer />
+            <BottomStrip />
             {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
           </MetersProvider>
         </SynthContext.Provider>
