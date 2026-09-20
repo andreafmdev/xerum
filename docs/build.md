@@ -11,7 +11,7 @@
 git submodule update --init --recursive
 ```
 
-JUCE is pinned under `external/JUCE` (tag `8.0.6`).
+JUCE is pinned under `external/JUCE` (tag `9.0.2`).
 
 ## One command
 
@@ -74,6 +74,10 @@ It prints one line per test and ends with `ALL TESTS PASSED` (or `TEST FAILURES`
 ## Web UI
 
 Requires pnpm 11 (`corepack enable`).
+
+Also requires the JUCE submodule to be initialised: `WebUI` links the WebView interop
+package straight out of `external/JUCE`, so `pnpm install` fails without it. The C++ build
+already required the submodule; the web build now does too.
 
     cd WebUI
     pnpm install

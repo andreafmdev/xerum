@@ -17,6 +17,7 @@
     "gen:params": "node ../scripts/gen-params.mjs"
   },
   "dependencies": {
+    "@juce-framework/webview": "link:../external/JUCE/modules/juce_gui_extra/native/typescript/webview-interop",
     "@xerum/ui": "workspace:*",
     "lucide-react": "^1.46.0",
     "react": "^19.0.0",

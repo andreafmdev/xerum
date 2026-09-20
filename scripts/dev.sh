@@ -8,6 +8,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${PORT:-5173}"
 WEB_ONLY="${1:-}"
 
+cd "$ROOT"
+# Il submodule deve esistere prima di "cd WebUI" + pnpm install: pnpm risolve la
+# dipendenza link: dentro external/JUCE, quindi serve già per l'install web, non
+# solo più avanti per la build CMake.
+[ -f external/JUCE/CMakeLists.txt ] || git submodule update --init --recursive
+
 cd "$ROOT/WebUI"
 [ -d node_modules ] || pnpm install
 [ -f packages/ui/dist/index.js ] || pnpm ui:build
@@ -30,7 +36,6 @@ if [ "$WEB_ONLY" = "--web" ]; then
 fi
 
 cd "$ROOT"
-[ -f external/JUCE/CMakeLists.txt ] || git submodule update --init --recursive
 [ -d build/macos-debug ] || cmake --preset macos-debug
 cmake --build --preset macos-debug --target SerumStyleSynth_Standalone
 
