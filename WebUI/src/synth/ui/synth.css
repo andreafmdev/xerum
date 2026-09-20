@@ -16,6 +16,8 @@
 
 .sx-chassis {
   width: 900px;
+  /* 708 = H in SynthWindow.tsx. Le due copie non devono divergere: la sorgente di verita' e'
+     H, questo valore la segue e SynthWindow.test.tsx controlla che lo faccia davvero. */
   height: 708px;
   position: relative;
   display: flex;

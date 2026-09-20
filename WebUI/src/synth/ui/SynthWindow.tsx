@@ -27,7 +27,12 @@ export type SynthWindowProps = {
 };
 
 const W = 900;
-const H = 708;
+// 708 = 600 di pannello + 108 di striscia bassa. E' il numero da cui dipende tutta la geometria
+// dell'editor: la regola .sx-chassis in synth.css deve restare uguale a questo valore (il test
+// in SynthWindow.test.tsx controlla che non divergano), e da Task 12 anche kChassisHeight in
+// PluginEditor.cpp deve restare uguale a questo valore. Esportata perche' e' quella verita', non
+// il testo del CSS, a dover guidare chi la legge.
+export const H = 708;
 
 // Lo chassis si scala con `transform`, non con `zoom`.
 //

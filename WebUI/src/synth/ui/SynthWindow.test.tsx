@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { FakeBackend } from "../../juce/fake-backend";
 import { ZERO_METERS } from "../../juce/backend";
 import { BridgeProvider } from "../../juce/provider";
-import { SynthWindow } from "./SynthWindow";
+import { H, SynthWindow } from "./SynthWindow";
 
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement["getContext"];
 
@@ -33,14 +33,24 @@ describe("SynthWindow on the bridge", () => {
     expect(screen.getByTestId("chassis")).toHaveAttribute("data-attached");
   });
 
-  it("il chassis è alto 708: 600 di pannello più 108 di striscia", async () => {
+  it("H è 708: 600 di pannello più 108 di striscia, il numero che PluginEditor.cpp deve ricalcare", async () => {
+    // Non un numero nel test: H e' il valore che guida davvero la scala dello chassis (vedi
+    // l'arithmetic in SynthWindow.tsx). Un fix precedente controllava solo il testo del CSS —
+    // cambiare H a 700 e lasciare synth.css intatto avrebbe fatto passare quel test con una UI
+    // rotta. Da Task 12 anche kChassisHeight in PluginEditor.cpp deve restare uguale a questo
+    // numero: tre posti, una sola sorgente di verita'.
+    expect(H).toBe(708);
+  });
+
+  it("la regola .sx-chassis in synth.css non diverge da H", async () => {
     // toHaveStyle non basta: `test.css: false` in vitest.config.ts fa sì che l'import di
-    // synth.css sia stubbato, quindi in jsdom la regola .sx-chassis non viene mai applicata
-    // e getComputedStyle non la vedrebbe comunque. Si legge quindi la regola sorgente: è lì,
-    // non a runtime, che vive il numero da cui dipende tutta la geometria dell'editor.
+    // synth.css sia stubbato, quindi in jsdom la regola .sx-chassis non viene mai applicata e
+    // getComputedStyle non la vedrebbe comunque. Si legge quindi la regola sorgente e si
+    // confronta con H, non con un letterale: cosi' le due copie non possono divergere in
+    // silenzio, che era il difetto vero da chiudere.
     const css = readFileSync(join(process.cwd(), "src/synth/ui/synth.css"), "utf8");
     const chassisRule = css.match(/\.sx-chassis\s*\{[^}]*\}/)?.[0] ?? "";
-    expect(chassisRule).toMatch(/height:\s*708px/);
+    expect(chassisRule).toMatch(new RegExp(`height:\\s*${H}px`));
   });
 
   it("monta la striscia bassa al posto del footer", async () => {
