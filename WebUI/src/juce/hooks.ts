@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { PARAM_SPECS, type ParamId } from "../synth/params.generated";
 import { formatValue, fromIndex, fromInt, paramLabel, toIndex, toInt } from "../synth/mapping";
-import type { BridgeState, MeterFrame, ModAssignment, ModSource } from "./backend";
+import type { BridgeState, MeterFrame, MidiInputs, ModAssignment, ModSource } from "./backend";
 import { meterStore } from "./meters";
 import { useBackend } from "./provider";
 
@@ -121,6 +121,33 @@ export function useBridgeState() {
     setDepth: (i: number, depth: number) => setMods(modsRef.current.map((m, j) => (j === i ? { ...m, depth } : m))),
     removeMod: (i: number) => setMods(modsRef.current.filter((_, j) => j !== i)),
   };
+}
+
+/**
+ * Gli ingressi MIDI del sistema e il modo di sceglierli. `host` vero (VST3/AU) finche' il backend
+ * non risponde e nel plugin: la barra mostra "HOST". Nello Standalone la lista arriva da
+ * getMidiInputs e si aggiorna con l'evento midiInputsChanged.
+ */
+export function useMidiInputs() {
+  const backend = useBackend();
+  const [inputs, setInputs] = useState<MidiInputs>({ host: true, devices: [] });
+  useEffect(() => {
+    let alive = true;
+    backend.midiInputs().then((m) => { if (alive) setInputs(m); }, (e) => console.warn("[bridge] getMidiInputs fallita", e));
+    const off = backend.onMidiInputsChanged((m) => setInputs(m));
+    return () => { alive = false; off(); };
+  }, [backend]);
+  /** "all" abilita ogni ingresso; un id abilita quello e spegne gli altri. */
+  const select = useCallback(async (choice: string) => {
+    const devices = inputs.devices;
+    if (choice === "all") {
+      for (const d of devices) await backend.setMidiInputEnabled(d.id, true);
+      return;
+    }
+    await backend.setMidiInputEnabled(choice, true);
+    for (const d of devices) if (d.id !== choice) await backend.setMidiInputEnabled(d.id, false);
+  }, [backend, inputs.devices]);
+  return { inputs, select };
 }
 
 /**

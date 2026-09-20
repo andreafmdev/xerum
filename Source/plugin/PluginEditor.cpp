@@ -70,7 +70,8 @@ juce::String withGutterParam (juce::String url)
 
 juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& relays,
                                                   bridge::StateChannel& stateChannel,
-                                                  bridge::MidiChannel& midiChannel)
+                                                  bridge::MidiChannel& midiChannel,
+                                                  bridge::MidiDeviceChannel& midiDevices)
 {
     auto options = juce::WebBrowserComponent::Options {}
                        .withNativeIntegrationEnabled()
@@ -95,6 +96,9 @@ juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& rela
     // Il canale MIDI aggiunge noteOn / noteOff / allNotesOff / setWheel.
     options = midiChannel.applyTo (options);
 
+    // Gli ingressi MIDI del sistema: getMidiInputs / setMidiInputEnabled (solo Standalone).
+    options = midiDevices.applyTo (options);
+
     return options;
 }
 } // namespace
@@ -105,13 +109,15 @@ XerumAudioProcessorEditor::XerumAudioProcessorEditor (
       processorRef_ (p),
       stateChannel_ (p.getAPVTS(), p.getStateReplacedBroadcaster()),
       midiChannel_ (p.getKeyboardState(), p),
-      webView_ (makeWebOptions (relays_, stateChannel_, midiChannel_)),
+      midiDevices_ (p),
+      webView_ (makeWebOptions (relays_, stateChannel_, midiChannel_, midiDevices_)),
       meters_ (p.getMeters(), webView_),
       constrainer_ (std::make_unique<ChassisConstrainer>())
 {
     // Gli attachment vanno creati dopo la WebView, mai prima.
     relays_.attach (processorRef_.getAPVTS());
     stateChannel_.setWebView (&webView_);
+    midiDevices_.setWebView (&webView_);
 
     addAndMakeVisible (webView_);
 
@@ -137,6 +143,7 @@ XerumAudioProcessorEditor::~XerumAudioProcessorEditor()
 {
     // stateChannel_ è distrutto dopo webView_ (è dichiarato prima): sgancia il puntatore qui.
     stateChannel_.setWebView (nullptr);
+    midiDevices_.setWebView (nullptr);
 }
 
 void XerumAudioProcessorEditor::paint (juce::Graphics& g)

@@ -5,7 +5,7 @@
 
 import { PARAM_SPECS, type ParamId } from "../synth/params.generated";
 import { fromIndex, toIndex } from "../synth/mapping";
-import { defaultNormalised, type Backend, type BridgeState, type MeterFrame, type ModAssignment, type ParamHandle } from "./backend";
+import { defaultNormalised, type Backend, type BridgeState, type MeterFrame, type ModAssignment, type ParamHandle, type MidiInputs } from "./backend";
 import type { getSliderState, getToggleState, getComboBoxState } from "@juce-framework/webview";
 
 /**
@@ -108,6 +108,7 @@ export async function createJuceBackend(): Promise<Backend> {
   };
   const onStateChanged = fanOut<BridgeState & { origin: string }>("stateChanged");
   const onMeters = fanOut<MeterFrame>("meters");
+  const onMidiInputsChanged = fanOut<MidiInputs>("midiInputsChanged");
 
   return {
     kind: "juce",
@@ -133,5 +134,8 @@ export async function createJuceBackend(): Promise<Backend> {
     async noteOff(note) { await call("noteOff")(note); },
     async allNotesOff() { await call("allNotesOff")(); },
     async setWheel(kind, value) { await call("setWheel")(kind, value); },
+    midiInputs: () => call("getMidiInputs")() as Promise<MidiInputs>,
+    setMidiInputEnabled: (id: string, enabled: boolean) => call("setMidiInputEnabled")(id, enabled).then(() => {}),
+    onMidiInputsChanged,
   };
 }

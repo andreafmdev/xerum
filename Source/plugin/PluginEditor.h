@@ -2,6 +2,7 @@
 
 #include "bridge/MeterChannel.h"
 #include "bridge/MidiChannel.h"
+#include "bridge/MidiDeviceChannel.h"
 #include "bridge/StateChannel.h"
 #include "bridge/WebRelays.h"
 #include "plugin/PluginProcessor.h"
@@ -30,6 +31,9 @@ private:
 
     /** Note e rotelle suonate dentro la WebView: anche lui prima di webView_. */
     bridge::MidiChannel midiChannel_;
+
+    /** Gli ingressi MIDI del sistema (solo Standalone): anche lui prima di webView_. */
+    bridge::MidiDeviceChannel midiDevices_;
 
     juce::WebBrowserComponent webView_;
 

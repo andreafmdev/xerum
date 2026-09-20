@@ -86,7 +86,15 @@ export interface Backend {
   allNotesOff(): Promise<void>;
   /** Posizione di una rotella, 0..1. `pitch` ha il centro a 0.5. */
   setWheel(kind: "pitch" | "mod", value: number): Promise<void>;
+  /** Gli ingressi MIDI del sistema. `host` vero (VST3/AU): il MIDI arriva dall'host, lista vuota. */
+  midiInputs(): Promise<MidiInputs>;
+  /** Abilita o disabilita un ingresso (solo Standalone). */
+  setMidiInputEnabled(id: string, enabled: boolean): Promise<void>;
+  onMidiInputsChanged(cb: (m: MidiInputs) => void): () => void;
 }
+
+export type MidiInputDevice = { id: string; name: string; enabled: boolean };
+export type MidiInputs = { host: boolean; devices: MidiInputDevice[] };
 
 /** Default normalizzato di uno spec (float: già 0..1; bool: 0/1; int: mappato; choice: indice mappato). */
 export function defaultNormalised(spec: ParamSpec): number {

@@ -4,7 +4,7 @@
 
 import { PARAM_IDS, type ParamId } from "../synth/params.generated";
 import { PRESETS } from "../synth/presets.generated";
-import { defaultNormalised, specOf, type Backend, type BridgeState, type MeterFrame, type ModAssignment, type ParamHandle } from "./backend";
+import { defaultNormalised, specOf, type Backend, type BridgeState, type MeterFrame, type MidiInputs, type ModAssignment, type ParamHandle } from "./backend";
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 type Op = { id: ParamId; op: "begin" | "set" | "end"; v?: number };
@@ -35,8 +35,13 @@ export class FakeBackend implements Backend {
   /** Le note che la UI sta tenendo premute. Pubblico: è ciò su cui i test guardano. */
   readonly playing = new Set<number>();
   wheels = { pitch: 0.5, mod: 0 };
+  /** Cosa la UI ha chiesto di abilitare/disabilitare, in ordine. */
+  readonly midiLog: [string, boolean][] = [];
+  private midi: MidiInputs = { host: true, devices: [] };
+  private midiSubs = new Set<(m: MidiInputs) => void>();
 
-  constructor(opts: { demo?: boolean; state?: Partial<BridgeState>; values?: Partial<Record<ParamId, number>> } = {}) {
+  constructor(opts: { demo?: boolean; state?: Partial<BridgeState>; values?: Partial<Record<ParamId, number>>; midiInputs?: MidiInputs } = {}) {
+    if (opts.midiInputs) this.midi = structuredClone(opts.midiInputs);
     this.state = { version: 1, mods: [], arpSteps: [0.8, 0, 0.6, 0.9, 0, 0.7, 0, 0.5, 0.8, 0, 0.6, 0, 0.9, 0.4, 0, 0.7], ...opts.state };
     for (const id of PARAM_IDS) this.handles.set(id, new FakeHandle(id, opts.values?.[id] ?? defaultNormalised(specOf(id)), this.log));
     if (opts.demo && typeof requestAnimationFrame === "function") this.startDemo();
@@ -70,6 +75,11 @@ export class FakeBackend implements Backend {
   async noteOn(note: number, _velocity: number) { this.playing.add(note); }
   async noteOff(note: number) { this.playing.delete(note); }
   async allNotesOff() { this.playing.clear(); }
+  async midiInputs() { return structuredClone(this.midi); }
+  async setMidiInputEnabled(id: string, enabled: boolean) { this.midiLog.push([id, enabled]); }
+  onMidiInputsChanged(cb: (m: MidiInputs) => void) { this.midiSubs.add(cb); return () => { this.midiSubs.delete(cb); }; }
+  /** Per i test: la lista cambia "dal sistema". */
+  emitMidiInputsChanged(m: MidiInputs) { this.midi = structuredClone(m); for (const cb of this.midiSubs) cb(structuredClone(m)); }
   async setWheel(kind: "pitch" | "mod", value: number) { this.wheels = { ...this.wheels, [kind]: value }; }
 
   /**

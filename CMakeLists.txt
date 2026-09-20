@@ -103,6 +103,7 @@ target_sources(Xerum
         Source/bridge/WebRelays.cpp
         Source/bridge/MeterChannel.cpp
         Source/bridge/MidiChannel.cpp
+        Source/bridge/MidiDeviceChannel.cpp
         Source/bridge/WebAssets.cpp
 )
 
@@ -152,6 +153,7 @@ target_sources(XerumTests
         Tests/StateTreeTests.cpp
         Tests/NoteMaskTests.cpp
         Tests/PluginProcessorTests.cpp
+        Tests/MidiDevicesTests.cpp
         # Il processore, senza editor (XERUM_HEADLESS_TESTS): il round-trip dello stato salvato
         # passa da qui, e prima non aveva nessun test.
         Source/plugin/PluginProcessor.cpp
