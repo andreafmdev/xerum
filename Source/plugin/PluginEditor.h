@@ -5,7 +5,6 @@
 #include "bridge/StateChannel.h"
 #include "bridge/WebRelays.h"
 #include "plugin/PluginProcessor.h"
-#include "ui/XerumKeyboard.h"
 
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -20,8 +19,6 @@ public:
     void resized() override;
 
 private:
-    void configureKeyboard();
-
     SerumStyleSynthAudioProcessor& processorRef_;
 
     /** Relay dei parametri verso la WebView: dichiarati prima di webView_ perché le
@@ -40,18 +37,9 @@ private:
         webView_, quindi va dichiarato dopo di lei per essere distrutto prima. */
     bridge::MeterChannel meters_;
 
-    /** Native on-screen keyboard strip under the WebView (Serum/Vital style).
-        Feeds the processor's MidiKeyboardState, which is merged into the host
-        MIDI stream in processBlock(). */
-    ui::XerumKeyboard keyboard_;
-
     /** Lega l'altezza della finestra alla larghezza: senza, la WebView resta più
         alta dello chassis scalato e fra pannello e tastiera si apre una banda vuota. */
     std::unique_ptr<juce::ComponentBoundsConstrainer> constrainer_;
-
-    static constexpr int kLowestNote = 36;   // C2
-    static constexpr int kHighestNote = 96;  // C7
-    static constexpr int kWhiteKeysVisible = 36;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SerumStyleSynthAudioProcessorEditor)
 };

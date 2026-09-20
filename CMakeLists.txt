@@ -54,7 +54,6 @@ target_sources(SerumStyleSynth
         Source/dsp/MipTable.cpp
         Source/dsp/WavetableStore.cpp
         Source/parameters/ParameterLayout.cpp
-        Source/ui/XerumKeyboard.cpp
 )
 
 target_include_directories(SerumStyleSynth

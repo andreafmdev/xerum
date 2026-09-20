@@ -9,13 +9,14 @@ namespace
 {
 constexpr const char* kDevServerUrl = "http://localhost:5173";
 
-// Lo chassis della WebUI è 900×600 e si scala per riempire la WebView (SynthWindow.tsx).
-// Qui la larghezza della finestra è l'unica variabile libera: da lei derivano la scala,
-// l'altezza della WebView e quella della tastiera, così i due pezzi combaciano sempre.
+// Lo chassis della WebUI è 900×708 e si scala per riempire la WebView (SynthWindow.tsx).
+// Qui la larghezza della finestra è l'unica variabile libera: da lei derivano la scala e
+// l'altezza della WebView, che è l'intero editor.
 constexpr int kChassisWidth = 900;
-constexpr int kChassisHeight = 600;
-constexpr int kKeyboardHeight = 78;   // a scala 1
-constexpr float kChassisCorner = 14.0f;
+// 708 = H in SynthWindow.tsx (WebUI/src/synth/ui/SynthWindow.tsx). Terza copia dello stesso
+// numero, dopo H e la regola .sx-chassis in synth.css: la sorgente di verita' resta H, questa
+// costante la segue.
+constexpr int kChassisHeight = 708;
 constexpr float kMinScale = 0.72f;
 constexpr float kMaxScale = 1.5f;     // stesso tetto del fit lato web
 
@@ -24,16 +25,11 @@ float scaleForWidth (int width) noexcept
     return juce::jlimit (kMinScale, kMaxScale, static_cast<float> (width) / static_cast<float> (kChassisWidth));
 }
 
-int webHeightForWidth (int width) noexcept
-{
-    // Arrotondato per eccesso: la WebView non deve mai essere più bassa dello chassis,
-    // altrimenti il fit lato web rimpicciolisce e riaprirebbe il margine laterale.
-    return static_cast<int> (std::ceil (kChassisHeight * scaleForWidth (width)));
-}
-
 int heightForWidth (int width) noexcept
 {
-    return webHeightForWidth (width) + juce::roundToInt (kKeyboardHeight * scaleForWidth (width));
+    // La WebView e' l'intero editor: l'altezza e' quella dello chassis scalato, punto. Prima
+    // qui si sommava la striscia nativa, che adesso vive dentro lo chassis.
+    return static_cast<int> (std::ceil (kChassisHeight * scaleForWidth (width)));
 }
 
 int widthForScale (float scale) noexcept
@@ -110,7 +106,6 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
       midiChannel_ (p.getKeyboardState(), p),
       webView_ (makeWebOptions (relays_, stateChannel_, midiChannel_)),
       meters_ (p.getMeters(), webView_),
-      keyboard_ (p.getKeyboardState()),
       constrainer_ (std::make_unique<ChassisConstrainer>())
 {
     // Gli attachment vanno creati dopo la WebView, mai prima.
@@ -118,8 +113,6 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
     stateChannel_.setWebView (&webView_);
 
     addAndMakeVisible (webView_);
-    addAndMakeVisible (keyboard_);
-    configureKeyboard();
 
     setResizable (true, true);
     setConstrainer (constrainer_.get());
@@ -129,7 +122,8 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
 
    #if JUCE_DEBUG
     // Dev aid: XERUM_SNAPSHOT=/path/out.png writes a snapshot of the JUCE-painted editor
-    // (keyboard strip; the WebView is a native view and renders blank) ~2 s after opening.
+    // ~2 s after opening. The WebView is a native view and renders blank, and now it's the
+    // whole editor, so the snapshot comes out blank in full.
     if (const auto snapshotPath = juce::SystemStats::getEnvironmentVariable ("XERUM_SNAPSHOT", {});
         snapshotPath.isNotEmpty())
     {
@@ -171,27 +165,7 @@ void SerumStyleSynthAudioProcessorEditor::paint (juce::Graphics& g)
     g.fillAll (juce::Colour (0xff0e1016)); // --background (theme.css)
 }
 
-void SerumStyleSynthAudioProcessorEditor::configureKeyboard()
-{
-    // La pelle (colori, gradienti, angoli) sta in ui::XerumKeyboard: qui solo il comportamento.
-    keyboard_.setAvailableRange (kLowestNote, kHighestNote);
-    keyboard_.setLowestVisibleKey (kLowestNote);
-    keyboard_.setScrollButtonsVisible (false);
-    keyboard_.setOctaveForMiddleC (4);
-    keyboard_.setKeyPressBaseOctave (5);          // QWERTY row (A W S E D ...) plays from middle C
-    keyboard_.setVelocity (0.8f, true);           // click height sets velocity
-    keyboard_.setBlackNoteLengthProportion (0.62f);
-}
-
 void SerumStyleSynthAudioProcessorEditor::resized()
 {
-    const auto bounds = getLocalBounds();
-    const auto scale = scaleForWidth (bounds.getWidth());
-    const auto webHeight = webHeightForWidth (bounds.getWidth());
-
-    webView_.setBounds (bounds.withHeight (webHeight));
-
-    keyboard_.setKeyWidth (static_cast<float> (bounds.getWidth()) / static_cast<float> (kWhiteKeysVisible));
-    keyboard_.setBottomCornerRadius (kChassisCorner * scale);
-    keyboard_.setBounds (bounds.withTop (webHeight));
+    webView_.setBounds (getLocalBounds());
 }
