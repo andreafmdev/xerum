@@ -13,7 +13,9 @@ import { ArpTab, EnvTab, FxTab, LfoTab, ModTab, TabArea } from "./Tabs";
 import { WaveDisplay } from "./WaveDisplay";
 import "./synth.css";
 
-export type SynthVariant = "deep" | "soft" | "glow";
+/** Materiali dello chassis. `glass` (default) e `metal` sono i due del design "Versione glassy":
+    vetro fumé sopra un'aurora in movimento, e metallo spazzolato con anelli OLED. */
+export type SynthVariant = "deep" | "soft" | "glow" | "glass" | "metal";
 
 export type SynthWindowProps = {
   /** Materiale del pannello. */
@@ -61,7 +63,7 @@ export const H = 680;
 // tocca il backing store, quindi lo schermo dell'onda restava a risoluzione 1x anche quando
 // tutto il resto era ingrandito. Lo ricava da getBoundingClientRect (vedi WaveDisplay.tsx).
 /** Finestra del plugin: 900×680 scalata per stare nel contenitore. Va montata dentro <BridgeProvider>. */
-export function SynthWindow({ variant = "deep", initialTab = "env", scale: fixedScale, gutter = 16 }: SynthWindowProps) {
+export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixedScale, gutter = 16 }: SynthWindowProps) {
   const s = useSynth(initialTab);
   // Unica istanza dello stato condiviso: i tab lo leggono dal contesto, così non
   // esistono copie che si aggiornano a turno con gli echo dell'host.

@@ -21,6 +21,12 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@branding/*": [
+        "../Resources/branding/*"
+      ]
+    },
     "types": [
       "vitest/globals"
     ]

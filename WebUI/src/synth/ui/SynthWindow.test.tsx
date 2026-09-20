@@ -65,6 +65,19 @@ describe("SynthWindow on the bridge", () => {
     expect(screen.getByRole("slider", { name: "PB" })).toBeInTheDocument();
   });
 
+  it("wears the glass material by default, the one the design opens on", async () => {
+    mount();
+    expect(screen.getByTestId("chassis")).toHaveAttribute("data-variant", "glass");
+  });
+
+  it("the header carries the brand mark and the wordmark, not a placeholder", async () => {
+    mount();
+    // Il simbolo viene da Resources/branding (xerum-mark-simple.svg): Vite lo inlina come data
+    // URI perche' e' piccolo, quindi si riconosce dal suo <title>, non dal nome del file.
+    expect(screen.getByRole("img", { name: "Xerum" }).getAttribute("src")).toMatch(/xerum-mark-simple|Xerum(%20| )simplified(%20| )symbol/);
+    expect(screen.getByRole("img", { name: "XERUM" })).toBeInTheDocument();
+  });
+
   it("by default the chassis keeps its margin and stays detached", async () => {
     mount();
     expect(screen.getByTestId("chassis")).not.toHaveAttribute("data-attached");
@@ -196,6 +209,7 @@ describe("SynthWindow on the bridge", () => {
     const overlay = screen.getByRole("dialog", { name: "Presets" });
     await userEvent.type(within(overlay).getByRole("searchbox"), "acid");
     await userEvent.click(within(overlay).getByRole("button", { name: /Acid Line/ }));
+    await userEvent.click(within(overlay).getByRole("button", { name: "Carica preset" }));
     expect(screen.getByRole("button", { name: /Acid Line/ })).toBeInTheDocument();
   });
 
@@ -205,6 +219,7 @@ describe("SynthWindow on the bridge", () => {
     const overlay = screen.getByRole("dialog", { name: "Presets" });
     await userEvent.type(within(overlay).getByRole("searchbox"), "acid");
     await userEvent.click(within(overlay).getByRole("button", { name: /Acid Line/ }));
+    await userEvent.click(within(overlay).getByRole("button", { name: "Carica preset" }));
     // Ancorato a fine stringa: "Acid Line *" (sporco) non termina con "Acid Line"
     // e farebbe fallire questa asserzione, a differenza di un /Acid Line/ non ancorato.
     expect(screen.getByRole("button", { name: /Acid Line$/ })).toBeInTheDocument();

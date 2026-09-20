@@ -36,6 +36,10 @@ juce_add_plugin(SerumStyleSynth
     PLUGIN_CODE Ss01
     FORMATS AU VST3 Standalone
     PRODUCT_NAME "SerumStyleSynth"
+    # Icone di app e bundle dal marchio in Resources/branding (rigenerabili con build.mjs).
+    # JUCE compone da queste due l'.icns della Standalone e l'icona del bundle VST3/AU.
+    ICON_BIG "Resources/branding/icons/xerum.iconset/icon_512x512@2x.png"
+    ICON_SMALL "Resources/branding/icons/xerum-128.png"
 )
 
 target_sources(SerumStyleSynth

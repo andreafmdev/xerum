@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
 import { toneStyle } from "@xerum/ui";
+import { noteMaskOf } from "../../juce/backend";
 import { sampleWave, spectrum } from "../curves";
 import { formatValue } from "../mapping";
 import { modsFor } from "../mod";
+import { noteHz, topNote } from "../notes";
 import { PARAM_SPECS } from "../params.generated";
 import { useMeterFrame } from "./MetersContext";
 import { useSynthCtx } from "./SynthContext";
@@ -24,8 +26,17 @@ export function WaveDisplay({ position, warp, level, name, scale }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   // Scostamento istantaneo della posizione: solo le sorgenti LFO assegnate a wtpos.
   const { mods } = useSynthCtx();
-  const { lfo: lfoLevel } = useMeterFrame();
-  const lfo = modsFor(mods, "wtpos").reduce((a, m) => a + (m.src === "lfo" ? m.depth * lfoLevel : 0), 0);
+  const frame = useMeterFrame();
+  const lfo = modsFor(mods, "wtpos").reduce((a, m) => a + (m.src === "lfo" ? m.depth * frame.lfo : 0), 0);
+  // Una nota tenuta fa scorrere l'onda e le fa fare piu' cicli salendo di altezza; il "gate"
+  // ingrossa e illumina i tratti mentre suona e si spegne dolcemente al rilascio. La nota si
+  // legge dal mask del motore (la piu' acuta), non dalla tastiera a schermo: cosi' vale anche
+  // per il MIDI dell'host.
+  const top = topNote(noteMaskOf(frame));
+  const hz = top === null ? 0 : noteHz(top);
+  const hzRef = useRef(hz);
+  hzRef.current = hz;
+  const gate = useRef(0);
 
   const draw = useCallback(() => {
     const cv = ref.current;
@@ -72,6 +83,13 @@ export function WaveDisplay({ position, warp, level, name, scale }: Props) {
     mags.forEach((mag, h) => ctx.fillRect(W * 0.66 + h * bw, H - 6 - mag * (H - 30), bw - 1.5, mag * (H - 30)));
     ctx.globalAlpha = 1;
 
+    // Il gate segue la nota con un attacco rapido e un rilascio in nove frame circa.
+    const g = gate.current;
+    gate.current = hzRef.current ? Math.min(1, g + 0.25) : g * 0.9;
+    const t = performance.now() / 1000;
+    const cyc = hzRef.current ? 1 + Math.min(5, Math.log2(hzRef.current / 55)) : 1;
+    const scroll = hzRef.current ? (t * hzRef.current * 0.02) % 1 : 0;
+
     const x0 = 26;
     const w0 = W * 0.55;
     const amp = ((H - 44) / 2) * level;
@@ -85,14 +103,14 @@ export function WaveDisplay({ position, warp, level, name, scale }: Props) {
       ctx.beginPath();
       for (let i = 0; i <= 160; i++) {
         const x = dx + (i / 160) * w;
-        const y = dy - sampleWave(pos, i / 160, warp) * amp * (0.55 + 0.45 * near);
+        const y = dy - sampleWave(pos, ((i / 160) * cyc + scroll) % 1, warp) * amp * (0.55 + 0.45 * near) * (1 + gate.current * 0.25);
         if (i) ctx.lineTo(x, y);
         else ctx.moveTo(x, y);
       }
-      ctx.lineWidth = 1 + near * 1.2;
+      ctx.lineWidth = 1 + near * 1.2 + gate.current * 0.6;
       ctx.strokeStyle = col;
       ctx.globalAlpha = 0.14 + near * 0.86;
-      ctx.shadowBlur = near * 8;
+      ctx.shadowBlur = near * (8 + gate.current * 10);
       ctx.shadowColor = col;
       ctx.stroke();
       ctx.shadowBlur = 0;
@@ -114,9 +132,23 @@ export function WaveDisplay({ position, warp, level, name, scale }: Props) {
     return () => window.removeEventListener("resize", draw);
   }, [draw]);
 
+  // Finche' una nota suona (o il gate sta ancora scendendo) lo schermo si ridisegna a ogni
+  // frame: e' l'unico momento in cui il tempo entra nel disegno. Con lo strumento fermo non
+  // gira nessun requestAnimationFrame.
+  useEffect(() => {
+    if (!hz && gate.current < 0.02) return;
+    let id = 0;
+    const loop = () => {
+      draw();
+      if (hzRef.current || gate.current >= 0.02) id = requestAnimationFrame(loop);
+    };
+    id = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(id);
+  }, [hz, draw]);
+
   return (
     <div
-      className="relative h-32.5 shrink-0 overflow-hidden rounded-plate bg-well shadow-well after:pointer-events-none after:absolute after:inset-0 after:bg-linear-to-br after:from-foreground/5 after:to-transparent"
+      className="sx-display relative h-32.5 shrink-0 overflow-hidden rounded-plate bg-well shadow-well after:pointer-events-none after:absolute after:inset-0 after:bg-linear-to-br after:from-foreground/5 after:to-transparent"
       style={toneStyle("osc")}
     >
       <canvas ref={ref} role="img" aria-label="Wavetable display" className="absolute inset-0 size-full" />

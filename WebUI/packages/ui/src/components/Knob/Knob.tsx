@@ -44,6 +44,14 @@ export type KnobMod = {
 
 export const MOD_DRAG_TYPE = "text/x-mod";
 
+/**
+ * Le parti del disegno portano un `data-part` (track, value, cap-edge, cap, rim, grip, pointer,
+ * pointer-groove, pointer-tip, label, readout): e' il contratto con cui una app cambia materiale
+ * al knob via CSS (vetro, metallo spazzolato) senza aggiungere prop. I token --color-cap-* restano
+ * la via per ricolorare il cappuccio; `data-part` serve per cio' che i token non coprono, come un
+ * anello luminoso del colore di sezione o un indice bianco con alone.
+ */
+
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /** Estremi 0..1 dell'anello di un mod attorno a `value`. */
@@ -193,6 +201,7 @@ export function Knob({
           ))}
 
           <path
+            data-part="track"
             d={arcPath(C, C, R, KNOB_START, KNOB_START + KNOB_SWEEP)}
             className="fill-none stroke-surface-3"
             strokeWidth={2}
@@ -216,6 +225,7 @@ export function Knob({
           })}
           <path
             data-testid="knob-value-arc"
+            data-part="value"
             d={arcPath(C, C, R, start, end)}
             className="fill-none stroke-(--tone) transition-[d] ease-snap [filter:var(--glow,none)]"
             strokeWidth={2.5}
@@ -235,9 +245,10 @@ export function Knob({
           })()}
 
           {/* Ombra di contatto + cappuccio + rialzo del bordo. */}
-          <circle cx={C} cy={C} r={CAP_R + 0.6} className="fill-none stroke-edge-dark" strokeWidth={1} />
-          <circle cx={C} cy={C} r={CAP_R} fill={`url(#${capFill})`} filter={`url(#${capShadow})`} />
+          <circle data-part="cap-edge" cx={C} cy={C} r={CAP_R + 0.6} className="fill-none stroke-edge-dark" strokeWidth={1} />
+          <circle data-part="cap" cx={C} cy={C} r={CAP_R} fill={`url(#${capFill})`} filter={`url(#${capShadow})`} />
           <circle
+            data-part="rim"
             cx={C}
             cy={C}
             r={CAP_R - 0.35}
@@ -247,6 +258,7 @@ export function Knob({
           {GRIPS.map((g, i) => (
             <line
               key={i}
+              data-part="grip"
               x1={g.x1}
               y1={g.y1}
               x2={g.x2}
@@ -257,8 +269,9 @@ export function Knob({
           ))}
 
           {/* Indicatore: solco scuro con il fondo lucido sopra. */}
-          <g transform={`rotate(${pointerDeg - 270} ${C} ${C})`}>
+          <g data-part="pointer" transform={`rotate(${pointerDeg - 270} ${C} ${C})`}>
             <line
+              data-part="pointer-groove"
               x1={C}
               y1={C - 4.2}
               x2={C}
@@ -268,6 +281,7 @@ export function Knob({
               strokeLinecap="round"
             />
             <line
+              data-part="pointer-tip"
               x1={C}
               y1={C - 4.8}
               x2={C}
@@ -281,10 +295,11 @@ export function Knob({
       </div>
 
       <div className="flex flex-col items-center">
-        <span className={cn("text-(length:--text-label)/4", disabled ? "text-text-dim" : "text-muted-foreground")}>{label}</span>
+        <span data-part="label" className={cn("text-(length:--text-label)/4", disabled ? "text-text-dim" : "text-muted-foreground")}>{label}</span>
         {!hideValue && (
           <span
             data-testid="knob-readout"
+            data-part="readout"
             data-dragging={dragging}
             className={cn(
               "font-mono text-(length:--text-label)/4 tabular-nums",

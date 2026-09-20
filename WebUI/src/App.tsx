@@ -1,10 +1,10 @@
 import { SynthWindow, type SynthVariant } from "./synth/ui/SynthWindow";
 import type { TabId } from "./synth/useSynth";
 
-const VARIANTS: SynthVariant[] = ["deep", "soft", "glow"];
+const VARIANTS: SynthVariant[] = ["glass", "metal", "deep", "soft", "glow"];
 const TABS: TabId[] = ["env", "lfo", "mod", "fx", "arp"];
 
-/** `?variant=deep|soft|glow&tab=env|lfo|mod|fx|arp` per provare le varianti dal browser.
+/** `?variant=glass|metal|deep|soft|glow&tab=env|lfo|mod|fx|arp` per provare le varianti dal browser.
     `?gutter=0` (lo passa l'host JUCE) toglie il margine attorno allo chassis. */
 function fromQuery<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   const v = new URLSearchParams(window.location.search).get(key);
@@ -21,7 +21,7 @@ function gutterFromQuery(fallback: number) {
 export default function App() {
   return (
     <SynthWindow
-      variant={fromQuery("variant", VARIANTS, "deep")}
+      variant={fromQuery("variant", VARIANTS, "glass")}
       initialTab={fromQuery("tab", TABS, "env")}
       gutter={gutterFromQuery(16)}
     />

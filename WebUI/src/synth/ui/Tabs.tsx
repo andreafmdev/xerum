@@ -23,8 +23,8 @@ const TAB_ITEMS = [
 export function TabArea({ tab, setTab, children }: { tab: TabId; setTab: (t: TabId) => void; children: ReactNode }) {
   const tone = TAB_ITEMS.find((t) => t.value === tab)!.tone;
   return (
-    <section className="sx-plate flex h-31 shrink-0 flex-col overflow-hidden rounded-plate shadow-panel" style={toneStyle(tone)}>
-      <div className="flex h-7 shrink-0 items-stretch bg-surface-0 shadow-[inset_0_-1px_0_var(--color-edge-dark)]">
+    <section className="sx-plate sx-tabs flex h-31 shrink-0 flex-col overflow-hidden rounded-plate shadow-panel" style={toneStyle(tone)}>
+      <div className="sx-tabbar flex h-7 shrink-0 items-stretch bg-surface-0 shadow-[inset_0_-1px_0_var(--color-edge-dark)]">
         <Tabs variant="bar" value={tab} onChange={(v) => setTab(v as TabId)} items={[...TAB_ITEMS]} className="flex-1" />
         <div className="flex items-center gap-1.5 px-2.5 text-[9px] tracking-[0.14em] text-text-dim uppercase">
           Mod sources
@@ -206,7 +206,7 @@ export function FxTab() {
   const fx2On = useBoolParam("fx2On");
   const dirty = useDirty();
   const slot = (on: boolean, setOn: (v: boolean) => void, name: string, knobs: ReactNode) => (
-    <div className={`flex flex-1 items-center gap-2.5 rounded-control bg-surface-1 px-2.5 py-1 shadow-[inset_0_0_0_1px_var(--color-edge-dark),inset_0_1px_0_var(--color-edge-light)] ${on ? "" : "[&_.fx-nm]:opacity-45 [&_[data-slot=knob]]:opacity-45"}`}>
+    <div className={`sx-fxslot flex flex-1 items-center gap-2.5 rounded-control bg-surface-1 px-2.5 py-1 shadow-[inset_0_0_0_1px_var(--color-edge-dark),inset_0_1px_0_var(--color-edge-light)] ${on ? "" : "[&_.fx-nm]:opacity-45 [&_[data-slot=knob]]:opacity-45"}`}>
       <Toggle checked={on} onChange={dirty(setOn)} label={`${name} on`} className="[&_label]:sr-only" />
       <span className="fx-nm w-18 text-2xs font-semibold tracking-widest text-(--tone) uppercase">{name}</span>
       <div className={`${group} flex-1 justify-around gap-3`}>{knobs}</div>
@@ -258,7 +258,7 @@ export function ArpTab() {
         <Toggle checked={arpOn.checked} onChange={dirty(arpOn.set)} label="Arp on" />
         <Segmented label="Arp mode" value={arpMode.value} onChange={dirty(arpMode.set)} options={arpMode.options} />
       </div>
-      <div className="flex h-16 items-end gap-[3px] rounded-control bg-well p-1.5 shadow-well">
+      <div className="sx-arp flex h-16 items-end gap-[3px] rounded-control bg-well p-1.5 shadow-well">
         {arpSteps.map((v, i) => (
           <button
             key={i}

@@ -106,6 +106,9 @@ export function Keybed({
   }
 
   const unit = 100 / whiteNotes.length;
+  // `data-key` e' il gancio con cui una app ridisegna il materiale dei tasti via CSS (tasti di
+  // vetro sopra un'aurora, ad esempio) senza toccare la primitiva: i `data-testid` restano per i
+  // test e non vanno usati come selettori di stile.
 
   return (
     <div
@@ -129,6 +132,7 @@ export function Keybed({
           key={note}
           ref={registerKey}
           data-testid="key-white"
+          data-key="white"
           data-note={note}
           data-active="false"
           className={cn(
@@ -146,6 +150,7 @@ export function Keybed({
           key={note}
           ref={registerKey}
           data-testid="key-black"
+          data-key="black"
           data-note={note}
           data-active="false"
           className={cn(

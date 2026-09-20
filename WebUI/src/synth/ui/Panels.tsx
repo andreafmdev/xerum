@@ -38,7 +38,7 @@ export function OscPanel() {
     >
       <div className={body}>
         <div className="flex h-full w-32 shrink-0 flex-col justify-between gap-1.5 self-stretch">
-          <div className="flex h-6.5 items-center gap-1 rounded-control bg-well px-1.5 shadow-well">
+          <div className="sx-well flex h-6.5 items-center gap-1 rounded-control bg-well px-1.5 shadow-well">
             <button type="button" aria-label="Previous wavetable" onClick={() => pickWt(-1)} className="text-text-dim hover:text-foreground">
               <ChevronLeft className="size-3.5" />
             </button>
@@ -75,7 +75,7 @@ function FilterCurve({ cutoff, res, type }: { cutoff: number; res: number; type:
   const cutLive = liveValue(cutoff, modsFor(mods, "cutoff"), sources);
   const d = useMemo(() => filterPath(cutLive, res, type, CURVE_W, CURVE_H), [cutLive, res, type]);
   return (
-    <div className="mx-2.5 overflow-hidden rounded-control bg-well shadow-well" style={{ height: CURVE_H }}>
+    <div className="sx-well mx-2.5 overflow-hidden rounded-control bg-well shadow-well" style={{ height: CURVE_H }}>
       <svg width="100%" height={CURVE_H} viewBox={`0 0 ${CURVE_W} ${CURVE_H}`} preserveAspectRatio="none" className="block">
         {[0.25, 0.5, 0.75].map((x) => (
           <line key={x} x1={x * CURVE_W} x2={x * CURVE_W} y1="0" y2={CURVE_H} className="stroke-line-strong" opacity={0.3} />
