@@ -49,6 +49,23 @@ const LINE_RULES = [
     re: /\btransition-\[[^\]]*\b(?:height|width|top|left|grid-template-rows|backdrop-filter)\b[^\]]*\]/,
     pre: beforeRealComment,
   },
+  // transition-all: la Tailwind utility che anima "tutto" — il difetto con cui si apre lo spec
+  // (button.tsx lo usava; round finale, finding 4: rimosso anche dalle ultime tre primitive
+  // vendorizzate che lo avevano ancora, tabs.tsx/switch.tsx/badge.tsx). Vale sia come classe
+  // Tailwind (`transition-all`) sia come dichiarazione CSS vera (`transition: all` /
+  // `transition-property: all`): stesso doppio mondo di forbidden-transition-property qui sopra.
+  //
+  // `pre` compone due filtri, non uno: beforeRealComment (un commento che *nomina* la classe per
+  // spiegare che non la usa più non è una violazione — lo stesso caso già risolto per
+  // forbidden-transition-property) e beforeNegativeAssertion, che toglie un'asserzione negativa
+  // di test (`expect(el).not.toHaveClass("transition-all")`, il caso reale in Button.test.tsx:
+  // nomina la stringa esatta per dimostrare che NON compare più; senza questo filtro sarebbe una
+  // violazione fantasma identica nello spirito a quella del commento).
+  {
+    rule: "transition-all",
+    re: /\btransition-all\b|\btransition(-property)?\s*:\s*all\b/,
+    pre: (line) => beforeNegativeAssertion(beforeRealComment(line)),
+  },
 ];
 
 // Righe tra un marker `<nome>:start` e il suo `<nome>:end` sono escluse da ogni regola. Ogni
@@ -109,6 +126,14 @@ function realCommentIndex(line) {
 function beforeRealComment(line) {
   const i = realCommentIndex(line);
   return i === -1 ? line : line.slice(0, i);
+}
+
+// Solo per transition-all (vedi sopra): un'asserzione negativa di test nomina la stringa esatta
+// del token per dimostrare che NON compare più su un elemento, non per applicarla. Togliere il
+// contenuto della chiamata prima di cercare il token evita di leggere quella dimostrazione come
+// la violazione stessa.
+function beforeNegativeAssertion(line) {
+  return line.replace(/\.not\.(?:toHaveClass|toContain)\([^)]*\)/g, "");
 }
 
 // ---- animated-blur: backdrop-filter o filter:blur() animati, in CSS vero. --------------------

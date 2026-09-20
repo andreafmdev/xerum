@@ -91,6 +91,42 @@ test("a URL scheme's // does not hide a hardcoded-duration violation later on th
   assert.deepEqual(rules('<a href="http://x.com" className="duration-[500ms]" />'), ["hardcoded-duration"]);
 });
 
+// --- Finding 4: transition-all, il difetto con cui si apre la spec ---------------------------
+
+test("flags the transition-all Tailwind utility", () => {
+  assert.deepEqual(rules('<div className="transition-all" />'), ["transition-all"]);
+});
+
+test("does not flag an unrelated identifier that merely contains the substring", () => {
+  assert.deepEqual(rules('<div className="transition-allowance" />'), []);
+});
+
+test("flags a raw CSS transition: all, alongside its hardcoded duration", () => {
+  assert.deepEqual(rules(".sx { transition: all 150ms; }", "a.css").sort(), ["hardcoded-css-duration", "transition-all"]);
+});
+
+test("flags a raw CSS transition-property: all", () => {
+  assert.deepEqual(rules(".sx { transition-property: all; transition-duration: var(--dur-state); }", "a.css"), ["transition-all"]);
+});
+
+test("does not flag a comment that merely names transition-all to explain it is NOT used anymore", () => {
+  const line = "  // transition-all (il difetto con cui si apre lo spec) rimpiazzato da una lista esplicita";
+  assert.deepEqual(rules(line), []);
+});
+
+test("does not flag a test assertion checking the class is absent (toHaveClass)", () => {
+  assert.deepEqual(rules('expect(el).not.toHaveClass("transition-all");'), []);
+});
+
+test("does not flag a test assertion checking the class is absent (toContain)", () => {
+  assert.deepEqual(rules('expect(cls).not.toContain("transition-all");'), []);
+});
+
+test("still flags a real application of the class even with an unrelated negative assertion earlier on the line", () => {
+  const line = 'expect(x).not.toHaveClass("y"); const cls = "transition-all";';
+  assert.deepEqual(rules(line), ["transition-all"]);
+});
+
 test("reports the offending line number", () => {
   const [v] = findViolations([{ path: "x.tsx", text: '\n\n<m.div layout />' }]);
   assert.equal(v.line, 3);
