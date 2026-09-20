@@ -25,9 +25,15 @@ La WebView gira nel processo del DAW e condivide CPU e GPU con l'audio. Vale una
 | Animabile | Vietato |
 |---|---|
 | `transform` (translate, scale, rotate) | `backdrop-filter`, e il raggio di `blur()` |
-| `opacity` | `box-shadow` con `spread` variabile |
+| `opacity` | il raggio di `blur()` dentro un `box-shadow` |
 | `filter: brightness()`, `saturate()` | `width`, `height`, `top`, `left`, `grid-template-rows` |
 | custom properties consumate da `color-mix` | qualunque proprietà che forzi layout |
+
+`box-shadow` merita una riga a parte, perché la prima stesura di questo documento lo vietava nella tabella e poi lo prescriveva tre sezioni più sotto, dove la lista del bottone lo contiene per nome. Le implementazioni hanno seguito la sezione, non la tabella, e avevano ragione.
+
+La regola vera: si può animare un `box-shadow` su un **controllo** — un anello che si accende, un cappuccio che affonda — dove la superficie è piccola e il raggio di sfocatura resta fisso, perché il costo è il repaint di pochi pixel. Resta vietato dove la sfocatura stessa cambia, e su superfici grandi come il chassis o un pannello, dove lo stesso repaint costa quanto la finestra intera.
+
+Questa distinzione **nessun linter la può esprimere**, perché dipende dalla dimensione della superficie e non dalla sintassi: è una regola per chi fa review, scritta qui perché sia una decisione invece di una dimenticanza.
 
 Il blur dei layer esiste dal primo frame e resta costante: sale solo l'opacity del contenuto sopra. È la regola più controintuitiva del documento — il blur che cresce sarebbe l'effetto più bello e il più caro — e per questo è la prima che `check:motion` verifica.
 
