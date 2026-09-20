@@ -72,7 +72,8 @@ juce::String withGutterParam (juce::String url)
 }
 
 juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& relays,
-                                                  bridge::StateChannel& stateChannel)
+                                                  bridge::StateChannel& stateChannel,
+                                                  bridge::MidiChannel& midiChannel)
 {
     auto options = juce::WebBrowserComponent::Options {}
                        .withNativeIntegrationEnabled()
@@ -94,6 +95,9 @@ juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& rela
     // Il canale di stato aggiunge getState / setMods / setArpSteps.
     options = stateChannel.applyTo (options);
 
+    // Il canale MIDI aggiunge noteOn / noteOff / allNotesOff / setWheel.
+    options = midiChannel.applyTo (options);
+
     return options;
 }
 } // namespace
@@ -103,7 +107,8 @@ SerumStyleSynthAudioProcessorEditor::SerumStyleSynthAudioProcessorEditor (
     : AudioProcessorEditor (&p),
       processorRef_ (p),
       stateChannel_ (p.getAPVTS(), p.getStateReplacedBroadcaster()),
-      webView_ (makeWebOptions (relays_, stateChannel_)),
+      midiChannel_ (p.getKeyboardState(), p),
+      webView_ (makeWebOptions (relays_, stateChannel_, midiChannel_)),
       meters_ (p.getMeters(), webView_),
       keyboard_ (p.getKeyboardState()),
       constrainer_ (std::make_unique<ChassisConstrainer>())

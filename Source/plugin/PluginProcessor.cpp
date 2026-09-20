@@ -206,6 +206,13 @@ void SerumStyleSynthAudioProcessor::prepareToPlay (double sampleRate, int sample
     spec.maximumBlockSize = samplesPerBlock;
     spec.numChannels = getTotalNumOutputChannels();
     engine_->prepare (spec);
+
+    // Ogni riavvio dello stream riparte "vergine": un valore gia' visto in una sessione
+    // precedente non deve essere considerato "gia' mandato" in questa, altrimenti la prima
+    // posizione della rotella dopo un riavvio (identica all'ultima prima dello stop) non
+    // verrebbe mai iniettata nel buffer.
+    lastSentPitchBend_ = -1;
+    lastSentModWheel_ = -1;
 }
 
 void SerumStyleSynthAudioProcessor::releaseResources()
@@ -267,6 +274,22 @@ void SerumStyleSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         // v e' gia' il guadagno lineare 0..1 dell'APVTS: nessun boost fisso qui, l'headroom
         // vive per intero in SynthVoice::kVoiceHeadroomGain (vedi il suo commento).
         engine_->setMasterGainLinear (v <= 0.0f ? 0.0f : v);
+    }
+
+    // Le rotelle della UI diventano messaggi veri, e solo quando cambiano: mandarli a ogni blocco
+    // riscriverebbe di continuo sopra un controller hardware che sta mandando gli stessi CC.
+    if (const auto bend = uiPitchBend_.load (std::memory_order_relaxed);
+        bend >= 0 && bend != lastSentPitchBend_)
+    {
+        midi.addEvent (juce::MidiMessage::pitchWheel (1, bend), 0);
+        lastSentPitchBend_ = bend;
+    }
+
+    if (const auto mw = uiModWheel_.load (std::memory_order_relaxed);
+        mw >= 0 && mw != lastSentModWheel_)
+    {
+        midi.addEvent (juce::MidiMessage::controllerEvent (1, 1, mw), 0);
+        lastSentModWheel_ = mw;
     }
 
     // Merge notes played on the editor's on-screen keyboard into the host MIDI stream.

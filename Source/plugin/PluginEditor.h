@@ -1,6 +1,7 @@
 #pragma once
 
 #include "bridge/MeterChannel.h"
+#include "bridge/MidiChannel.h"
 #include "bridge/StateChannel.h"
 #include "bridge/WebRelays.h"
 #include "plugin/PluginProcessor.h"
@@ -29,6 +30,9 @@ private:
 
     /** Canale per lo stato non parametrico (mod matrix, arp): anche lui prima di webView_. */
     bridge::StateChannel stateChannel_;
+
+    /** Note e rotelle suonate dentro la WebView: anche lui prima di webView_. */
+    bridge::MidiChannel midiChannel_;
 
     juce::WebBrowserComponent webView_;
 

@@ -37,6 +37,7 @@ target_sources(SerumStyleSynth
         Source/bridge/StateChannel.cpp
         Source/bridge/WebRelays.cpp
         Source/bridge/MeterChannel.cpp
+        Source/bridge/MidiChannel.cpp
         Source/bridge/WebAssets.cpp
         Source/engine/SynthEngine.cpp
         Source/engine/VoiceManager.cpp

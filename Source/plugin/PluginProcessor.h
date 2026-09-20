@@ -80,6 +80,20 @@ public:
     /** Notifica che replaceState() ha sostituito l'albero: chi ascolta il ValueTree deve riagganciarsi. */
     juce::ChangeBroadcaster& getStateReplacedBroadcaster() noexcept { return stateReplaced_; }
 
+    /** Posizione della rotella di pitch dalla UI, 0..1 (0.5 = centro). Message thread. */
+    void setUiPitchBend (float value01) noexcept
+    {
+        uiPitchBend_.store (juce::jlimit (0, 16383, juce::roundToInt (value01 * 16383.0f)),
+                            std::memory_order_relaxed);
+    }
+
+    /** Posizione del mod wheel dalla UI, 0..1. Message thread. */
+    void setUiModWheel (float value01) noexcept
+    {
+        uiModWheel_.store (juce::jlimit (0, 127, juce::roundToInt (value01 * 127.0f)),
+                           std::memory_order_relaxed);
+    }
+
 private:
     /** Indice `wtIndex` corrente, come intero valido per WavetableStore. */
     int wavetableIndexFromParam() const noexcept;
@@ -125,6 +139,21 @@ private:
     juce::ValueTree listenedState_;
 
     juce::MidiKeyboardState keyboardState_;
+
+    /**
+     * Le due rotelle disegnate nella UI, in unita' MIDI grezze: 0..16383 per il pitch (8192 e' il
+     * centro), 0..127 per il mod wheel. `-1` significa "mai toccata": finche' resta li' il
+     * processor non inietta niente, cosi' una UI mai aperta non sovrascrive un controller vero.
+     *
+     * Non passano da MidiKeyboardState — quello trasporta solo note — ma diventano **veri
+     * messaggi MIDI** anteposti al buffer in processBlock: da li' in giu' arp, motore e mod matrix
+     * non sanno ne' devono sapere che quella rotella e' disegnata.
+     */
+    std::atomic<int> uiPitchBend_ { -1 };
+    std::atomic<int> uiModWheel_ { -1 };
+    int lastSentPitchBend_ { -1 };   // solo thread audio
+    int lastSentModWheel_ { -1 };    // solo thread audio
+
     std::unique_ptr<engine::SynthEngine> engine_;
     engine::MeterFrame meters_;
     juce::ChangeBroadcaster stateReplaced_;
