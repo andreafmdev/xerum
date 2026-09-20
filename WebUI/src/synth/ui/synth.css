@@ -110,6 +110,17 @@
   --glow: drop-shadow(0 0 3px color-mix(in oklch, var(--tone) 80%, transparent));
 }
 
+/* Il motion segue il materiale. `soft`, `deep` e `glow` restano sui default della libreria. */
+.sx-chassis[data-variant="glass"] {
+  --ease-snap: var(--ease-glass);
+  --dur-state: 140ms;
+}
+
+.sx-chassis[data-variant="metal"] {
+  --dur-layer: 160ms;
+  --dur-state: 100ms;
+}
+
 /* Knob come nel design: cappuccio grande (lg 64, md 42, sm 30 px di disco dentro una scatola
    di +16), niente scala di tacche. La scatola si allarga con i token di spacing; il disco con
    le proprieta' geometriche SVG (`r` e' una proprieta' CSS in SVG 2). */

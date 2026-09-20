@@ -1,6 +1,7 @@
 import "./index.css";
 
 export { cn } from "@/lib/utils";
+export { DUR, EASE, EXIT_RATIO, bezier, T, type Bezier, type Transition } from "@/motion";
 export { TONES, toneStyle, type Tone } from "@/lib/tone";
 export { useDragValue, type UseDragValueOptions, type UseDragValueResult } from "@/hooks/useDragValue";
 
