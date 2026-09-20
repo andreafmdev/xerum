@@ -121,8 +121,8 @@ export function Keybed({
           data-active="false"
           className={cn(
             "h-full flex-1 rounded-b-[3px] border-r border-edge-dark last:border-r-0",
-            "bg-linear-to-b from-[#e9edf3] to-[#b9c0cc]",
-            "data-[active=true]:from-(--tone) data-[active=true]:to-[#8f96a4]",
+            "bg-linear-to-b from-key-ivory-hi to-key-ivory-lo",
+            "data-[active=true]:from-(--tone) data-[active=true]:to-key-ivory-active-lo",
           )}
           onPointerDown={(e) => { if (e.button === 0) press(note); }}
           onPointerEnter={(e) => { if (e.buttons === 1) press(note); }}
@@ -138,8 +138,8 @@ export function Keybed({
           data-active="false"
           className={cn(
             "absolute top-0 z-10 h-[62%] rounded-b-[3px] shadow-cap",
-            "bg-linear-to-b from-[#2a2f3c] to-[#0d0f15]",
-            "data-[active=true]:from-(--tone) data-[active=true]:to-[#1b1e27]",
+            "bg-linear-to-b from-key-ebony-hi to-key-ebony-lo",
+            "data-[active=true]:from-(--tone) data-[active=true]:to-key-ebony-active-lo",
           )}
           style={{ left: `${index * unit - unit * 0.3}%`, width: `${unit * 0.6}%` }}
           onPointerDown={(e) => { if (e.button === 0) press(note); }}
