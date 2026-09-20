@@ -1,16 +1,27 @@
 import { lfoShape, type FilterType, type LfoShape } from "./mod";
 
-/** Morph di frame: sine → saw → square → pulse lungo la posizione 0..1. Uscita -1..1. */
-export function sampleWave(pos: number, t: number, warp: number): number {
-  const ph = (t * (1 + warp * 3)) % 1;
-  const sine = Math.sin(2 * Math.PI * ph);
-  const saw = 2 * ph - 1;
-  const sq = ph < 0.5 ? 1 : -1;
-  const pl = ph < 0.2 ? 1 : -1;
-  const s = pos * 3;
-  if (s < 1) return sine * (1 - s) + saw * s;
-  if (s < 2) return saw * (2 - s) + sq * (s - 1);
-  return sq * (3 - s) + pl * (s - 2);
+/**
+ * Un campione della tavola: `pos` 0..1 sceglie fra i frame dell'anteprima interpolando fra i
+ * due adiacenti, `t` 0..1 e' la fase dentro il ciclo, `warp` la accelera come fa l'oscillator
+ * sync nel motore (qui e' approssimato: il vero warp vive in SynthVoice).
+ */
+export function tableSample(frames: number[][], pos: number, t: number, warp: number): number {
+  const last = frames.length - 1;
+  const fpos = Math.min(last, Math.max(0, pos * last));
+  const lo = frames[Math.floor(fpos)]!;
+  const hi = frames[Math.min(last, Math.floor(fpos) + 1)]!;
+  const fk = fpos - Math.floor(fpos);
+
+  const n = lo.length;
+  const ph = (((t * (1 + warp * 3)) % 1) + 1) % 1;
+  const x = ph * n;
+  const i0 = Math.floor(x) % n;
+  const i1 = (i0 + 1) % n;
+  const k = x - Math.floor(x);
+
+  const a = lo[i0]! * (1 - k) + lo[i1]! * k;
+  const b = hi[i0]! * (1 - k) + hi[i1]! * k;
+  return a * (1 - fk) + b * fk;
 }
 
 /** Risposta in frequenza stilizzata del filtro, come path SVG `M x y L x y …`. */
@@ -81,9 +92,9 @@ export function lfoPath(shape: LfoShape, W: number, H: number): string {
 }
 
 /** Magnitudo delle prime N armoniche del frame corrente, normalizzate 0..1 e scalate dal livello. */
-export function spectrum(pos: number, warp: number, level: number, N: number): number[] {
+export function spectrum(frames: number[][], pos: number, warp: number, level: number, N: number): number[] {
   const M = 128;
-  const frame = Array.from({ length: M }, (_, i) => sampleWave(pos, i / M, warp));
+  const frame = Array.from({ length: M }, (_, i) => tableSample(frames, pos, i / M, warp));
   const out: number[] = [];
   for (let h = 1; h <= N; h++) {
     let re = 0;

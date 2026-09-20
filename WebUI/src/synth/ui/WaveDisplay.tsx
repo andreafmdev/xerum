@@ -4,11 +4,12 @@ import { noteMaskOf, type MeterFrame } from "../../juce/backend";
 import { useChoiceParam, useFloatParam } from "../../juce/hooks";
 import { useBackend } from "../../juce/provider";
 import { canvas2d, cssColor } from "../canvas";
-import { sampleWave, spectrum } from "../curves";
+import { tableSample, spectrum } from "../curves";
 import { formatValue } from "../mapping";
 import { modsFor } from "../mod";
 import { noteHz, topNote } from "../notes";
 import { PARAM_SPECS } from "../params.generated";
+import { WAVETABLES } from "../wavetables.generated";
 import { useSynthCtx } from "./SynthContext";
 
 type Props = {
@@ -32,6 +33,10 @@ export function WaveDisplay({ scale }: Props) {
   const level = useFloatParam("level").value;
   const wt = useChoiceParam("wtIndex");
   const name = wt.options.find((o) => o.value === wt.value)?.label ?? "";
+  // L'anteprima della tavola scelta: stesso ordine delle opzioni, quindi l'indice del choice
+  // e' l'indice qui. Il fallback sulla prima copre solo il caso in cui il file generato sia
+  // piu' vecchio di parameters.json.
+  const table = (WAVETABLES.find((w) => w.value === wt.value) ?? WAVETABLES[0]!).frames;
 
   // Scostamento istantaneo della posizione: solo le sorgenti LFO assegnate a wtpos.
   const { mods } = useSynthCtx();
@@ -75,7 +80,7 @@ export function WaveDisplay({ scale }: Props) {
     ctx.globalAlpha = 1;
 
     const cur = Math.min(1, Math.max(0, position + 0.06 * lfoRef.current));
-    const mags = spectrum(cur, warp, level, HARMONICS);
+    const mags = spectrum(table, cur, warp, level, HARMONICS);
     const bw = (W * 0.32) / HARMONICS;
     ctx.fillStyle = col;
     ctx.globalAlpha = 0.14;
@@ -103,7 +108,7 @@ export function WaveDisplay({ scale }: Props) {
       ctx.beginPath();
       for (let i = 0; i <= 160; i++) {
         const x = dx + (i / 160) * w;
-        const y = dy - sampleWave(pos, ((i / 160) * cyc + scroll) % 1, warp) * amp * (0.55 + 0.45 * near) * (1 + gate.current * 0.25);
+        const y = dy - tableSample(table, pos, ((i / 160) * cyc + scroll) % 1, warp) * amp * (0.55 + 0.45 * near) * (1 + gate.current * 0.25);
         if (i) ctx.lineTo(x, y);
         else ctx.moveTo(x, y);
       }
@@ -122,7 +127,7 @@ export function WaveDisplay({ scale }: Props) {
     ctx.beginPath();
     ctx.arc(px, py + amp * 0.6 + 8, 2, 0, 7);
     ctx.fill();
-  }, [position, warp, level, scale]);
+  }, [table, position, warp, level, scale]);
   // Il ciclo rAF e il listener dei meter durano piu' di un singolo `draw`: leggono sempre l'ultimo.
   const drawRef = useRef(draw);
   drawRef.current = draw;

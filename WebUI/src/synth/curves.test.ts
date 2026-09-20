@@ -1,25 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { sampleWave, filterPath, envPath, lfoPath, spectrum } from "./curves";
+import { tableSample, filterPath, envPath, lfoPath, spectrum } from "./curves";
 
-describe("sampleWave", () => {
-  it("is a sine at position 0", () => {
-    expect(sampleWave(0, 0.25, 0)).toBeCloseTo(1);
-    expect(sampleWave(0, 0.5, 0)).toBeCloseTo(0);
+/** Due frame piatti a -1 e +1: ogni valore letto dice da solo dove si trova. */
+const flat: number[][] = [
+  new Array(8).fill(-1),
+  new Array(8).fill(1),
+];
+
+/** Un frame con un dente: serve a vedere che la fase conta. */
+const ramp: number[][] = [Array.from({ length: 8 }, (_, i) => i / 4 - 1)];
+
+describe("tableSample", () => {
+  it("legge il primo e l'ultimo frame agli estremi di pos", () => {
+    expect(tableSample(flat, 0, 0, 0)).toBeCloseTo(-1);
+    expect(tableSample(flat, 1, 0, 0)).toBeCloseTo(1);
   });
-  it("is a saw at position 1/3", () => {
-    expect(sampleWave(1 / 3, 0, 0)).toBeCloseTo(-1);
-    expect(sampleWave(1 / 3, 0.5, 0)).toBeCloseTo(0);
+
+  it("interpola fra due frame adiacenti", () => {
+    expect(tableSample(flat, 0.5, 0, 0)).toBeCloseTo(0);
   });
-  it("is a square at 2/3", () => {
-    expect(sampleWave(2 / 3, 0.25, 0)).toBeCloseTo(1);
-    expect(sampleWave(2 / 3, 0.75, 0)).toBeCloseTo(-1);
+
+  it("segue la fase dentro il frame", () => {
+    expect(tableSample(ramp, 0, 0, 0)).toBeCloseTo(-1);
+    expect(tableSample(ramp, 0, 0.5, 0)).toBeCloseTo(0);
   });
-  it("stays within -1..1", () => {
-    for (let p = 0; p <= 1; p += 0.1) for (let t = 0; t < 1; t += 0.05) {
-      const s = sampleWave(p, t, 0.5);
-      expect(s).toBeGreaterThanOrEqual(-1);
-      expect(s).toBeLessThanOrEqual(1);
-    }
+
+  it("il warp accelera la fase", () => {
+    expect(tableSample(ramp, 0, 0.25, 1)).toBeCloseTo(tableSample(ramp, 0, 1, 0));
+  });
+
+  it("resta nei limiti per qualsiasi pos e t", () => {
+    for (let p = 0; p <= 1; p += 0.1)
+      for (let t = 0; t <= 1; t += 0.1) {
+        const s = tableSample(flat, p, t, 0.5);
+        expect(s).toBeGreaterThanOrEqual(-1.001);
+        expect(s).toBeLessThanOrEqual(1.001);
+      }
   });
 });
 
@@ -50,17 +66,18 @@ describe("paths", () => {
 });
 
 describe("spectrum", () => {
-  it("returns N normalised magnitudes, fundamental strongest for a sine", () => {
-    const s = spectrum(0, 0, 1, 16);
+  it("restituisce N magnitudini non negative", () => {
+    const s = spectrum(ramp, 0, 0, 1, 16);
     expect(s).toHaveLength(16);
-    expect(Math.max(...s)).toBe(s[0]);
-    for (const m of s) {
-      expect(m).toBeGreaterThanOrEqual(0);
-      expect(m).toBeLessThanOrEqual(1);
-    }
+    s.forEach((m) => expect(m).toBeGreaterThanOrEqual(0));
   });
-  it("scales with level", () => {
-    expect(spectrum(0.3, 0.2, 0.5, 8)[0]).toBeCloseTo(spectrum(0.3, 0.2, 1, 8)[0]! * 0.5);
+
+  it("scala col level", () => {
+    expect(spectrum(ramp, 0.3, 0.2, 0.5, 8)[0]).toBeCloseTo(spectrum(ramp, 0.3, 0.2, 1, 8)[0]! / 2);
+  });
+
+  it("una tavola piatta non ha armoniche", () => {
+    expect(spectrum(flat, 0, 0, 1, 8).every((m) => m < 1e-6)).toBe(true);
   });
 });
 
