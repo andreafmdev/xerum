@@ -26,8 +26,16 @@ type ListenerList = SliderState["valueChangedEvent"];
 // quella del pacchetto (stesso identificativo, modificatori o forma diversi) e tsc la rifiuta.
 // Usiamo quindi il tipo che il pacchetto stesso mette in globale.
 
+/**
+ * Il pacchetto dichiara `window.__JUCE__` come sempre presente, e dentro la WebView del plugin
+ * lo e'. Fuori — browser normale, test — non esiste. Qui lo si legge come opzionale, che e' la
+ * verita' a runtime: senza, `hasJuce()` sembrerebbe controllare qualcosa che non puo' mancare.
+ */
+const juceGlobal = (): Window["__JUCE__"] | undefined =>
+  typeof window === "undefined" ? undefined : (window as Partial<Window>).__JUCE__;
+
 /** True solo dentro la WebView del plugin: fuori (browser, test) manca window.__JUCE__. */
-export const hasJuce = () => typeof window !== "undefined" && !!window.__JUCE__?.backend;
+export const hasJuce = () => !!juceGlobal()?.backend;
 
 type Subs = Set<() => void>;
 const subscribeTo = (list: ListenerList, subs: Subs) => { list.addListener(() => { for (const s of subs) s(); }); };
@@ -82,7 +90,8 @@ class OrphanHandle implements ParamHandle {
 export async function createJuceBackend(): Promise<Backend> {
   // Import dinamico, e resta tale: il modulo legge window.__JUCE__ al caricamento.
   const juce = await import("@juce-framework/webview");
-  const init = window.__JUCE__!.initialisationData;
+  // Sicuro: createJuceBackend() viene chiamata solo dopo che hasJuce() ha confermato la presenza.
+  const init = juceGlobal()!.initialisationData;
   const handles = new Map<ParamId, ParamHandle>();
   const call = (name: string) => juce.getNativeFunction(name);
 
@@ -92,7 +101,7 @@ export async function createJuceBackend(): Promise<Backend> {
   // funzione di unsubscribe restituita rimuove davvero il callback.
   const fanOut = <T>(event: string) => {
     const subs = new Set<(p: T) => void>();
-    window.__JUCE__!.backend.addEventListener(event, (p) => { for (const cb of [...subs]) cb(p as T); });
+    juceGlobal()!.backend.addEventListener(event, (p) => { for (const cb of [...subs]) cb(p as T); });
     return (cb: (p: T) => void) => { subs.add(cb); return () => { subs.delete(cb); }; };
   };
   const onStateChanged = fanOut<BridgeState & { origin: string }>("stateChanged");
