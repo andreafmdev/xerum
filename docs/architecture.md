@@ -333,14 +333,18 @@ stessi strumenti della pipeline AKWF, `scripts/wavetable-dsp.mjs`): `retro-racin
 17.94 dB è stata guardata e lasciata così di proposito), `retro-ggsisters` (0.996, -0.01 dB) e
 `retro-leaderboard` (0.627, -0.87 dB). Le altre due non reggevano: `retro-commando` aveva frame
 adiacenti in antifase (-0.225, -4.11 dB) e `retro-uridium-pad` era di fatto scorrelata (0.013,
--2.95 dB). Per queste due si è tentata la stessa pipeline delle sei AKWF (allineamento di fase,
-continuità di fase per armonica, equalizzazione parziale dell'RMS — opt-in per tavola,
-`REALIGN_TABLES` in `scripts/import-serum-wavetables.mjs`), senza raggiungere il criterio di
-riuscita: dopo la pipeline `retro-commando` arriva a correlazione 0.290 ma perdita -1.90 dB,
-`retro-uridium-pad` a 0.352 ma -1.70 dB — entrambe vicine al limite che la sola fase non può
-superare (-1.88 dB e -1.66 dB, la distanza fra gli spettri di ampiezza dei frame adiacenti), che
-è un limite del materiale e non della pipeline. I due `.xwt` non sono stati toccati: dettagli e
-numeri completi in `Resources/wavetables/CREDITS.md`.
+-2.95 dB). Per queste due si è applicata la stessa pipeline delle sei AKWF (allineamento di
+fase, continuità di fase per armonica, equalizzazione parziale dell'RMS — opt-in per tavola,
+`REALIGN_TABLES` in `scripts/import-serum-wavetables.mjs`), dai frame grezzi originali di
+Serum: dopo la pipeline `retro-commando` arriva a correlazione 0.305 e perdita -1.85 dB,
+`retro-uridium-pad` a 0.357 e -1.60 dB. **Restano sotto lo standard delle sei AKWF** (0.923 di
+correlazione minima e -0.81 dB di perdita, vedi sopra): il riallineamento le ha portate
+dall'inusabile al passabile, non allo standard di casa, ed è un limite del materiale — la
+distanza fra gli spettri di ampiezza dei frame adiacenti era già -1.88 dB e -1.66 dB prima di
+qualunque intervento, un limite che la sola fase non supera — non della pipeline. Sono le due
+tavole meno solide della dotazione. I due `.xwt` non sono più bit-identici all'estrazione
+originale da Serum (cambia la fase, non lo spettro di ampiezza); dettagli e numeri completi in
+`Resources/wavetables/CREDITS.md`.
 
 Aggiungere una tavola vuol dire quattro cose, e la quarta è la sola che si dimentica:
 

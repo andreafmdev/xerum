@@ -69,10 +69,10 @@ opzioni in `parameters.json` e alle voci in `kWavetableFiles`.
 | `retro-commando` | 256 frame | 2 preset, es. `LD-Commando18` |
 | `retro-uridium-pad` | 278 frame | 1 preset, es. `PD-Uridium1` |
 
-### Riallineamento tentato su due tavole
+### Due tavole riallineate, e restano le più deboli della dotazione
 
 Misurate con gli strumenti di `scripts/wavetable-dsp.mjs` (le stesse sei metriche della
-pipeline AKWF sopra), tre delle cinque tavole spedite già reggono il morph senza alcun
+pipeline AKWF sopra), tre delle cinque tavole spedite reggono il morph senza alcun
 trattamento — `retro-racing` (correlazione minima 0.953, peggiore perdita a metà morph
 -0.10 dB; la sua escursione RMS di 17.94 dB è stata guardata e lasciata così di proposito),
 `retro-ggsisters` (0.996, -0.01 dB) e `retro-leaderboard` (0.627, -0.87 dB). Le altre due no:
@@ -80,27 +80,26 @@ trattamento — `retro-racing` (correlazione minima 0.953, peggiore perdita a me
 peggiore perdita a metà morph -4.11 dB) e `retro-uridium-pad` di fatto scorrelata (0.013,
 -2.95 dB).
 
-Per queste due si è tentato il riallineamento con la stessa pipeline delle sei tavole AKWF
+Per queste due si è applicato il riallineamento con la stessa pipeline delle sei tavole AKWF
 sopra — allineamento di fase, continuità di fase per armonica, equalizzazione parziale
-dell'RMS, `scripts/import-serum-wavetables.mjs`, opt-in per tavola (`REALIGN_TABLES`). Il
-tentativo **non ha raggiunto il criterio di riuscita** (correlazione minima positiva e
-perdita a metà morph non peggiore di -1.0 dB):
+dell'RMS, `scripts/import-serum-wavetables.mjs`, opt-in per tavola (`REALIGN_TABLES`) — dai
+frame grezzi originali di Serum (256 e 278 frame rispettivamente), non da un proxy:
 
-| tavola | correlazione minima | peggiore perdita a metà morph |
-|---|---|---|
-| `retro-commando` | -0.225 → 0.290 | -4.11 dB → -1.90 dB |
-| `retro-uridium-pad` | 0.013 → 0.352 | -2.95 dB → -1.70 dB |
+| tavola | correlazione minima | peggiore perdita a metà morph | escursione RMS |
+|---|---|---|---|
+| `retro-commando` | -0.225 → 0.305 | -4.11 dB → -1.85 dB | 5.65 dB → 1.72 dB |
+| `retro-uridium-pad` | 0.013 → 0.357 | -2.95 dB → -1.60 dB | 3.18 dB → 4.42 dB |
 
-La correlazione torna positiva, ma la perdita resta sotto soglia per entrambe: il limite che
-la sola fase non può superare (differenza fra gli spettri di ampiezza dei frame adiacenti,
-`midMorphLossBounds`) è già -1.88 dB e -1.66 dB rispettivamente, quindi è un limite del
-materiale — due frame timbricamente molto diversi da qualche parte nella sequenza originale —
-non della pipeline. Per questo **i due `.xwt` non sono stati toccati**: restano quelli
-originariamente importati, non allineati in fase. Nessun passo ulteriore è stato tentato oltre
-quelli già elencati.
+**Restano sotto lo standard delle sei tavole AKWF**, che questo stesso documento dichiara a
+correlazione minima ≥ 0.923 e peggiore perdita a metà morph ≥ -0.81 dB (vedi la sezione
+"Pipeline" sopra). Il riallineamento le ha portate dall'inusabile — frame adiacenti in
+antifase o di fatto scorrelati — al passabile, non allo standard di casa: sono le due tavole
+meno solide della dotazione. Il limite non è un passo mancante: la distanza fra gli spettri di
+ampiezza dei frame adiacenti (`midMorphLossBounds`, che nessun trattamento di sola fase può
+superare) era già -1.88 dB per `retro-commando` e -1.66 dB per `retro-uridium-pad` prima di
+qualunque intervento — due frame timbricamente molto diversi da qualche parte nella sequenza
+originale di Serum. Nessun passo oltre a quelli elencati sopra è stato tentato.
 
-Nota per chi rilancia l'importatore con i `.fxp` originali (non presenti in questo
-ambiente): la misura sopra è stata fatta sui 64 frame già ridotti nel repo, come proxy —
-`selectFrames` con lunghezza di ingresso e uscita uguali è un'identità, quindi il calcolo è
-corretto per quei dati, ma un rilancio dai 256/278 frame grezzi di Serum potrebbe interpolare
-su più materiale intermedio e dare un risultato diverso.
+I due `.xwt` scritti da questo riallineamento **non sono più bit-identici** all'estrazione
+originale da Serum: la fase dei singoli frame è cambiata (per costruzione: è quello il
+trattamento), lo spettro di ampiezza no.
