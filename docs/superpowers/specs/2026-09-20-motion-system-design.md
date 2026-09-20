@@ -24,7 +24,7 @@ La WebView gira nel processo del DAW e condivide CPU e GPU con l'audio. Vale una
 
 | Animabile | Vietato |
 |---|---|
-| `transform` (translate, scale, rotate) | `backdrop-filter`, e il raggio di `blur()` |
+| `transform`, e le proprietà indipendenti `translate`, `scale`, `rotate` | `backdrop-filter`, e il raggio di `blur()` |
 | `opacity` | il raggio di `blur()` dentro un `box-shadow` |
 | `filter: brightness()`, `saturate()` | `width`, `height`, `top`, `left`, `grid-template-rows` |
 | custom properties consumate da `color-mix` | qualunque proprietà che forzi layout |
