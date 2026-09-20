@@ -10,7 +10,17 @@ import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { framesFromStream, parseFxp, splitZlibStreams, SERUM_FRAME_SIZE } from "./serum-fxp.mjs";
-import { adjacentCorrelations, encodeXwt, midMorphRmsLosses, normaliseTable, selectFrames } from "./wavetable-dsp.mjs";
+import {
+  adjacentCorrelations,
+  alignFramesToPhase,
+  encodeXwt,
+  enforceHarmonicPhaseContinuity,
+  equaliseFrameRms,
+  midMorphRmsLosses,
+  normaliseTable,
+  rmsSpreadDb,
+  selectFrames,
+} from "./wavetable-dsp.mjs";
 
 /** I 64 frame che Xerum si aspetta in ogni .xwt. */
 const TARGET_FRAMES = 64;
@@ -60,6 +70,74 @@ export function classifyTable(sha1) {
   if (duplicate) return { kind: "duplicate", ...duplicate };
 
   return { kind: "unknown" };
+}
+
+/**
+ * Le due tavole misurate fuori soglia sul morph — `retro-commando` in antifase fra frame
+ * adiacenti (correlazione minima -0.225), `retro-uridium-pad` di fatto scorrelata (0.013).
+ * Solo per queste due si applica la pipeline di `scripts/fetch-wavetables.mjs` — allineamento
+ * di fase, continuita' di fase per armonica dove serve, equalizzazione parziale dell'RMS — ed
+ * e' un opt-in per tavola: le altre tre (piu' `retro-racing`, esplicitamente lasciata com'e')
+ * restano fuori da questo insieme e si rigenerano bit-identiche a quelle gia' nel repo.
+ */
+export const REALIGN_TABLES = new Set(["retro-commando", "retro-uridium-pad"]);
+
+/** Soglia e fattore della pipeline di riallineamento: gli stessi di scripts/fetch-wavetables.mjs. */
+const REALIGN_LOSS_TARGET_DB = -1.0;
+const REALIGN_RMS_EXPONENT = 0.7;
+
+function finishRealigned(frames) {
+  equaliseFrameRms(frames, REALIGN_RMS_EXPONENT);
+  normaliseTable(frames);
+  return frames;
+}
+
+/**
+ * Applica a `frames` la stessa pipeline di `scripts/fetch-wavetables.mjs`, nello stesso
+ * ordine: allineamento di fase (passo A), riduzione/interpolazione a TARGET_FRAMES,
+ * equalizzazione parziale dell'RMS e normalizzazione globale. Se il passo A non basta a
+ * portare la perdita peggiore a meta' morph sopra la soglia, si applica anche la continuita'
+ * di fase per armonica (passo B) sui frame allineati, e si ripetono riduzione ed
+ * equalizzazione — esattamente come in `fetch-wavetables.mjs`. Non va oltre: nessun passo di
+ * reinterpolazione ulteriore, nessun filtro inventato.
+ *
+ * Restituisce i frame finiti e se il passo B e' stato usato; l'ingresso non viene toccato.
+ */
+export function realignSerumTable(frames) {
+  const aligned = alignFramesToPhase(frames);
+  let reduced = finishRealigned(selectFrames(aligned, TARGET_FRAMES));
+  let usedStepB = false;
+
+  if (Math.min(...midMorphRmsLosses(reduced)) < REALIGN_LOSS_TARGET_DB) {
+    const continuous = enforceHarmonicPhaseContinuity(aligned);
+    reduced = finishRealigned(selectFrames(continuous, TARGET_FRAMES));
+    usedStepB = true;
+  }
+
+  return { frames: reduced, usedStepB };
+}
+
+/** Le tre metriche del morph che si stampano prima e dopo il riallineamento. */
+function morphMetrics(frames) {
+  return {
+    minCorrelation: Math.min(...adjacentCorrelations(frames)),
+    worstLoss: Math.min(...midMorphRmsLosses(frames)),
+    rmsSpread: rmsSpreadDb(frames),
+  };
+}
+
+function formatMorphMetrics(m) {
+  return (
+    `correlazione minima ${m.minCorrelation.toFixed(3)}, ` +
+    `peggiore perdita a meta' morph ${m.worstLoss.toFixed(2)} dB, ` +
+    `escursione RMS ${m.rmsSpread.toFixed(2)} dB`
+  );
+}
+
+/** Vero se `m` raggiunge il criterio di riuscita del riallineamento: correlazione minima
+    positiva e perdita a meta' morph non peggiore della soglia. */
+function meetsRealignTarget(m) {
+  return m.minCorrelation > 0 && m.worstLoss >= REALIGN_LOSS_TARGET_DB;
 }
 
 /**
@@ -142,26 +220,50 @@ function main(argv) {
 
     const slug = classified.slug;
     const before = { frames: frames.length, peak: peakOf(frames), rms: rmsOf(frames) };
-    const reduced = normaliseTable(selectFrames(frames, TARGET_FRAMES));
+
+    let reduced;
+    let usedStepB = false;
+    let realignBefore = null;
+    const realign = REALIGN_TABLES.has(slug);
+    if (realign) {
+      realignBefore = morphMetrics(normaliseTable(selectFrames(frames, TARGET_FRAMES)));
+      const result = realignSerumTable(frames);
+      reduced = result.frames;
+      usedStepB = result.usedStepB;
+    } else {
+      reduced = normaliseTable(selectFrames(frames, TARGET_FRAMES));
+    }
+
     const after = { frames: reduced.length, peak: peakOf(reduced), rms: rmsOf(reduced) };
+    const afterMorph = morphMetrics(reduced);
 
-    // Picco e RMS sono globali: non possono mostrare una cancellazione che avviene a meta'
-    // crossfade fra due frame vicini, perche' quei due numeri si fanno su tutta la tavola.
-    // La correlazione minima e la peggiore perdita RMS a meta' morph sono la verifica per
-    // frame adiacente che la spec chiedeva al punto 8, a giustificare la scelta di non
-    // riallineare le fasi di queste tavole (solo diagnostica: i dati scritti nel .xwt
-    // restano quelli di `reduced`, invariati).
-    const minCorrelation = Math.min(...adjacentCorrelations(reduced));
-    const worstMidMorphLoss = Math.min(...midMorphRmsLosses(reduced));
-
-    console.log(
-      `  ${slug} (${sha1}): ${before.frames} → ${after.frames} frame, ` +
-        `picco ${before.peak.toFixed(3)} → ${after.peak.toFixed(3)}, ` +
-        `rms ${before.rms.toFixed(3)} → ${after.rms.toFixed(3)}, ` +
-        `correlazione minima fra frame adiacenti ${minCorrelation.toFixed(3)}, ` +
-        `peggiore perdita RMS a meta' morph ${worstMidMorphLoss.toFixed(2)} dB, ` +
-        `da ${sources.length} preset (${sources[0]})`,
-    );
+    if (realign) {
+      console.log(
+        `  ${slug} (${sha1}): riallineata (passo A${usedStepB ? " + continuita' di fase" : ""}), ` +
+          `${before.frames} → ${after.frames} frame, da ${sources.length} preset (${sources[0]})`,
+      );
+      console.log(`    prima  — ${formatMorphMetrics(realignBefore)}`);
+      console.log(`    dopo   — ${formatMorphMetrics(afterMorph)}`);
+      if (!meetsRealignTarget(afterMorph))
+        console.warn(
+          `    ATTENZIONE: ${slug} non raggiunge il criterio di riuscita (correlazione minima positiva e perdita a meta' morph >= ` +
+            `${REALIGN_LOSS_TARGET_DB} dB) nemmeno dopo la pipeline. Nessun altro passo e' stato tentato: i numeri sopra sono il risultato finale.`,
+        );
+    } else {
+      // Picco e RMS sono globali: non possono mostrare una cancellazione che avviene a meta'
+      // crossfade fra due frame vicini, perche' quei due numeri si fanno su tutta la tavola.
+      // La correlazione minima e la peggiore perdita RMS a meta' morph sono la verifica per
+      // frame adiacente (solo diagnostica per queste tre: i dati scritti nel .xwt restano
+      // quelli di `reduced`, invariati — vedi REALIGN_TABLES sopra per le due eccezioni).
+      console.log(
+        `  ${slug} (${sha1}): ${before.frames} → ${after.frames} frame, ` +
+          `picco ${before.peak.toFixed(3)} → ${after.peak.toFixed(3)}, ` +
+          `rms ${before.rms.toFixed(3)} → ${after.rms.toFixed(3)}, ` +
+          `correlazione minima fra frame adiacenti ${afterMorph.minCorrelation.toFixed(3)}, ` +
+          `peggiore perdita RMS a meta' morph ${afterMorph.worstLoss.toFixed(2)} dB, ` +
+          `da ${sources.length} preset (${sources[0]})`,
+      );
+    }
 
     if (!dryRun) writeFileSync(resolve(outDir, `${slug}.xwt`), encodeXwt(reduced, SERUM_FRAME_SIZE));
     written.push({ slug, sha1, sources, sourceFrames: before.frames });
