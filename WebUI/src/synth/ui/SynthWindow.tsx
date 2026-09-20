@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
+import { DUR, EASE, bezier } from "@xerum/ui";
 import { useBoolParam, useBridgeState } from "../../juce/hooks";
 import type { ModSource } from "../../juce/backend";
 import type { ParamId } from "../params.generated";
@@ -119,6 +120,38 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
   // L'ambient audio: un rAF coalescente scrive tre custom property sul chassis, niente stato
   // React e niente re-render a 30 Hz (vedi il commento in conductor.ts).
   useMeterConductor(chassisRef);
+
+  // Il colpo di luce del caricamento preset: pilotato da WAAPI, non da una regola CSS chiave
+  // sul nome del preset. Una regola `[data-wipe]` guarderebbe solo la PRESENZA dell'attributo,
+  // sempre vera dal primissimo render, quindi non riparte mai a un cambio di valore (verificato
+  // con un browser vero — vedi il report del task). `element.animate()` invece riparte a ogni
+  // chiamata, senza bisogno del trucco "azzera l'attributo, forza un reflow, rimettilo" — che è
+  // esattamente il tipo di codice che il prossimo che legge scambia per un errore e "ripulisce",
+  // portandosi via l'effetto insieme.
+  const wipeRef = useRef<HTMLDivElement>(null);
+  // Il primo giro di questo effect e' il preset gia' in piedi al mount (quello che l'host ha
+  // ripristinato, non una scelta fatta qui): l'apertura (data-boot sopra) possiede gia' quel
+  // momento, e sovrapporci anche il wipe darebbe un doppio lampo. Si anima solo dal secondo
+  // giro in poi, cioe' da un vero cambio di preset — e un preset ricaricato IDENTICO a quello
+  // corrente non arriva neppure fin qui, perche' `setPreset` in useSynth.ts riceve lo stesso
+  // riferimento dell'array PRESETS e React salta il render (Object.is bail-out).
+  const firstPresetRef = useRef(true);
+  useEffect(() => {
+    if (firstPresetRef.current) {
+      firstPresetRef.current = false;
+      return;
+    }
+    const el = wipeRef.current;
+    if (!el) return;
+    // Letta ORA, non una volta sola all'avvio del modulo: chi tiene aperto il plugin puo'
+    // cambiare questa preferenza di sistema mentre la finestra e' li'. Una @media
+    // (prefers-reduced-motion) nel foglio di stile non basterebbe: non copre le animazioni
+    // create in JavaScript, solo quelle dichiarate in CSS.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    // Nessun fill-mode: l'ultimo keyframe (opacity 0) e' gia' il riposo di .sx-wipe in
+    // synth.css, quindi a fine animazione il controllo torna alla cascata senza scatti.
+    el.animate([{ opacity: 0.45 }, { opacity: 0 }], { duration: DUR.scene, easing: bezier(EASE.exit) });
+  }, [s.preset.name]);
   const [sc, setSc] = useState(fixedScale ?? 1);
   const [mode, setMode] = useState<ScaleMode>("zoom");
   // La verifica dello zoom, dopo il layout: una sola volta, alla prima scala diversa da 1.
@@ -196,11 +229,9 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
         </SynthContext>
         {/* Il colpo di luce del caricamento preset: un elemento dedicato, non lo pseudo-elemento
             ::after dello chassis, perche' la variante glass lo occupa gia' per l'aurora (vedi
-            synth.css). data-wipe porta il nome del preset caricato, ma il selettore CSS che lo
-            referenzia guarda solo la presenza dell'attributo, non il suo valore: l'animazione
-            NON riparte a un cambio di preset (ne' diverso ne' uguale), suona una volta sola al
-            mount — vedi la nota in synth.css e il report del task. */}
-        <div className="sx-wipe" data-wipe={s.preset.name} aria-hidden="true" />
+            synth.css). Il suo `opacity` e' animato via WAAPI (vedi l'effect qui sopra), non da
+            una regola CSS chiave sul preset: niente `data-wipe` da leggere, quindi. */}
+        <div ref={wipeRef} className="sx-wipe" data-testid="wipe" aria-hidden="true" />
       </div>
     </div>
   );

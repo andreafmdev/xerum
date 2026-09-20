@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitForElementToBeRemoved, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { domAnimation, LazyMotion } from "motion/react";
@@ -11,6 +11,25 @@ import { resetFirstBoot } from "./boot";
 import { H, SynthWindow } from "./SynthWindow";
 
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement["getContext"];
+
+// jsdom non implementa ne' Element.animate() ne' window.matchMedia: servono solo al wipe del
+// preset in SynthWindow.tsx, quindi li stub qui invece che nel setup condiviso con @xerum/ui.
+// animateSpy registra le chiamate per le asserzioni; reducedMotion e' una variabile di modulo
+// che ogni test puo' alzare per simulare "prefers-reduced-motion: reduce" senza toccare gli
+// altri test (letta a ogni chiamata di matchMedia, non catturata una volta sola).
+const animateSpy = vi.fn();
+HTMLElement.prototype.animate = animateSpy as unknown as typeof HTMLElement.prototype.animate;
+let reducedMotion = false;
+window.matchMedia = ((query: string) => ({
+  matches: query.includes("prefers-reduced-motion") && reducedMotion,
+  media: query,
+  onchange: null,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  addListener: () => {},
+  removeListener: () => {},
+  dispatchEvent: () => false,
+})) as unknown as typeof window.matchMedia;
 
 function mount(b = new FakeBackend({ state: { mods: [{ src: "lfo", target: "cutoff", depth: 0.25 }, { src: "env", target: "wtpos", depth: 0.3 }] } }), props: Partial<React.ComponentProps<typeof SynthWindow>> = {}) {
   render(<BridgeProvider backend={b}><SynthWindow {...props} /></BridgeProvider>);
@@ -316,5 +335,71 @@ describe("SynthWindow boot sequence", () => {
       </BridgeProvider>,
     );
     expect(screen.getByTestId("chassis")).toHaveAttribute("data-boot", "again");
+  });
+});
+
+// Il colpo di luce del caricamento preset (round 1 del fix): pilotato da element.animate(), non
+// da una regola CSS chiave sul nome del preset (quella non ripartiva mai, vedi synth.css e il
+// report). jsdom non implementa animate(), quindi qui gira lo stub di modulo definito in cima al
+// file: prova che l'effect chiama (o non chiama) animate() nelle giuste circostanze, non che
+// l'animazione DOM reale riparta — quella e' stata verificata a parte con un browser vero.
+describe("SynthWindow preset wipe", () => {
+  beforeEach(() => {
+    animateSpy.mockClear();
+    reducedMotion = false;
+  });
+
+  it("does not animate on first mount: the opening sequence already owns that moment", () => {
+    render(
+      <BridgeProvider backend={new FakeBackend()}>
+        <SynthWindow variant="glass" initialTab="env" gutter={0} />
+      </BridgeProvider>,
+    );
+    expect(animateSpy).not.toHaveBeenCalled();
+  });
+
+  it("animates once when a different preset loads", async () => {
+    render(
+      <BridgeProvider backend={new FakeBackend()}>
+        <SynthWindow variant="glass" initialTab="env" gutter={0} />
+      </BridgeProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Init/ }));
+    const overlay = screen.getByRole("dialog", { name: "Presets" });
+    await userEvent.type(within(overlay).getByRole("searchbox"), "acid");
+    await userEvent.click(within(overlay).getByRole("button", { name: /Acid Line/ }));
+    await userEvent.click(within(overlay).getByRole("button", { name: "Carica preset" }));
+    expect(animateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not animate when the already-loaded preset is picked again", async () => {
+    render(
+      <BridgeProvider backend={new FakeBackend()}>
+        <SynthWindow variant="glass" initialTab="env" gutter={0} />
+      </BridgeProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Init/ }));
+    const overlay = screen.getByRole("dialog", { name: "Presets" });
+    // Nessuna ricerca ne' scelta di scheda: l'anteprima si apre gia' sul preset corrente
+    // (Init), quindi il tasto e' gia' "Caricato" e onPick riceve lo stesso riferimento di
+    // PRESETS che useSynth.ts tiene gia' in stato — React salta il render (Object.is bail-out)
+    // e l'effect del wipe non gira nemmeno una seconda volta.
+    await userEvent.click(within(overlay).getByRole("button", { name: "Caricato" }));
+    expect(animateSpy).not.toHaveBeenCalled();
+  });
+
+  it("skips the animation when the system prefers reduced motion", async () => {
+    reducedMotion = true;
+    render(
+      <BridgeProvider backend={new FakeBackend()}>
+        <SynthWindow variant="glass" initialTab="env" gutter={0} />
+      </BridgeProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Init/ }));
+    const overlay = screen.getByRole("dialog", { name: "Presets" });
+    await userEvent.type(within(overlay).getByRole("searchbox"), "acid");
+    await userEvent.click(within(overlay).getByRole("button", { name: /Acid Line/ }));
+    await userEvent.click(within(overlay).getByRole("button", { name: "Carica preset" }));
+    expect(animateSpy).not.toHaveBeenCalled();
   });
 });
