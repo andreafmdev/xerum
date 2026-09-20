@@ -97,8 +97,13 @@ html body {
   color: var(--foreground);
 }
 
-/* L'anello di modulazione nasce dall'arco del valore: scala e opacity, niente altro. */
+/* L'anello di modulazione nasce dall'arco del valore: scala e opacity, niente altro.
+   L'arrivo e' l'opacita' di riposo dell'arco (opacity-80), non 1: altrimenti l'elemento
+   scatterebbe da pieno a 0.8 nell'istante in cui l'animazione finisce, senza `fill-mode`
+   a mascherarlo (un `forwards` che fissa l'anello a un valore diverso dal riposo sarebbe
+   lo stesso difetto sotto altro nome). La scala arriva gia' a 1, che e' il riposo implicito
+   di un elemento senza transform: nessuno scatto li'. */
 @keyframes sx-ring-in {
-  from { opacity: 0; scale: 0.9; }
-  to   { opacity: 1; scale: 1; }
+  from { opacity: 0;   scale: 0.9; }
+  to   { opacity: 0.8; scale: 1; }
 }
