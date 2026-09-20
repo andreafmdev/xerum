@@ -5,6 +5,7 @@ import type { ModSource } from "../../juce/backend";
 import type { ParamId } from "../params.generated";
 import { useSynth, type TabId } from "../useSynth";
 import { BottomStrip } from "./BottomStrip";
+import { useMeterConductor } from "./conductor";
 import { Header } from "./Header";
 import { FilterPanel, MasterPanel, OscPanel } from "./Panels";
 import { PresetOverlay } from "./PresetOverlay";
@@ -109,6 +110,9 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
 
   const rootRef = useRef<HTMLDivElement>(null);
   const chassisRef = useRef<HTMLDivElement>(null);
+  // L'ambient audio: un rAF coalescente scrive tre custom property sul chassis, niente stato
+  // React e niente re-render a 30 Hz (vedi il commento in conductor.ts).
+  useMeterConductor(chassisRef);
   const [sc, setSc] = useState(fixedScale ?? 1);
   const [mode, setMode] = useState<ScaleMode>("zoom");
   // La verifica dello zoom, dopo il layout: una sola volta, alla prima scala diversa da 1.

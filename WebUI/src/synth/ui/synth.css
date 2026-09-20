@@ -45,6 +45,12 @@
   /* Effetti opzionali: attivi solo in `glow`. */
   --glow: none;
   --tglow: none;
+
+  /* Valori di riposo dell'ambient audio (Task 13): li scrive useMeterConductor a 30 Hz, ma
+     senza motore collegato (o prima del primo frame) la UI deve restare corretta lo stesso. */
+  --m-out: 0;
+  --m-env: 0;
+  --m-lfo: 0;
 }
 
 /* soft = token di libreria così come sono. */
@@ -247,7 +253,9 @@
     radial-gradient(circle at 60% 20%, #6f9cff90, transparent 30%),
     radial-gradient(circle at 30% 80%, #e26fd680, transparent 30%);
   animation: sx-aurora 26s ease-in-out infinite alternate;
-  opacity: 0.55;
+  /* Solo opacity, mai un transform sul chassis (900×680): --m-out arriva da useMeterConductor,
+     l'ambient respira con l'uscita audio invece di avere una luminosità fissa. */
+  opacity: calc(0.35 + 0.4 * var(--m-out));
 }
 .sx-chassis[data-variant="glass"]::after {
   animation-duration: 37s;
