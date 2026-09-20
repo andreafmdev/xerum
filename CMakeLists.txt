@@ -51,6 +51,7 @@ set(XERUM_CORE_SOURCES
     Source/dsp/MipTable.cpp
     Source/dsp/PlateReverb.cpp
     Source/dsp/StateVariableFilter.cpp
+    Source/dsp/StereoDelay.cpp
     Source/dsp/WavetableBlob.cpp
     Source/dsp/WavetableOscillator.cpp
     Source/dsp/WavetableStore.cpp
@@ -154,6 +155,7 @@ target_sources(XerumTests
         Tests/NoteMaskTests.cpp
         Tests/PluginProcessorTests.cpp
         Tests/MidiDevicesTests.cpp
+        Tests/DelayTests.cpp
         # Il processore, senza editor (XERUM_HEADLESS_TESTS): il round-trip dello stato salvato
         # passa da qui, e prima non aveva nessun test.
         Source/plugin/PluginProcessor.cpp
