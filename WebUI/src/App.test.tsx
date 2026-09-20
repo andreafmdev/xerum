@@ -14,13 +14,18 @@ function mount() {
   );
 }
 
+// Questi due test non provano che App.tsx avvolga lo chassis in LazyMotion (ne' che passi
+// strict/domAnimation): quella verifica vive in App.lazymotion.test.tsx, con LazyMotion
+// mockato per ispezionare le props ricevute. Qui si prova solo, rispettivamente, che l'app
+// renderizzi lo chassis e che la libreria `motion` mantenga davvero la garanzia "strict" su
+// cui l'intero wrapping fa affidamento.
 describe("App", () => {
-  it("renders the chassis inside the motion provider", () => {
+  it("renders the chassis", () => {
     mount();
     expect(screen.getByTestId("chassis")).toBeInTheDocument();
   });
 
-  it("refuses the full motion namespace: LazyMotion runs in strict mode", async () => {
+  it("sanity check: LazyMotion in strict mode really throws on the full motion namespace", async () => {
     const { LazyMotion, domAnimation, motion } = await import("motion/react");
     // strict-mode-throws-test:start
     // `motion.div` qui e' l'oggetto del test, non una regressione: verifica che `strict`
