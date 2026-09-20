@@ -62,11 +62,11 @@ function lineOf(text, index) {
   return line;
 }
 
-// ---- animated-blur: backdrop-filter o filter:blur() animati. --------------------------------
+// ---- animated-blur: backdrop-filter o filter:blur() animati, in CSS vero. --------------------
 // Nominati direttamente nel valore di transition/transition-property, anche su una
 // dichiarazione multi-riga (transition:\n  backdrop-filter ...): [^;] include gli a-capo.
-const TRANSITION_BACKDROP_RE = /\btransition(-property)?\s*:[^;]*\bbackdrop-filter\b/g;
-const TRANSITION_BLURWORD_RE = /\btransition(-property)?\s*:[^;]*\bblur\b/g;
+const TRANSITION_BACKDROP_RE = /\btransition(-property)?\s*:[^;]*\bbackdrop-filter\b/;
+const TRANSITION_BLURWORD_RE = /\btransition(-property)?\s*:[^;]*\bblur\b/;
 
 // Il bypass più naturale: `transition: filter ...` e `filter: blur(...)` sono due
 // dichiarazioni distinte nella stessa regola, in un ordine qualsiasi. Servono i confini del
@@ -88,6 +88,18 @@ function cssBlocks(text) {
   }
   return blocks;
 }
+
+// Una graffa non è per forza una regola CSS: in un .ts/.tsx la stessa `{`/`}` apre un letterale
+// oggetto, un corpo di funzione, un `if`/`for`, una callback... l'insieme delle forme che una
+// graffa JS può assumere non è enumerabile con un'euristica sul testo che la precede (un
+// tentativo con un elenco di "codette" tipiche di JS — `={`, `={{`, `=> {` — si è rivelato
+// bucato: cadeva già sulla graffa di una normale dichiarazione di funzione, tipo
+// `function Foo(props: Props) {`, che finisce in `) ` come una regola `:not(.foo) {`). L'unico
+// segnale davvero affidabile in questo repo è quello vero: qui il CSS vive solo nei file .css
+// (nessun CSS-in-JS, verificato: niente styled-components, niente template `css\``), quindi i
+// controlli che leggono dentro una graffa come se fosse CSS si applicano solo li'. La prop
+// `transition` di motion (`animate={{ transition: T.layerIn }}`) resta cosi' quello che è: un
+// valore JS, mai scambiato per una dichiarazione CSS solo perché contiene la parola "transition:".
 const TRANSITION_FILTER_RE = /\btransition(-property)?\s*:[^;]*\bfilter\b/;
 const FILTER_USES_BLUR_RE = /\bfilter\s*:[^;]*\bblur\(/;
 const KEYFRAMES_BACKDROP_RE = /\bbackdrop-filter\s*:/;
@@ -118,18 +130,20 @@ export function findViolations(files) {
       for (const { rule, re } of LINE_RULES) if (re.test(line)) push(i + 1, rule);
     });
 
-    for (const re of [TRANSITION_BACKDROP_RE, TRANSITION_BLURWORD_RE]) {
-      re.lastIndex = 0;
-      let m;
-      while ((m = re.exec(text))) push(lineOf(text, m.index), "animated-blur");
-    }
-
-    for (const block of cssBlocks(text)) {
+    // Tutti i controlli di animated-blur guardano dentro blocchi `{ ... }`, ma solo nei file
+    // .css: è li' che vive il CSS vero in questo repo (nessun CSS-in-JS). Su un .ts/.tsx la
+    // stessa sintassi a graffe apre oggetti letterali, corpi di funzione, callback — la prop
+    // `transition` di un componente motion inclusa — e non ha senso leggerla come CSS.
+    for (const block of extname(path) === ".css" ? cssBlocks(text) : []) {
       if (/@keyframes/.test(block.selector)) {
         if (KEYFRAMES_BACKDROP_RE.test(block.body) || KEYFRAMES_FILTER_BLUR_RE.test(block.body)) {
           push(lineOf(text, block.bodyStart), "animated-blur");
         }
-      } else if (TRANSITION_FILTER_RE.test(block.body) && FILTER_USES_BLUR_RE.test(block.body)) {
+      } else if (
+        TRANSITION_BACKDROP_RE.test(block.body) ||
+        TRANSITION_BLURWORD_RE.test(block.body) ||
+        (TRANSITION_FILTER_RE.test(block.body) && FILTER_USES_BLUR_RE.test(block.body))
+      ) {
         push(lineOf(text, block.bodyStart), "animated-blur");
       }
     }

@@ -91,6 +91,37 @@ test("does not flag a static backdrop-filter that is never transitioned", () => 
   assert.deepEqual(rules(".sx { backdrop-filter: blur(10px); }", "a.css"), []);
 });
 
+// --- Round 3 / motion-system task 10-11 fix round: `transition:` inside a JSX prop object is
+// not a CSS declaration -------------------------------------------------------------------------
+// Il bug reale: `animate={{ transition: T.layerIn }}` in un componente `motion` è una graffa
+// JS (il valore di una prop React), non una regola CSS. Le regex di animated-blur scandivano il
+// testo grezzo del file, cosi' un `transition:` di questo tipo restava "aperto" fino al primo `;`
+// letterale successivo — potenzialmente lontanissimo — e qualunque parola "blur" incontrata nel
+// mezzo (una classe Tailwind come `backdrop-blur-sm`, o un commento che ne spiega la staticità)
+// veniva presa per una sfocatura animata.
+test("a motion `transition` prop next to a static backdrop-blur-sm className is not a violation", () => {
+  const jsx = [
+    "<m.div",
+    "  animate={{ opacity: 1, transition: T.layerIn }}",
+    "  exit={{ opacity: 0, transition: T.layerOut }}",
+    "  // Il fondo sfocato è statico dal primo frame: non anima mai il raggio del blur.",
+    '  className="absolute inset-0 backdrop-blur-sm"',
+    ">",
+  ].join("\n");
+  assert.deepEqual(rules(jsx, "a.tsx"), []);
+});
+
+test("a genuinely animated blur in real CSS is still caught next to the same kind of prose", () => {
+  // Stesso testo "blur" nei paraggi, ma stavolta dentro una regola CSS vera: deve restare presa.
+  const css = [
+    "/* il blur qui sotto e' quello vietato: cambia nel tempo */",
+    ".sx {",
+    "  transition: backdrop-filter var(--dur-state);",
+    "}",
+  ].join("\n");
+  assert.deepEqual(rules(css, "a.css"), ["animated-blur"]);
+});
+
 test("flags a @keyframes block that changes backdrop-filter", () => {
   const text = "@keyframes k { from { backdrop-filter: blur(0); } to { backdrop-filter: blur(10px); } }";
   assert.deepEqual(rules(text, "a.css"), ["animated-blur"]);

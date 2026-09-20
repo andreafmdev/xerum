@@ -36,13 +36,12 @@ export function PresetOverlay({ current, onPick, onClose }: Props) {
       role="dialog"
       aria-label="Presets"
       onKeyDown={(e) => e.key === "Escape" && onClose()}
-      // Il fondo sfocato c'è dal primo frame e resta fisso: solo l'opacità e la scala del
-      // pannello animano. Animarne il raggio sarebbe la sola cosa che questa WebView non può
-      // permettersi (vedi la whitelist nella spec).
-      className="sx-ovl absolute inset-0 z-20 flex flex-col gap-3 rounded-[14px] bg-background/94 p-3.5 backdrop-blur-sm"
       initial={{ opacity: 0, scale: 0.99 }}
       animate={{ opacity: 1, scale: 1, transition: T.layerIn }}
       exit={{ opacity: 0, scale: 0.995, transition: T.layerOut }}
+      // Il blur c'è dal primo frame e non si muove: animarne il raggio è la sola cosa
+      // che la WebView non può permettersi (vedi la whitelist nella spec).
+      className="sx-ovl absolute inset-0 z-20 flex flex-col gap-3 rounded-[14px] bg-background/94 p-3.5 backdrop-blur-sm"
     >
       <div className="flex items-center gap-3">
         <Logo>PRESETS</Logo>
