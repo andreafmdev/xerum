@@ -16,19 +16,51 @@ import { adjacentCorrelations, encodeXwt, midMorphRmsLosses, normaliseTable, sel
 const TARGET_FRAMES = 64;
 
 /**
- * Le sette tavole del pack, riconosciute per sha1 dello stream grezzo. Lo slug e'
- * anche il `value` dell'opzione di wtIndex e il nome del file .xwt: cambiarlo qui
- * senza cambiarlo in parameters.json fa fallire lo static_assert in ParamCollect.h.
+ * Le cinque tavole del pack che si spediscono, riconosciute per sha1 dello stream grezzo. Lo
+ * slug e' anche il `value` dell'opzione di wtIndex e il nome del file .xwt: cambiarlo qui senza
+ * cambiarlo in parameters.json fa fallire lo static_assert in ParamCollect.h.
+ *
+ * Il pack ne conteneva sette: due erano la stessa tavola salvata due volte con arrotondamenti
+ * float diversi (vedi KNOWN_DUPLICATE_TABLES sotto) e non si spediscono due volte.
  */
 export const KNOWN_TABLES = {
   "56780dc5": "retro-racing",
-  "40bbc013": "retro-spindizzy",
   d15054da: "retro-ggsisters",
   "8490d094": "retro-commando",
   b5167ba8: "retro-uridium-pad",
   fa38ca0c: "retro-leaderboard",
-  "34b742bb": "retro-uridium",
 };
+
+/**
+ * Due sha1 del pack sono la STESSA tavola di una gia' in KNOWN_TABLES, salvata due volte con
+ * arrotondamenti float diversi — la deduplica per sha1 dello stream grezzo non li vede perche'
+ * gli stream sorgente differiscono davvero, di rumore (`maxDiff` e' la differenza massima
+ * campione per campione fra i due .xwt gia' scritti, misurata due volte: ~1 ULP float32 per
+ * `retro-spindizzy`/`retro-racing`).
+ *
+ * Restano fuori da KNOWN_TABLES di proposito, ma non devono sparire in silenzio dietro
+ * l'avviso generico "nessuno slug noto": chi rilancia l'importatore deve leggere che sono
+ * duplicati noti e scartati apposta, non un buco nella tabella.
+ */
+export const KNOWN_DUPLICATE_TABLES = {
+  "40bbc013": { slug: "retro-spindizzy", duplicateOf: "retro-racing", ofSha1: "56780dc5", maxDiff: 5.96e-8 },
+  "34b742bb": { slug: "retro-uridium", duplicateOf: "retro-leaderboard", ofSha1: "fa38ca0c", maxDiff: 4.77e-7 },
+};
+
+/**
+ * Come va trattato uno sha1 trovato nel pack: una tavola nota da scrivere (`known`), un
+ * duplicato noto di una tavola gia' spedita da scartare (`duplicate`), o uno sha1 mai visto
+ * (`unknown`). Pura, cosi' i test possono coprire il caso `duplicate` senza leggere .fxp veri.
+ */
+export function classifyTable(sha1) {
+  const known = KNOWN_TABLES[sha1];
+  if (known) return { kind: "known", slug: known };
+
+  const duplicate = KNOWN_DUPLICATE_TABLES[sha1];
+  if (duplicate) return { kind: "duplicate", ...duplicate };
+
+  return { kind: "unknown" };
+}
 
 /**
  * Raccoglie le tavole distinte fra i file dati. Lo stream 0 e' sempre lo stato Serum
@@ -93,12 +125,22 @@ function main(argv) {
 
   const written = [];
   for (const { sha1, frames, sources } of found.values()) {
-    const slug = KNOWN_TABLES[sha1];
-    if (!slug) {
+    const classified = classifyTable(sha1);
+
+    if (classified.kind === "duplicate") {
+      console.warn(
+        `  ${sha1}: duplicato noto di \`${classified.duplicateOf}\` (${classified.ofSha1}) — stessa tavola salvata due volte nel ` +
+          `pack con arrotondamenti float diversi (differenza massima campione per campione ${classified.maxDiff.toExponential(2)}), ` +
+          `scartato di proposito e non spedito come \`${classified.slug}\` (da ${sources[0]})`,
+      );
+      continue;
+    }
+    if (classified.kind === "unknown") {
       console.warn(`  ${sha1}: ${frames.length} frame, nessuno slug noto — saltata (da ${sources[0]})`);
       continue;
     }
 
+    const slug = classified.slug;
     const before = { frames: frames.length, peak: peakOf(frames), rms: rmsOf(frames) };
     const reduced = normaliseTable(selectFrames(frames, TARGET_FRAMES));
     const after = { frames: reduced.length, peak: peakOf(reduced), rms: rmsOf(reduced) };
@@ -107,7 +149,7 @@ function main(argv) {
     // crossfade fra due frame vicini, perche' quei due numeri si fanno su tutta la tavola.
     // La correlazione minima e la peggiore perdita RMS a meta' morph sono la verifica per
     // frame adiacente che la spec chiedeva al punto 8, a giustificare la scelta di non
-    // riallineare le fasi di queste sette tavole (solo diagnostica: i dati scritti nel .xwt
+    // riallineare le fasi di queste tavole (solo diagnostica: i dati scritti nel .xwt
     // restano quelli di `reduced`, invariati).
     const minCorrelation = Math.min(...adjacentCorrelations(reduced));
     const worstMidMorphLoss = Math.min(...midMorphRmsLosses(reduced));

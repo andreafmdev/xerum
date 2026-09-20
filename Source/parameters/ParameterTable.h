@@ -16,7 +16,7 @@ struct Spec
     const char* const* options; int numOptions;
 };
 
-inline constexpr const char* const kOptions_wtIndex[] = { "Basic Shapes", "Analog Saws", "Digital Grit", "Vocal Formant", "Glass Bells", "PWM Sweep", "Retro Racing", "Retro Spindizzy", "Retro GG Sisters", "Retro Commando", "Retro Uridium Pad", "Retro Leaderboard", "Retro Uridium" };
+inline constexpr const char* const kOptions_wtIndex[] = { "Basic Shapes", "Analog Saws", "Digital Grit", "Vocal Formant", "Glass Bells", "PWM Sweep", "Retro Racing", "Retro GG Sisters", "Retro Commando", "Retro Uridium Pad", "Retro Leaderboard" };
 inline constexpr const char* const kOptions_unison[] = { "1", "2", "4", "8" };
 inline constexpr const char* const kOptions_ftype[] = { "LP", "HP", "BP" };
 inline constexpr const char* const kOptions_slope[] = { "12", "24" };
@@ -24,7 +24,7 @@ inline constexpr const char* const kOptions_voiceMode[] = { "Poly", "Mono", "Leg
 inline constexpr const char* const kOptions_lshape[] = { "Sine", "Tri", "Saw", "Square", "S&H" };
 inline constexpr const char* const kOptions_arpMode[] = { "Up", "Down", "UpDn", "Rand" };
 inline constexpr const char* const kOptions_fxOrder[] = { "Cho→Dly→Rev", "Dly→Cho→Rev", "Cho→Rev→Dly" };
-inline constexpr const char* const kOptionValues_wtIndex[] = { "basic", "saws", "grit", "vocal", "bells", "pwm", "retro-racing", "retro-spindizzy", "retro-ggsisters", "retro-commando", "retro-uridium-pad", "retro-leaderboard", "retro-uridium" };
+inline constexpr const char* const kOptionValues_wtIndex[] = { "basic", "saws", "grit", "vocal", "bells", "pwm", "retro-racing", "retro-ggsisters", "retro-commando", "retro-uridium-pad", "retro-leaderboard" };
 inline constexpr const char* const kOptionValues_unison[] = { "1", "2", "4", "8" };
 inline constexpr const char* const kOptionValues_ftype[] = { "LP", "HP", "BP" };
 inline constexpr const char* const kOptionValues_slope[] = { "12", "24" };
@@ -36,7 +36,7 @@ inline constexpr const char* const kOptionValues_fxOrder[] = { "cdr", "dcr", "cr
 inline constexpr int kNumParams = 64;
 inline constexpr Spec kTable[kNumParams] = {
     { "oscOn", "Oscillator on", "osc", Kind::Bool, Map::None, 0.0f, 1.0f, 0.0f, 1.0f, nullptr, 0, Label::None, nullptr, 0 },
-    { "wtIndex", "Wavetable", "osc", Kind::Choice, Map::None, 0.0f, 1.0f, 0.0f, 0.0f, nullptr, 0, Label::None, kOptions_wtIndex, 13 },
+    { "wtIndex", "Wavetable", "osc", Kind::Choice, Map::None, 0.0f, 1.0f, 0.0f, 0.0f, nullptr, 0, Label::None, kOptions_wtIndex, 11 },
     { "unison", "Unison", "osc", Kind::Choice, Map::None, 0.0f, 1.0f, 0.0f, 0.0f, nullptr, 0, Label::None, kOptions_unison, 4 },
     { "oct", "Octave", "osc", Kind::Int, Map::Linear, -3.0f, 3.0f, 0.0f, 0.0f, "OCT", 0, Label::None, nullptr, 0 },
     { "semi", "Semitones", "osc", Kind::Int, Map::Linear, -12.0f, 12.0f, 0.0f, 0.0f, "SEMI", 0, Label::None, nullptr, 0 },

@@ -28,8 +28,8 @@ std::unique_ptr<MipTable> buildMipTable (const BlobView& blob);
  * di compilazione, nome per nome (`value` + ".xwt").
  */
 inline constexpr const char* const kWavetableFiles[] = { "basic.xwt", "saws.xwt", "grit.xwt", "vocal.xwt", "bells.xwt", "pwm.xwt",
-                                                         "retro-racing.xwt", "retro-spindizzy.xwt", "retro-ggsisters.xwt", "retro-commando.xwt",
-                                                         "retro-uridium-pad.xwt", "retro-leaderboard.xwt", "retro-uridium.xwt" };
+                                                         "retro-racing.xwt", "retro-ggsisters.xwt", "retro-commando.xwt",
+                                                         "retro-uridium-pad.xwt", "retro-leaderboard.xwt" };
 
 class WavetableStore
 {
