@@ -10,7 +10,7 @@ import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { framesFromStream, parseFxp, splitZlibStreams, SERUM_FRAME_SIZE } from "./serum-fxp.mjs";
-import { encodeXwt, normaliseTable, selectFrames } from "./wavetable-dsp.mjs";
+import { adjacentCorrelations, encodeXwt, midMorphRmsLosses, normaliseTable, selectFrames } from "./wavetable-dsp.mjs";
 
 /** I 64 frame che Xerum si aspetta in ogni .xwt. */
 const TARGET_FRAMES = 64;
@@ -103,10 +103,21 @@ function main(argv) {
     const reduced = normaliseTable(selectFrames(frames, TARGET_FRAMES));
     const after = { frames: reduced.length, peak: peakOf(reduced), rms: rmsOf(reduced) };
 
+    // Picco e RMS sono globali: non possono mostrare una cancellazione che avviene a meta'
+    // crossfade fra due frame vicini, perche' quei due numeri si fanno su tutta la tavola.
+    // La correlazione minima e la peggiore perdita RMS a meta' morph sono la verifica per
+    // frame adiacente che la spec chiedeva al punto 8, a giustificare la scelta di non
+    // riallineare le fasi di queste sette tavole (solo diagnostica: i dati scritti nel .xwt
+    // restano quelli di `reduced`, invariati).
+    const minCorrelation = Math.min(...adjacentCorrelations(reduced));
+    const worstMidMorphLoss = Math.min(...midMorphRmsLosses(reduced));
+
     console.log(
       `  ${slug} (${sha1}): ${before.frames} → ${after.frames} frame, ` +
         `picco ${before.peak.toFixed(3)} → ${after.peak.toFixed(3)}, ` +
         `rms ${before.rms.toFixed(3)} → ${after.rms.toFixed(3)}, ` +
+        `correlazione minima fra frame adiacenti ${minCorrelation.toFixed(3)}, ` +
+        `peggiore perdita RMS a meta' morph ${worstMidMorphLoss.toFixed(2)} dB, ` +
         `da ${sources.length} preset (${sources[0]})`,
     );
 

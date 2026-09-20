@@ -47,6 +47,13 @@ test("parseFxp rifiuta un chunk piu' lungo del file", () => {
   assert.throws(() => parseFxp(makeFxp({ chunk: Buffer.from("ab"), declaredLen: 9999 })), /troncato/);
 });
 
+test("parseFxp rifiuta un chunk dichiarato a zero byte con un messaggio che non parla di troncamento", () => {
+  assert.throws(
+    () => parseFxp(makeFxp({ chunk: Buffer.alloc(0), declaredLen: 0 })),
+    (err) => /0 byte/.test(err.message) && !/troncato/.test(err.message),
+  );
+});
+
 test("splitZlibStreams separa gli stream concatenati e ignora la coda", () => {
   const a = deflateSync(Buffer.from("stato"));
   const b = deflateSync(rampStream(2));

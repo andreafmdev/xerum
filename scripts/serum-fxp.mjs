@@ -17,7 +17,8 @@ export function parseFxp(buffer) {
   if (pluginId !== SERUM_PLUGIN_ID) throw new Error(`plugin "${pluginId}", atteso "${SERUM_PLUGIN_ID}" (Serum)`);
 
   const chunkLength = buffer.readUInt32BE(56);
-  if (chunkLength <= 0 || 60 + chunkLength > buffer.length)
+  if (chunkLength <= 0) throw new Error(`chunk dichiarato ${chunkLength} byte: non c'e' nessuna wavetable da leggere`);
+  if (60 + chunkLength > buffer.length)
     throw new Error(`chunk dichiarato ${chunkLength} byte ma il file e' troncato (${buffer.length - 60} disponibili)`);
 
   return {
