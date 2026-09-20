@@ -313,6 +313,34 @@ It costs brightness, deliberately: the effective harmonic count is `maxHarmonics
 
 **Loading and lifecycle** (`dsp::WavetableStore`): tables are embedded at build time via `juce_add_binary_data(WavetableAssets ... HEADER_NAME WavetableData.h)` — the explicit header name avoids colliding with the `WebUIAssets` target, which already generates its own `BinaryData.h` for the web-bundle embed. `WavetableStore::lookupBlob` copies each embedded blob into an aligned buffer before parsing it, because JUCE's generated resource arrays give no alignment guarantee and `parseXwt` refuses a misaligned pointer. Built `MipTable`s are never freed: the audio thread reads `WavetableStore::active()` (an atomic pointer) at any time, so their memory must outlive every possible concurrent read. `PluginProcessor::prepareToPlay` and its 25 Hz timer (`kWavetablePollHz`) both call `WavetableStore::setActive` and are serialised by `PluginProcessor::wavetableLock_` (a `juce::CriticalSection`), never taken on the audio thread. The pointer itself reaches the audio thread through a single-slot atomic mailbox, `SynthEngine::setPendingWavetable`, drained once per block inside `SynthEngine::process`: handing it to the voices directly from the message thread would race with the audio thread reading the oscillator's plain (non-atomic) fields.
 
+### Da dove vengono le tavole, e come se ne aggiunge una
+
+Due sorgenti, una sola strada. Le sei tavole originali nascono dalle famiglie AKWF con
+`scripts/fetch-wavetables.mjs`; le sette `retro-*` vengono dalle wavetable custom incorporate
+nei preset Serum del pack *Retro Synthwave Pack 2*, estratte da
+`scripts/import-serum-wavetables.mjs`. Entrambi gli script scrivono un `.xwt` — 64 frame da
+2048 campioni, float32 — in `Resources/wavetables`, che `file(GLOB CONFIGURE_DEPENDS)`
+raccoglie e `juce_add_binary_data` compila nel target `WavetableAssets`.
+
+Aggiungere una tavola vuol dire quattro cose, e la quarta è la sola che si dimentica:
+
+1. scrivere il `.xwt` in `Resources/wavetables`;
+2. aggiungere l'opzione in coda a `wtIndex` in `Source/parameters/parameters.json`, col
+   `value` uguale al nome del file senza estensione;
+3. aggiungere la voce in coda a `kWavetableFiles` in `Source/dsp/WavetableStore.h`, nella
+   stessa posizione — lo `static_assert` in `Source/engine/ParamCollect.h` non compila se le due
+   liste divergono;
+4. rigenerare le anteprime della WebUI con `node scripts/build-wavetable-previews.mjs`,
+   altrimenti lo schermo continua a disegnare la tavola vecchia a quell'indice.
+
+Nessuna tavola si carica da disco a runtime: `WavetableStore` legge solo da `WavetableAssets`.
+
+I preset di fabbrica non contengono l'indice della tavola ma il suo nome
+(`"wtIndex": "retro-racing"` in `Source/parameters/presets.json`): un choice si normalizza
+`indice / (numOpzioni - 1)`, e senza il nome ogni aggiunta di tavola ripunterebbe in silenzio
+tutti i preset già scritti. `scripts/gen-params.mjs` risolve il nome e fallisce la
+generazione se non esiste.
+
 ## Presets
 
 `Source/parameters/presets.json` is the single source of truth for the twelve factory presets. `scripts/gen-params.mjs` reads it, together with `parameters.json`, and emits four generated files: `Source/parameters/ParameterTable.h`, `WebUI/src/synth/params.generated.ts`, `Source/parameters/PresetTable.h`, `WebUI/src/synth/presets.generated.ts`.

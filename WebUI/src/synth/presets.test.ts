@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { PRESETS, CATEGORIES, filterPresets, step } from "./presets";
+import { PRESETS, CATEGORIES, filterPresets, presetWave, step } from "./presets";
 import { PARAM_SPECS, type ParamId } from "./params.generated";
+import { WAVETABLES } from "./wavetables.generated";
 
 describe("presets", () => {
   it("ships the catalogue", () => {
@@ -29,5 +30,16 @@ describe("presets", () => {
         expect(value).toBeLessThanOrEqual(1);
       }
     }
+  });
+
+  it("presetWave porta la tavola del preset", () => {
+    const withTable = PRESETS.find((p) => p.values.wtIndex !== undefined)!;
+    const { frames } = presetWave(withTable);
+    expect(frames).toBe(WAVETABLES[Math.round(withTable.values.wtIndex! * (WAVETABLES.length - 1))]!.frames);
+  });
+
+  it("un preset che non tocca wtIndex prende la tavola di default", () => {
+    const init = PRESETS.find((p) => p.name === "Init")!;
+    expect(presetWave(init).frames).toBe(WAVETABLES[0]!.frames);
   });
 });

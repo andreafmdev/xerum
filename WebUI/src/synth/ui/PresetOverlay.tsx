@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@xerum/ui";
 import { Search, X } from "lucide-react";
 import { canvas2d, cssColor } from "../canvas";
-import { sampleWave } from "../curves";
+import { tableSample } from "../curves";
 import { AUTHOR, BANK, CATEGORIES, DESCRIPTIONS, filterPresets, presetWave, PRESETS, type Preset } from "../presets";
 import { Logo } from "./Header";
 
@@ -75,7 +75,7 @@ export function PresetOverlay({ current, onPick, onClose }: Props) {
                 className={`sx-card relative flex flex-col gap-1.5 rounded-[10px] bg-linear-to-b from-surface-2 to-surface-1 p-2 text-left shadow-panel transition-transform hover:-translate-y-px ${selected ? "shadow-[var(--shadow-panel),inset_0_0_0_1px_color-mix(in_oklch,var(--color-osc)_60%,transparent),0_0_16px_color-mix(in_oklch,var(--color-osc)_25%,transparent)]" : ""}`}
               >
                 <div className="sx-wv relative h-16 overflow-hidden rounded-control bg-well shadow-well">
-                  <MiniWave pos={w.pos} warp={w.warp} />
+                  <MiniWave pos={w.pos} warp={w.warp} frames={w.frames} />
                 </div>
                 <div className="text-xs font-semibold tracking-[0.01em] text-foreground">
                   {p.name}
@@ -92,7 +92,7 @@ export function PresetOverlay({ current, onPick, onClose }: Props) {
 
         <div className="sx-prev relative flex flex-col gap-2.5 rounded-lg bg-linear-to-b from-surface-2 to-surface-1 p-3 shadow-panel">
           <div className="sx-wv relative h-30 overflow-hidden rounded-control bg-well shadow-well">
-            <MiniWave pos={selWave.pos} warp={selWave.warp} />
+            <MiniWave pos={selWave.pos} warp={selWave.warp} frames={selWave.frames} />
           </div>
           <h4 data-testid="preset-preview-name" className="m-0 text-[15px] font-semibold tracking-[0.01em]">{sel.name}</h4>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-2xs text-muted-foreground">
@@ -120,7 +120,7 @@ export function PresetOverlay({ current, onPick, onClose }: Props) {
 const MINI_FRAMES = 8;
 
 /** Miniatura dell'onda: la pila di frame dello schermo principale, in piccolo e senza spettro. */
-function MiniWave({ pos, warp }: { pos: number; warp: number }) {
+function MiniWave({ pos, warp, frames }: { pos: number; warp: number; frames: number[][] }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const cv = ref.current;
@@ -141,7 +141,7 @@ function MiniWave({ pos, warp }: { pos: number; warp: number }) {
       ctx.beginPath();
       for (let i = 0; i <= 96; i++) {
         const x = dx + (i / 96) * w;
-        const y = dy - sampleWave(p, i / 96, warp) * amp * (0.5 + 0.5 * near);
+        const y = dy - tableSample(frames, p, i / 96, warp) * amp * (0.5 + 0.5 * near);
         if (i) ctx.lineTo(x, y);
         else ctx.moveTo(x, y);
       }
@@ -154,6 +154,6 @@ function MiniWave({ pos, warp }: { pos: number; warp: number }) {
     }
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
-  }, [pos, warp]);
+  }, [pos, warp, frames]);
   return <canvas ref={ref} aria-hidden className="absolute inset-0 size-full" />;
 }
