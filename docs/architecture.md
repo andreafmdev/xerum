@@ -280,13 +280,13 @@ A step's value is its **velocity**: 0 is off, anything above it is the level the
 
 ## Wavetables
 
-Six tables ship under `Resources/wavetables/*.xwt` — `basic`, `saws`, `grit`, `vocal`, `bells`, `pwm`, in the order of the `wtIndex` choice options in `Source/parameters/parameters.json` — sourced from **Adventure Kid Waveforms (AKWF)**, CC0-1.0, provenance tracked in `Resources/wavetables/CREDITS.md`. Regenerate them with:
+Thirteen tables ship under `Resources/wavetables/*.xwt`, in the order of the `wtIndex` choice options in `Source/parameters/parameters.json`, built by two different pipelines — see "Da dove vengono le tavole, e come se ne aggiunge una" below for the split and for adding one. The first six — `basic`, `saws`, `grit`, `vocal`, `bells`, `pwm` — are sourced from **Adventure Kid Waveforms (AKWF)**, CC0-1.0, provenance tracked in `Resources/wavetables/CREDITS.md`. Regenerate those six with:
 
     node scripts/fetch-wavetables.mjs
 
 This re-downloads the AKWF families from GitHub and overwrites the `.xwt` files and `CREDITS.md`. It runs rarely — the `.xwt` files are committed, and this only refreshes them from source. `scripts/realign-wavetables.mjs` runs the same treatment on the committed files without touching the network.
 
-**The pipeline is what makes Position a morph instead of a slideshow.** AKWF ships single-cycle waves that are individually peak-normalised and mutually unrelated in phase, so taking 64 of them and crossfading between neighbours produced comb filtering, not intermediate timbres. Measured on the shipped tables: adjacent-frame correlation as low as 0.299, and up to −4.6 dB of RMS lost halfway through a crossfade. The steps, in order, all in `scripts/wavetable-dsp.mjs`:
+**The pipeline is what makes Position a morph instead of a slideshow.** AKWF ships single-cycle waves that are individually peak-normalised and mutually unrelated in phase, so taking 64 of them and crossfading between neighbours produced comb filtering, not intermediate timbres. Measured on the six AKWF tables before the pipeline: adjacent-frame correlation as low as 0.299, and up to −4.6 dB of RMS lost halfway through a crossfade. The steps, in order, all in `scripts/wavetable-dsp.mjs`:
 
 1. **Resample** each cycle to 2048 samples through its Fourier series — exact for a periodic signal, where linear interpolation would invent harmonics.
 2. **Phase-align** each frame to its predecessor by the circular shift that maximises cross-correlation (computed by FFT). A circular shift of a single cycle is a pure phase offset: the amplitude spectrum is untouched, so this step costs nothing in timbre. Asserted in `scripts/wavetable-dsp.test.mjs`.
