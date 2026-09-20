@@ -23,6 +23,7 @@
     "@juce-framework/webview": "link:../external/JUCE/modules/juce_gui_extra/native/typescript/webview-interop",
     "@xerum/ui": "workspace:*",
     "lucide-react": "^1.47.0",
+    "motion": "^13.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

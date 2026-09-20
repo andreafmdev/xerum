@@ -1,3 +1,4 @@
+import { LazyMotion, domAnimation } from "motion/react";
 import { SynthWindow, type SynthVariant } from "./synth/ui/SynthWindow";
 import type { TabId } from "./synth/useSynth";
 
@@ -20,10 +21,14 @@ function gutterFromQuery(fallback: number) {
 
 export default function App() {
   return (
-    <SynthWindow
-      variant={fromQuery("variant", VARIANTS, "glass")}
-      initialTab={fromQuery("tab", TABS, "env")}
-      gutter={gutterFromQuery(16)}
-    />
+    // `strict` fa fallire ogni `motion.*`: obbliga `m.*` e tiene il bundle sul solo
+    // `domAnimation`, che di suo non contiene le layout animations (vietate dalla spec).
+    <LazyMotion features={domAnimation} strict>
+      <SynthWindow
+        variant={fromQuery("variant", VARIANTS, "glass")}
+        initialTab={fromQuery("tab", TABS, "env")}
+        gutter={gutterFromQuery(16)}
+      />
+    </LazyMotion>
   );
 }
