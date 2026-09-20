@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findViolations } from "./check-motion.mjs";
+import { findViolations, isDeroga, repoRelativePath } from "./check-motion.mjs";
 
 const rules = (text, path = "a.tsx") => findViolations([{ path, text }]).map((v) => v.rule);
 
@@ -182,6 +182,30 @@ test("still flags a raw duration outside the ambient-loop-block", () => {
     ".sy { animation: pulse 999ms; }",
   ].join("\n");
   assert.deepEqual(rules(text, "synth.css"), ["hardcoded-css-duration"]);
+});
+
+// --- Fix round 1 / Finding 1: le deroghe devono essere per path, non per basename -------------
+// La regressione reale: WebUI/src/synth/ui/Tabs.tsx (grandfathered, ha duration-100 a riga 331)
+// e WebUI/packages/ui/src/components/Tabs/Tabs.tsx (il file toccato dal Task 6) condividono il
+// solo basename "Tabs.tsx". Un matching per basename copre entrambi in silenzio; uno per path
+// copre esattamente il file grandfathered.
+
+test("exempts the real grandfathered file by its full path", () => {
+  assert.equal(isDeroga("WebUI/src/synth/ui/Tabs.tsx"), true);
+});
+
+test("does NOT exempt a same-named file in a different directory (the case that was silently broken)", () => {
+  assert.equal(isDeroga("WebUI/packages/ui/src/components/Tabs/Tabs.tsx"), false);
+});
+
+test("does NOT exempt a same-named file elsewhere for a permanent exemption either", () => {
+  assert.equal(isDeroga("WebUI/packages/ui/src/components/ui/select.tsx"), true);
+  assert.equal(isDeroga("WebUI/src/some/other/select.tsx"), false);
+});
+
+test("repoRelativePath normalizes to a POSIX path relative to the repo root", () => {
+  const abs = new URL("../WebUI/packages/ui/src/motion.ts", import.meta.url).pathname;
+  assert.equal(repoRelativePath(abs), "WebUI/packages/ui/src/motion.ts");
 });
 
 test("does not treat an unrelated custom-property indirection as a licensed exemption", () => {

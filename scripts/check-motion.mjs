@@ -3,7 +3,16 @@
 // whitelist delle proprietà animabili, divieto di layout animations, durate solo dai token.
 import { readFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
-import { join, resolve, extname } from "node:path";
+import { join, resolve, relative, extname, sep } from "node:path";
+
+// Radice del repo, per trasformare un path assoluto in un path relativo stabile (POSIX, quindi
+// identico su ogni SO) da confrontare con le deroghe sotto. Prima le deroghe confrontavano il
+// solo basename (e.name in collect()): due file con lo stesso nome in cartelle diverse
+// condividevano la stessa deroga in silenzio (è successo davvero con Tabs.tsx, vedi sotto).
+const REPO_ROOT = resolve(import.meta.dirname, "..");
+export function repoRelativePath(path) {
+  return relative(REPO_ROOT, path).split(sep).join("/");
+}
 
 // ---- Regole valutate riga per riga: non richiedono di guardare oltre la riga corrente. -------
 const LINE_RULES = [
@@ -135,22 +144,38 @@ export function findViolations(files) {
 }
 
 const EXT = new Set([".ts", ".tsx", ".css"]);
-// Deroghe permanenti: motion.ts è la sorgente delle durate, theme.css la loro copia CSS.
-// select.tsx è una primitiva shadcn vendorizzata che viene rigenerata dal CLI shadcn:
+// Deroghe permanenti, un path per riga: motion.ts è la sorgente delle durate, theme.css la loro
+// copia CSS. select.tsx è una primitiva shadcn vendorizzata che viene rigenerata dal CLI shadcn:
 // non si modifica a mano, quindi non ha senso farla sistemare da una task del piano.
-const EXEMPT = new Set(["motion.ts", "theme.css", "select.tsx"]);
+//
+// Path completi dalla radice del repo, non bare basename: il matching per solo nome file
+// copriva silenziosamente OGNI file con quel nome in tutte le cartelle scandite, non solo
+// quello inteso. È il bug reale che ha reso `check:motion → ok` vero e privo di significato per
+// il diff del Task 6: WebUI/packages/ui/src/components/Tabs/Tabs.tsx (il file toccato dal task)
+// non è mai stato scansionato, perché condivideva il nome con WebUI/src/synth/ui/Tabs.tsx (il
+// file davvero grandfathered, che ha la violazione viva a riga 331) e la deroga sul basename
+// copriva entrambi. Una deroga ora nomina esattamente un file.
+const EXEMPT = new Set([
+  "WebUI/packages/ui/src/motion.ts",
+  "WebUI/packages/ui/src/theme.css",
+  "WebUI/packages/ui/src/components/ui/select.tsx",
+]);
 
-// Deroghe temporanee: spariscono con la task 10 del piano di motion. Tabs.tsx:331 ha ancora
-// la violazione live (duration-100); non è "già sistemata", solo grandfathered fino a quel
-// punto del piano, come PresetOverlay.tsx.
-const GRANDFATHERED = new Set(["Tabs.tsx", "PresetOverlay.tsx"]);
+// Deroghe temporanee: spariscono con la task 10 del piano di motion. Tabs.tsx:331 (quello sotto
+// WebUI/src/synth/ui/, NON la libreria @xerum/ui) ha ancora la violazione live (duration-100);
+// non è "già sistemata", solo grandfathered fino a quel punto del piano, come PresetOverlay.tsx.
+const GRANDFATHERED = new Set(["WebUI/src/synth/ui/Tabs.tsx", "WebUI/src/synth/ui/PresetOverlay.tsx"]);
+
+export function isDeroga(relPath) {
+  return EXEMPT.has(relPath) || GRANDFATHERED.has(relPath);
+}
 
 async function collect(dir, acc = []) {
   for (const e of await readdir(dir, { withFileTypes: true })) {
     if (e.name === "node_modules" || e.name === "dist") continue;
     const path = join(dir, e.name);
     if (e.isDirectory()) await collect(path, acc);
-    else if (EXT.has(extname(e.name)) && !EXEMPT.has(e.name) && !GRANDFATHERED.has(e.name)) {
+    else if (EXT.has(extname(e.name)) && !isDeroga(repoRelativePath(path))) {
       acc.push({ path, text: readFileSync(path, "utf8") });
     }
   }
