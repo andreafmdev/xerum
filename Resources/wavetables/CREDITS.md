@@ -78,13 +78,16 @@ opzioni in `parameters.json` e alle voci in `kWavetableFiles`.
 ### Due tavole riallineate, e restano le più deboli della dotazione
 
 Misurate con gli strumenti di `scripts/wavetable-dsp.mjs` (le stesse sei metriche della
-pipeline AKWF sopra), tre delle cinque tavole spedite reggono il morph senza alcun
-trattamento — `retro-racing` (correlazione minima 0.953, peggiore perdita a metà morph
--0.10 dB; la sua escursione RMS di 17.94 dB è stata guardata e lasciata così di proposito),
-`retro-ggsisters` (0.996, -0.01 dB) e `retro-leaderboard` (0.627, -0.87 dB). Le altre due no:
-`retro-commando` arrivava con frame adiacenti in **antifase** (correlazione minima -0.225,
-peggiore perdita a metà morph -4.11 dB) e `retro-uridium-pad` di fatto scorrelata (0.013,
--2.95 dB).
+pipeline AKWF sopra), due delle cinque tavole spedite reggono il morph con margine, senza
+alcun trattamento — `retro-ggsisters` (correlazione minima 0.996, peggiore perdita a metà
+morph -0.01 dB) e `retro-racing` (0.953, -0.10 dB; la sua escursione RMS di 17.94 dB è stata
+guardata e lasciata così di proposito). `retro-leaderboard` (0.627, -0.87 dB) è al limite:
+la sua perdita a metà morph resta appena sotto la soglia che le sei tavole AKWF rispettano
+(-0.81 dB, vedi sotto); non è stata trattata perché il margine mancante è piccolo, a
+differenza delle due tavole seguenti, che partivano molto più sotto quella soglia. Le
+restanti due no: `retro-commando` arrivava con frame adiacenti in **antifase** (correlazione
+minima -0.225, peggiore perdita a metà morph -4.11 dB) e `retro-uridium-pad` di fatto
+scorrelata (0.013, -2.95 dB).
 
 Per queste due si è applicato il riallineamento con la stessa pipeline delle sei tavole AKWF
 sopra — allineamento di fase, continuità di fase per armonica, equalizzazione parziale
