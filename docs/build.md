@@ -2,7 +2,7 @@
 
 ## Prerequisites (macOS)
 
-- Xcode (Command Line Tools / full IDE)
+- Xcode (Command Line Tools / full IDE), recent enough for C++23 — Apple clang 16 or newer
 - CMake ≥ 3.22 (`brew install cmake`)
 - Node.js 18+ (for `WebUI`)
 - Git submodule for JUCE:
@@ -12,6 +12,14 @@ git submodule update --init --recursive
 ```
 
 JUCE is pinned under `external/JUCE` (tag `9.0.2`).
+
+The project builds as **C++23** (`CMAKE_CXX_STANDARD 23`). JUCE 9 declares `cxx_std_17` as an
+INTERFACE feature — a floor for consumers, not a ceiling — so raising the standard does not
+violate it. Clean builds of every target at 17, 20 and 23 produced the same passing tests and the
+same ten warnings, with none added. The thing to watch is the standard library rather than the
+compiler: Apple clang implements the C++23 language, but libc++ lags on parts of the library. A
+missing C++23 header or function is that lag, not a misconfiguration — work around it rather than
+lowering the standard.
 
 ## One command
 

@@ -3,7 +3,15 @@ cmake_minimum_required(VERSION 3.22)
 
 project(SerumStyleSynth VERSION 0.1.0)
 
-set(CMAKE_CXX_STANDARD 17)
+# C++23. JUCE 9 chiede cxx_std_17 come INTERFACE, cioe' un minimo per chi lo consuma e non un
+# tetto: alzare lo standard non lo viola. Misurato prima di adottarlo, con build pulite di tutti i
+# target a 17, 20 e 23: stessi test verdi e lo stesso identico insieme di dieci warning, zero nuovi.
+#
+# Il punto da tenere d'occhio e' la libreria standard, non il compilatore: Apple clang regge il
+# linguaggio C++23, ma libc++ e' indietro su parti della libreria. Se un <header> o una funzione
+# C++23 risulta assente, e' quello il motivo, e la risposta e' non usarla — non tornare indietro
+# con lo standard.
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 

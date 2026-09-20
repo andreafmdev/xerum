@@ -1,6 +1,6 @@
 # SerumStyleSynth
 
-Wavetable-oriented synth scaffold (Serum-inspired architecture) on **JUCE 9** + CMake.
+Wavetable-oriented synth scaffold (Serum-inspired architecture) on **JUCE 9** + CMake, built as **C++23**.
 
 Phase 1: builds as AU / VST3 / Standalone, MIDI → voice pool → silence, React WebView shell.
 
