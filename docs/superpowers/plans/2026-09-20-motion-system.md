@@ -14,7 +14,7 @@
 
 - **Whitelist di proprietà animabili:** `transform`, `opacity`, `filter: brightness()/saturate()`, custom properties consumate da `color-mix`. Vietati: `backdrop-filter`, raggio di `blur()`, `box-shadow` con `spread` variabile, `width`, `height`, `top`, `left`, `grid-template-rows`.
 - **Vietate le layout animations:** nessun `layout` o `layoutId`, nessun import di `motion.` (solo `m.`).
-- **Nessuna durata in millisecondi scritta a mano** fuori da `packages/ui/src/motion.ts`. Nel markup si usa `duration-(--dur-press|state|layer|scene)`.
+- **Nessuna durata in millisecondi scritta a mano** fuori da `packages/ui/src/motion.ts`, dal suo specchio in `theme.css` e dal blocco di override per variante in `WebUI/src/synth/ui/synth.css`. Nel markup si usa `duration-(--dur-press|state|layer|scene)`. La regola dei valori unici vieta due copie dello stesso valore; una durata per variante è un valore nuovo, non una copia. La regola `hardcoded-duration` di `check:motion` sorveglia le utility Tailwind (`duration-150`), non le dichiarazioni di custom property.
 - **Asimmetria glass:** uscita = entrata × 0.6. Due eccezioni deliberate: la pressione di un tasto (discesa istantanea, risalita in `--dur-press`) e lo spegnimento di un LED (accensione `--dur-press`, spegnimento `--dur-state`).
 - **`@xerum/ui` non dipende da `motion`.** La libreria resta CSS puro; `motion` è dipendenza del solo pacchetto `xerum-webui`.
 - **Mai animare durante il drag di un controllo continuo:** `[data-dragging=true]` impone `transition-none`.

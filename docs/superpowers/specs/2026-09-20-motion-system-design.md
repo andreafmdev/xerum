@@ -64,6 +64,8 @@ export const T = {
 
 Come già per i colori, `.sx-chassis[data-variant]` ridefinisce i token: `glass` usa `--ease-glass` e durate piene, `metal` accorcia su `--ease-snap`, `soft`/`deep`/`glow` stanno in mezzo. Una primitiva di `@xerum/ui` non sa in che chassis vive: legge i token.
 
+Questo blocco è l'unico punto, oltre a `motion.ts` e al suo specchio in `theme.css`, dove una durata in millisecondi può essere scritta a mano. La regola del valore unico esiste per impedire che **lo stesso** valore viva in due copie che divergono; una durata per variante non è una copia, è un valore nuovo, e appartiene alla tuning di materiale accanto agli override di colore che le stanno già intorno. Fuori da quel blocco la regola vale intera.
+
 ### Runtime
 
 `App.tsx` monta `<LazyMotion features={domAnimation} strict>`. `strict` fa fallire a runtime ogni `motion.div`, obbligando `m.div`; `domAnimation` esclude di suo le layout animations. Il divieto della sezione "Non obiettivi" è quindi imposto dal bundle, non dalla disciplina. Peso atteso nell'ordine di 15-20 kB gzip contro i ~34 del bundle pieno; il numero vero si misura in implementazione e finisce nel piano.
