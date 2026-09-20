@@ -22,14 +22,28 @@ export const DESCRIPTIONS: Record<string, string> = {
   User: "Patch iniziale: oscillatore singolo, filtro aperto, nessun effetto.",
 };
 
+/** Il `value` dell'opzione di wtIndex che un normalizzato 0..1 seleziona: stessa aritmetica
+    indice/(numOpzioni-1) di gen-params.mjs, ma sul numero di opzioni dello spec, non su
+    WAVETABLES.length. Se le anteprime non sono state rigenerate dopo un'aggiunta a
+    parameters.json, WAVETABLES resta indietro: cercare per value (come fa WaveDisplay) invece
+    di ricalcolare l'indice su un array piu' corto e' cio' che evita di disegnare, in silenzio,
+    la tavola sbagliata. */
+function wavetableValueOf(wt: number): string | undefined {
+  const options = PARAM_SPECS.wtIndex.options ?? [];
+  if (options.length === 0) return undefined;
+  const index = options.length === 1 ? 0 : Math.round(wt * (options.length - 1));
+  return options[index]?.value;
+}
+
 /** Posizione, warp e tavola con cui disegnare la miniatura dell'onda: i valori del preset, o i
     default di spec per cio' che il preset non tocca (Init non tocca niente). */
 export function presetWave(p: Preset): { pos: number; warp: number; frames: number[][] } {
   const wt = p.values.wtIndex ?? defaultNormalised(PARAM_SPECS.wtIndex);
+  const value = wavetableValueOf(wt);
   return {
     pos: p.values.wtpos ?? defaultNormalised(PARAM_SPECS.wtpos),
     warp: p.values.warp ?? defaultNormalised(PARAM_SPECS.warp),
-    frames: (WAVETABLES[Math.round(wt * (WAVETABLES.length - 1))] ?? WAVETABLES[0]!).frames,
+    frames: (WAVETABLES.find((w) => w.value === value) ?? WAVETABLES[0]!).frames,
   };
 }
 

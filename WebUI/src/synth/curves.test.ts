@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { tableSample, filterPath, envPath, lfoPath, spectrum } from "./curves";
+import { WAVETABLES } from "./wavetables.generated";
 
 /** Due frame piatti a -1 e +1: ogni valore letto dice da solo dove si trova. */
 const flat: number[][] = [
@@ -36,6 +37,18 @@ describe("tableSample", () => {
         expect(s).toBeGreaterThanOrEqual(-1.001);
         expect(s).toBeLessThanOrEqual(1.001);
       }
+  });
+});
+
+describe("tableSample su tavole vere", () => {
+  it("disegna tavole diverse per wtIndex diversi", () => {
+    // Era in SynthWindow.test.tsx, ma non renderizza ne' SynthWindow ne' WaveDisplay: e' un
+    // confronto fra due tavole di wavetables.generated.ts letto da tableSample, non un test di
+    // rendering. Appartiene qui, dove sta il resto di tableSample.
+    const a = WAVETABLES.find((w) => w.value === "basic")!.frames;
+    const b = WAVETABLES.find((w) => w.value === "retro-racing")!.frames;
+    const differs = Array.from({ length: 64 }, (_, i) => Math.abs(tableSample(a, 0.5, i / 64, 0) - tableSample(b, 0.5, i / 64, 0)));
+    expect(Math.max(...differs)).toBeGreaterThan(0.05);
   });
 });
 
@@ -78,6 +91,13 @@ describe("spectrum", () => {
 
   it("una tavola piatta non ha armoniche", () => {
     expect(spectrum(flat, 0, 0, 1, 8).every((m) => m < 1e-6)).toBe(true);
+  });
+
+  it("una tavola non piatta ha almeno un'armonica non nulla", () => {
+    // I tre test sopra passerebbero anche se `spectrum` tornasse sempre zero: `>= 0` e
+    // `< 1e-6` sono veri per lo zero, e `0 ≈ 0/2` anche. Questo e' l'unico che fallirebbe.
+    const s = spectrum(ramp, 0, 0, 1, 8);
+    expect(Math.max(...s)).toBeGreaterThan(0);
   });
 });
 

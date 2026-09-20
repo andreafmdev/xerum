@@ -266,13 +266,4 @@ describe("SynthWindow on the bridge", () => {
     expect(screen.getByRole("button", { name: /Acid Line$/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /\*/ })).not.toBeInTheDocument();
   });
-
-  it("disegna tavole diverse per wtIndex diversi", async () => {
-    const { WAVETABLES } = await import("../wavetables.generated");
-    const { tableSample } = await import("../curves");
-    const a = WAVETABLES.find((w) => w.value === "basic")!.frames;
-    const b = WAVETABLES.find((w) => w.value === "retro-racing")!.frames;
-    const differs = Array.from({ length: 64 }, (_, i) => Math.abs(tableSample(a, 0.5, i / 64, 0) - tableSample(b, 0.5, i / 64, 0)));
-    expect(Math.max(...differs)).toBeGreaterThan(0.05);
-  });
 });

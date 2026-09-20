@@ -32,10 +32,14 @@ describe("presets", () => {
     }
   });
 
-  it("presetWave porta la tavola del preset", () => {
-    const withTable = PRESETS.find((p) => p.values.wtIndex !== undefined)!;
-    const { frames } = presetWave(withTable);
-    expect(frames).toBe(WAVETABLES[Math.round(withTable.values.wtIndex! * (WAVETABLES.length - 1))]!.frames);
+  it("presetWave porta la tavola del preset, cercata per nome e non per aritmetica d'indice", () => {
+    // Non la formula dell'implementazione riscritta qui (sarebbe tautologico: rileverebbe
+    // solo se le due copie della stessa aritmetica divergessero fra loro, mai se fossero
+    // sbagliate insieme). "Sub Pulse" ha "wtIndex": "pwm" in presets.json: la tavola attesa
+    // e' quella con value "pwm", nome per nome.
+    const subPulse = PRESETS.find((p) => p.name === "Sub Pulse")!;
+    expect(subPulse.values.wtIndex).toBeDefined();
+    expect(presetWave(subPulse).frames).toBe(WAVETABLES.find((w) => w.value === "pwm")!.frames);
   });
 
   it("un preset che non tocca wtIndex prende la tavola di default", () => {
