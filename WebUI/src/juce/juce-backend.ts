@@ -89,11 +89,6 @@ export async function createJuceBackend(): Promise<Backend> {
   const onStateChanged = fanOut<BridgeState & { origin: string }>("stateChanged");
   const onMeters = fanOut<MeterFrame>("meters");
 
-  const noteOnFn = call("noteOn");
-  const noteOffFn = call("noteOff");
-  const allNotesOffFn = call("allNotesOff");
-  const setWheelFn = call("setWheel");
-
   return {
     kind: "juce",
     param(id) {
@@ -114,9 +109,9 @@ export async function createJuceBackend(): Promise<Backend> {
     loadPreset: (index: number) => call("loadPreset")(index).then(() => {}),
     onStateChanged,
     onMeters,
-    async noteOn(note, velocity) { await noteOnFn(note, velocity); },
-    async noteOff(note) { await noteOffFn(note); },
-    async allNotesOff() { await allNotesOffFn(); },
-    async setWheel(kind, value) { await setWheelFn(kind, value); },
+    async noteOn(note, velocity) { await call("noteOn")(note, velocity); },
+    async noteOff(note) { await call("noteOff")(note); },
+    async allNotesOff() { await call("allNotesOff")(); },
+    async setWheel(kind, value) { await call("setWheel")(kind, value); },
   };
 }
