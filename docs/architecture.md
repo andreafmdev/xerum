@@ -280,7 +280,7 @@ A step's value is its **velocity**: 0 is off, anything above it is the level the
 
 ## Wavetables
 
-Thirteen tables ship under `Resources/wavetables/*.xwt`, in the order of the `wtIndex` choice options in `Source/parameters/parameters.json`, built by two different pipelines — see "Da dove vengono le tavole, e come se ne aggiunge una" below for the split and for adding one. The first six — `basic`, `saws`, `grit`, `vocal`, `bells`, `pwm` — are sourced from **Adventure Kid Waveforms (AKWF)**, CC0-1.0, provenance tracked in `Resources/wavetables/CREDITS.md`. Regenerate those six with:
+Eleven tables ship under `Resources/wavetables/*.xwt`, in the order of the `wtIndex` choice options in `Source/parameters/parameters.json`, built by two different pipelines — see "Da dove vengono le tavole, e come se ne aggiunge una" below for the split and for adding one. The first six — `basic`, `saws`, `grit`, `vocal`, `bells`, `pwm` — are sourced from **Adventure Kid Waveforms (AKWF)**, CC0-1.0, provenance tracked in `Resources/wavetables/CREDITS.md`. Regenerate those six with:
 
     node scripts/fetch-wavetables.mjs
 
@@ -309,25 +309,38 @@ It costs brightness, deliberately: the effective harmonic count is `maxHarmonics
 
 **The pyramid has to reach a single harmonic.** `kMaxLevel` is 10 because that is the first level that keeps exactly one harmonic on a 2048-sample frame — a plain sine. It is needed: at 12.5 kHz (MIDI 127) only the fundamental fits under Nyquist. The earlier value, 6, stopped the pyramid at 16 harmonics, so `levelForFrequency` had nothing narrower to pick for any note above ~1.4 kHz and every harmonic above Nyquist folded back. Measured against the harmonic energy of the note: −25 dB at MIDI 90, −17 dB at MIDI 96, −6 dB at MIDI 120 — more fold-back than note. With 11 levels the same measurement sits at −88 dB across the whole keyboard (`MipTable / nessun alias udibile su tutta l'estensione della tastiera`). The band-limiting loop also had an off-by-one — `bin < harmonics` instead of `bin <= harmonics` — which was invisible while the top level kept 16 harmonics but would have made the one-harmonic level silent.
 
-**Every level stays `frameSize` samples long.** The band limiting lives in the spectrum, not in the buffer length. An earlier version also decimated the length (`frameSize >> k` samples), which meant a note around A4 played a 64-sample table and anything higher a 32-sample one: at that length the oscillator's linear interpolation between adjacent samples adds far more distortion than the band limiting removes, and it was the single largest contributor to the instrument sounding bad. The cost is memory — `(kMaxLevel + 1) × frameSize` per frame instead of ≈ `2 × frameSize`, about 5.8 MB for a single 64 × 2048 table (11 levels × 2048 samples × 4 bytes × 64 frames = 5,767,168 bytes). Only one `MipTable` is *active* at a time, but built ones are never freed — see below, it is a deliberate policy, not an oversight — so a user who has cycled through all thirteen shipped tables is holding all thirteen at once: 13 × 5.8 MB ≈ 75.0 MB, not one. `buildMipTable` returns `nullptr` when a frame is shorter than 2^(`kMaxLevel` + 1) (2048) samples, because the top level would keep zero harmonics; the shipped tables are 2048 samples/frame, so this path never triggers on real material.
+**Every level stays `frameSize` samples long.** The band limiting lives in the spectrum, not in the buffer length. An earlier version also decimated the length (`frameSize >> k` samples), which meant a note around A4 played a 64-sample table and anything higher a 32-sample one: at that length the oscillator's linear interpolation between adjacent samples adds far more distortion than the band limiting removes, and it was the single largest contributor to the instrument sounding bad. The cost is memory — `(kMaxLevel + 1) × frameSize` per frame instead of ≈ `2 × frameSize`, about 5.8 MB for a single 64 × 2048 table (11 levels × 2048 samples × 4 bytes × 64 frames = 5,767,168 bytes). Only one `MipTable` is *active* at a time, but built ones are never freed — see below, it is a deliberate policy, not an oversight — so a user who has cycled through all eleven shipped tables is holding all eleven at once: 11 × 5.8 MB ≈ 63.4 MB, not one. `buildMipTable` returns `nullptr` when a frame is shorter than 2^(`kMaxLevel` + 1) (2048) samples, because the top level would keep zero harmonics; the shipped tables are 2048 samples/frame, so this path never triggers on real material.
 
 **Loading and lifecycle** (`dsp::WavetableStore`): tables are embedded at build time via `juce_add_binary_data(WavetableAssets ... HEADER_NAME WavetableData.h)` — the explicit header name avoids colliding with the `WebUIAssets` target, which already generates its own `BinaryData.h` for the web-bundle embed. `WavetableStore::lookupBlob` copies each embedded blob into an aligned buffer before parsing it, because JUCE's generated resource arrays give no alignment guarantee and `parseXwt` refuses a misaligned pointer. Built `MipTable`s are never freed: the audio thread reads `WavetableStore::active()` (an atomic pointer) at any time, so their memory must outlive every possible concurrent read. `PluginProcessor::prepareToPlay` and its 25 Hz timer (`kWavetablePollHz`) both call `WavetableStore::setActive` and are serialised by `PluginProcessor::wavetableLock_` (a `juce::CriticalSection`), never taken on the audio thread. The pointer itself reaches the audio thread through a single-slot atomic mailbox, `SynthEngine::setPendingWavetable`, drained once per block inside `SynthEngine::process`: handing it to the voices directly from the message thread would race with the audio thread reading the oscillator's plain (non-atomic) fields.
 
 ### Da dove vengono le tavole, e come se ne aggiunge una
 
 Due sorgenti, una sola strada. Le sei tavole originali nascono dalle famiglie AKWF con
-`scripts/fetch-wavetables.mjs`; le sette `retro-*` vengono dalle wavetable custom incorporate
+`scripts/fetch-wavetables.mjs`; le cinque `retro-*` vengono dalle wavetable custom incorporate
 nei preset Serum del pack *Retro Synthwave Pack 2*, estratte da
 `scripts/import-serum-wavetables.mjs`. Entrambi gli script scrivono un `.xwt` — 64 frame da
 2048 campioni, float32 — in `Resources/wavetables`, che `file(GLOB CONFIGURE_DEPENDS)`
 raccoglie e `juce_add_binary_data` compila nel target `WavetableAssets`.
 
-Le sette `retro-*` non passano dalla pipeline qui sopra: sono i frame di Serum ridotti a 64 e
-normalizzati con un solo fattore globale, ma senza allineamento di fase e senza equalizzazione
-dell'RMS (`scripts/import-serum-wavetables.mjs` stampa correlazione minima e peggiore perdita
-RMS a metà morph per ciascuna, solo in diagnostica). Non sono mai state misurate con la stessa
-pipeline delle sei AKWF, quindi non c'è un numero di perdita a metà morph da citare per loro
-accanto a quello di sopra.
+Il pack ne conteneva sette: `retro-spindizzy` e `retro-uridium` erano la stessa tavola di
+`retro-racing` e `retro-leaderboard` salvata due volte con arrotondamenti float diversi (non
+visibile alla deduplica per sha1 dello stream grezzo, che vede stream davvero diversi), e non
+si spediscono due volte — vedi `Resources/wavetables/CREDITS.md`.
+
+Delle cinque `retro-*` spedite, tre reggono il morph senza alcun trattamento (misurato con gli
+stessi strumenti della pipeline AKWF, `scripts/wavetable-dsp.mjs`): `retro-racing`
+(correlazione minima 0.953, peggiore perdita a metà morph -0.10 dB — la sua escursione RMS di
+17.94 dB è stata guardata e lasciata così di proposito), `retro-ggsisters` (0.996, -0.01 dB) e
+`retro-leaderboard` (0.627, -0.87 dB). Le altre due non reggevano: `retro-commando` aveva frame
+adiacenti in antifase (-0.225, -4.11 dB) e `retro-uridium-pad` era di fatto scorrelata (0.013,
+-2.95 dB). Per queste due si è tentata la stessa pipeline delle sei AKWF (allineamento di fase,
+continuità di fase per armonica, equalizzazione parziale dell'RMS — opt-in per tavola,
+`REALIGN_TABLES` in `scripts/import-serum-wavetables.mjs`), senza raggiungere il criterio di
+riuscita: dopo la pipeline `retro-commando` arriva a correlazione 0.290 ma perdita -1.90 dB,
+`retro-uridium-pad` a 0.352 ma -1.70 dB — entrambe vicine al limite che la sola fase non può
+superare (-1.88 dB e -1.66 dB, la distanza fra gli spettri di ampiezza dei frame adiacenti), che
+è un limite del materiale e non della pipeline. I due `.xwt` non sono stati toccati: dettagli e
+numeri completi in `Resources/wavetables/CREDITS.md`.
 
 Aggiungere una tavola vuol dire quattro cose, e la quarta è la sola che si dimentica:
 
