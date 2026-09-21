@@ -132,6 +132,30 @@ target_link_libraries(Xerum
         juce::juce_recommended_warning_flags
 )
 
+# --- Standalone: app nostra, finestra senza chrome -------------------------
+# Due file, due target diversi, e la divisione non e' arbitraria:
+#
+# XerumWindowMac.mm sta su Xerum (il codice condiviso da AU, VST3 e Standalone) perche' le
+# funzioni xerum::* che definisce sono chiamate dal bridge, che vive li'. Metterlo solo su
+# Xerum_Standalone lascerebbe AU e VST3 con riferimenti non risolti in fase di link.
+#
+# E' il primo .mm del progetto: CMake, con OBJCXX non abilitato da project(), lo lascia nella
+# lista di estensioni di CXX e clang lo compila come Objective-C++ in base all'estensione —
+# stesso trattamento che ricevono i .mm dei moduli JUCE.
+if(APPLE)
+    target_sources(Xerum PRIVATE Source/standalone/XerumWindowMac.mm)
+    target_link_libraries(Xerum PRIVATE "-framework Cocoa")
+endif()
+
+# L'app dello Standalone e' nostra: JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP spegne quella di JUCE
+# (juce_audio_plugin_client_Standalone.cpp:58) e al suo posto chiede un juce_CreateApplication().
+# Questo sorgente va sul target di formato, non su Xerum: e' quello a compilare il wrapper dello
+# Standalone, ed e' l'unico che definisce JucePlugin_Build_Standalone.
+if(TARGET Xerum_Standalone AND APPLE)
+    target_sources(Xerum_Standalone PRIVATE Source/standalone/XerumStandaloneApp.cpp)
+    target_compile_definitions(Xerum_Standalone PRIVATE JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
+endif()
+
 # --- Unit tests -----------------------------------------------------------
 # Console app: gira juce::UnitTestRunner su dsp/, engine/ e parameters/. Non tocca la UI ne'
 # l'host, quindi niente juce_gui_extra e niente WebView.
