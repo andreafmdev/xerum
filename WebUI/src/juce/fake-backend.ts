@@ -54,6 +54,13 @@ export class FakeBackend implements Backend {
   nextDragStarts = true;
   /** Per i test: la sequenza di spostamenti chiesti dal ripiego mousemove, in ordine. */
   readonly moves: [number, number][] = [];
+  /** Per i test: il totale accumulato degli spostamenti chiesti finora (somma di `moves`).
+      Simula la posizione della finestra finta, cosi' un test puo' scalare i clientX/clientY dei
+      mousemove successivi di quanto la finestra si e' "mossa" — esattamente cio' che fa una
+      finestra vera, e cio' che il bug I1 dimostra: usare clientX invece di screenX per il
+      calcolo del delta annulla il passo successivo perche' l'origine si e' spostata insieme al
+      cursore. Vedi Header.test.tsx. */
+  windowMoved: [number, number] = [0, 0];
   /** Per i test: quante volte la UI ha chiesto lo zoom nativo (doppio clic sull'header). */
   zoomToggles = 0;
   /** Per i test: se impostata, il prossimo beginWindowDrag() non si risolve da solo, resta in
@@ -134,7 +141,10 @@ export class FakeBackend implements Backend {
     this.pendingDrag = new Promise<boolean>((r) => { resolve = r; });
     return resolve;
   }
-  async moveWindowBy(dx: number, dy: number) { this.moves.push([dx, dy]); }
+  async moveWindowBy(dx: number, dy: number) {
+    this.moves.push([dx, dy]);
+    this.windowMoved = [this.windowMoved[0] + dx, this.windowMoved[1] + dy];
+  }
   async toggleWindowZoom() { this.zoomToggles++; }
   async windowChrome() { return { trafficLightWidth: 0 }; }
 

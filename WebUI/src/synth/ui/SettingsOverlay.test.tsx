@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SettingsOverlay } from "./SettingsOverlay";
@@ -44,6 +44,40 @@ describe("SettingsOverlay", () => {
     await userEvent.click(await screen.findByLabelText("Sample rate"));
     await userEvent.click(await screen.findByRole("option", { name: "44100 Hz" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Il device non si apre a 44.1 kHz");
+  });
+
+  // I2 della review finale: onKeyDown sta sul div del dialog e scatta solo col focus al suo
+  // interno, ma aprire il pannello non mette focus su niente da solo — a differenza di
+  // PresetOverlay, che ce l'ha gratis dall'autoFocus sul campo di ricerca. Senza mettere a
+  // fuoco il contenitore al mount, questi due test sarebbero rossi (Escape lettera morta).
+  it("Escape chiude il pannello", async () => {
+    const onClose = vi.fn();
+    render(
+      <BridgeProvider backend={new FakeBackend({ audioSettings: standalone })}>
+        <SettingsOverlay onClose={onClose} />
+      </BridgeProvider>,
+    );
+    await screen.findByLabelText("Audio output");
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("con la conferma di ripristino aperta, Escape chiude solo quella", async () => {
+    const onClose = vi.fn();
+    render(
+      <BridgeProvider backend={new FakeBackend({ audioSettings: standalone })}>
+        <SettingsOverlay onClose={onClose} />
+      </BridgeProvider>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Ripristina i valori di fabbrica" }));
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalled();
   });
 
   it("porta dentro anche il selettore MIDI", async () => {

@@ -31,7 +31,7 @@ jobs:
       - run: pnpm build
 
   cpp:
-    name: C++ (XerumTests)
+    name: C++ (XerumTests + Standalone)
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -41,3 +41,9 @@ jobs:
       - run: cmake --preset ninja-debug
       - run: cmake --build --preset ninja-debug --target XerumTests
       - run: ctest --preset ninja-debug
+      # Senza questo target CI non compila mai Xerum/Xerum_Standalone/VST3/AU: l'unico argomento
+      # per cui questa feature scambia codice mantenuto da JUCE (StandalonePluginHolder) con
+      # codice nostro è "un cambiamento upstream si manifesta come errore di compilazione", e
+      # quell'argomento è falso finché lo Standalone non fa parte della build di CI (review
+      # finale, must-fix).
+      - run: cmake --build --preset ninja-debug --target Xerum_Standalone

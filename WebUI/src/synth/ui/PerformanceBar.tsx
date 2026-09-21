@@ -54,6 +54,10 @@ export function PerformanceBar({
 
       <span className="flex-1" />
 
+      {/* M4 della review finale: il puntino da solo, senza etichetta, non dice cosa sia — prima
+          della trasloco del selettore in SettingsOverlay c'era "MIDI HOST" o "MIDI [device]" a
+          fargli da contesto. */}
+      <span>MIDI</span>
       <MidiActivity />
 
       <span className="flex-1" />

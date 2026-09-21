@@ -124,9 +124,15 @@ Manual checks in a DAW after touching `Source/bridge/` or the WebUI parameter/st
 5. `processBlock` CPU is the same with the editor open and closed (`MeterChannel` only runs while the editor/WebView is alive).
 6. Double-click a knob and confirm it returns to its default, not to zero.
 7. Lo Standalone si apre senza barra del titolo, ma il semaforo c'è e i tre bottoni funzionano.
-8. L'header trascina la finestra; una manopola no. Doppio clic sull'header: la finestra si ingrandisce.
-9. Il ridimensionamento rispetta ancora il vincolo altezza/larghezza del constrainer.
-10. Cambio di device e di buffer size mentre una nota suona: nessun crash, nessuna nota appesa.
-11. Interfaccia audio staccata a caldo: il pannello si aggiorna da solo.
-12. Riaperta l'app, device audio e ingresso MIDI scelti sono quelli di prima.
-13. Il ripristino di fabbrica chiede conferma prima di agire.
+8. Entra in full screen (bottone verde o ⌃⌘F) ed esci di nuovo: la striscia della barra del
+   titolo non deve essere tornata. È il giro di verifica del Critical corretto in questa
+   feature — `resized()` deve riapplicare `makeWindowChromeless` perché uscire dal full screen
+   fa scattare `windowDidExitFullScreen`, che dentro JUCE riassegna lo `styleMask` senza
+   `NSWindowStyleMaskFullSizeContentView` (vedi **Lo Standalone e la sua finestra** in
+   `docs/architecture.md`); saltare questo passo lascerebbe la regressione silenziosa.
+9. L'header trascina la finestra; una manopola no. Doppio clic sull'header: la finestra si ingrandisce.
+10. Il ridimensionamento rispetta ancora il vincolo altezza/larghezza del constrainer.
+11. Cambio di device e di buffer size mentre una nota suona: nessun crash, nessuna nota appesa.
+12. Interfaccia audio staccata a caldo: il pannello si aggiorna da solo.
+13. Riaperta l'app, device audio e ingresso MIDI scelti sono quelli di prima.
+14. Il ripristino di fabbrica chiede conferma prima di agire.

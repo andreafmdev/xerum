@@ -34,17 +34,29 @@ juce::WebBrowserComponent::Options WindowChannel::applyTo (juce::WebBrowserCompo
                                      juce::WebBrowserComponent::NativeFunctionCompletion done)
                              {
                                  auto* obj = new juce::DynamicObject();
-                                 obj->setProperty ("trafficLightWidth", nativeViewHandle() != nullptr
-                                                                            ? xerum::trafficLightWidth (nativeViewHandle())
-                                                                            : 0.0);
+                                 double width = 0.0;
+                                // L'header (bridge/WindowChannel.h) include XerumWindowMac.h solo sotto JUCE_MAC,
+                                // ma senza guardare anche QUESTA chiamata il simbolo xerum::trafficLightWidth
+                                // resterebbe visto dal compilatore fuori da macOS pur non essendo mai dichiarato:
+                                // errore di compilazione, non comportamento scorretto — nativeViewHandle() torna
+                                // gia' nullptr ovunque fuori da JUCE_MAC (M1 della review finale).
+                                #if JUCE_MAC
+                                 if (nativeViewHandle() != nullptr)
+                                     width = xerum::trafficLightWidth (nativeViewHandle());
+                                #endif
+                                 obj->setProperty ("trafficLightWidth", width);
                                  done (juce::var (obj));
                              })
         .withNativeFunction ("beginWindowDrag",
                              [this] (const juce::Array<juce::var>&,
                                      juce::WebBrowserComponent::NativeFunctionCompletion done)
                              {
+                                #if JUCE_MAC
                                  done (juce::var (nativeViewHandle() != nullptr
                                                   && xerum::beginNativeWindowDrag (nativeViewHandle())));
+                                #else
+                                 done (juce::var (false));
+                                #endif
                              })
         .withNativeFunction ("moveWindowBy",
                              [this] (const juce::Array<juce::var>& args,
@@ -65,8 +77,10 @@ juce::WebBrowserComponent::Options WindowChannel::applyTo (juce::WebBrowserCompo
                              [this] (const juce::Array<juce::var>&,
                                      juce::WebBrowserComponent::NativeFunctionCompletion done)
                              {
+                                #if JUCE_MAC
                                  if (nativeViewHandle() != nullptr)
                                      xerum::toggleWindowZoom (nativeViewHandle());
+                                #endif
 
                                  done (juce::var());
                              });

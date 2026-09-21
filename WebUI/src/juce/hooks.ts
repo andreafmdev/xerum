@@ -173,7 +173,13 @@ export function useAudioSettings() {
     return () => { alive = false; off(); };
   }, [backend]);
 
-  const run = useCallback(async (p: Promise<string>) => { setError(await p); }, []);
+  // Senza catch, un rifiuto della promise (setOutput/setSampleRate/setBufferSize) sarebbe un
+  // unhandled rejection: il fallimento "normale" gia' passa da qui come stringa risolta
+  // (l'errore restituito da applyAudio), quindi un reject e' sempre un guasto del bridge stesso.
+  const run = useCallback(async (p: Promise<string>) => {
+    try { setError(await p); }
+    catch (e) { console.warn("[bridge] cambio impostazioni audio fallito", e); }
+  }, []);
   return {
     settings,
     error,

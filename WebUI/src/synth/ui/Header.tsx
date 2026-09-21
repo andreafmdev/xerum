@@ -37,9 +37,22 @@ export function Header({ preset, dirty, onPrev, onNext, onBrowse, onSettings, sc
 
   const handleMouseDown = (e: React.MouseEvent<HTMLElement>) => {
     if (isInteractive(e.target)) return;
+    // Solo il tasto sinistro trascina/ripiega: un tasto destro fa tornare `false` a
+    // beginWindowDrag (il .mm rifiuta correttamente gli eventi non-NSEventTypeLeftMouseDown),
+    // il che arma comunque il ripiego sotto — a quel punto ev.buttons vale 2, non 0, quindi la
+    // guardia di stop() non scatterebbe e la finestra seguirebbe il tasto destro.
+    if (e.button !== 0) return;
 
-    let x = e.clientX;
-    let y = e.clientY;
+    // screenX/screenY, non clientX/clientY: la viewport E' la finestra che questo gesto sposta.
+    // Ogni moveWindowBy riuscito trasla l'origine da cui clientX/clientY sono misurate esattamente
+    // della stessa quantita', quindi il delta successivo calcolato da clientX si annulla (finestra
+    // a meta' velocita', a scatti — l'Important I1 della review finale). screenX/screenY sono
+    // assolute, non risentono del movimento della finestra: restano px CSS = punti AppKit su
+    // macOS (la y resta verso il basso, quindi la convenzione di segno di moveWindowBy non
+    // cambia), e non risentono dello zoom/transform dello chassis piu' di quanto ne risenta
+    // clientX.
+    let x = e.screenX;
+    let y = e.screenY;
     let released = false;
 
     // Osserva il rilascio da SUBITO, non solo dopo che la promise di beginWindowDrag si
@@ -68,10 +81,10 @@ export function Header({ preset, dirty, onPrev, onNext, onBrowse, onSettings, sc
         // passato di qui (intercettato da un altro elemento, o un ordine di eventi diverso da
         // quello previsto), fermiamoci comunque piuttosto che inseguire il cursore a vuoto.
         if (ev.buttons === 0) { stop(); return; }
-        const dx = ev.clientX - x;
-        const dy = ev.clientY - y;
-        x = ev.clientX;
-        y = ev.clientY;
+        const dx = ev.screenX - x;
+        const dy = ev.screenY - y;
+        x = ev.screenX;
+        y = ev.screenY;
         if (dx !== 0 || dy !== 0) void backend.moveWindowBy(dx, dy);
       };
       const stop = () => {
@@ -81,6 +94,12 @@ export function Header({ preset, dirty, onPrev, onNext, onBrowse, onSettings, sc
 
       window.addEventListener("mousemove", move);
       window.addEventListener("mouseup", stop);
+    }).catch((err: unknown) => {
+      // Ogni altra chiamata one-shot del bridge in questo file passa un handler: un rifiuto qui
+      // lascerebbe altrimenti attaccato il listener markReleased (fuga di memoria) e produrrebbe
+      // un unhandled rejection.
+      window.removeEventListener("mouseup", markReleased);
+      console.warn("[bridge] beginWindowDrag fallita", err);
     });
   };
 

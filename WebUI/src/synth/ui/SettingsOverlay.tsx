@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { m } from "motion/react";
 import { Button, Select, T } from "@xerum/ui";
 import { X } from "lucide-react";
@@ -25,9 +25,20 @@ export function SettingsOverlay({ onClose }: Props) {
   // Il ripristino butta via la patch su cui si sta lavorando: un misclick non deve poterlo fare
   // da solo, quindi il bottone apre solo una conferma; il backend lo sente solo da qui.
   const [confirmingReset, setConfirmingReset] = useState(false);
+  // onKeyDown sta sul div del dialog: scatta solo se il focus e' al suo interno o su un
+  // discendente. Aprendo il pannello nessun elemento riceve focus da solo — il bottone
+  // dell'ingranaggio che l'ha aperto resta nell'header, un fratello coperto da z-20 — quindi
+  // Escape restava lettera morta (I2 della review finale). PresetOverlay se la cava per via
+  // dell'autoFocus sul campo di ricerca; qui non c'e' un campo cosi' ovvio, quindi si mette a
+  // fuoco il contenitore stesso al mount (tabIndex=-1: fuori dal tab order, ma restabile via
+  // ref.focus()).
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { ref.current?.focus(); }, []);
 
   return (
     <m.div
+      ref={ref}
+      tabIndex={-1}
       role="dialog"
       aria-label="Settings"
       onKeyDown={(e) => {
