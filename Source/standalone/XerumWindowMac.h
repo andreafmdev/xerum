@@ -14,8 +14,9 @@ namespace xerum
     sparisce alla vista e la UI arriva al bordo superiore. */
 void makeWindowChromeless (void* nsViewHandle);
 
-/** Quanto spazio occupa il semaforo, in px di finestra, misurato sui bottoni veri e non
-    scritto a mano: la larghezza esatta cambia con la versione di macOS. */
+/** Quanto spazio occupa il semaforo, in punti (pt) — AppKit misura i frame in punti, non in
+    pixel: su uno schermo Retina i pixel sono il doppio. Misurato sui bottoni veri e non scritto
+    a mano, perche' la larghezza esatta cambia con la versione di macOS. */
 double trafficLightWidth (void* nsViewHandle);
 
 /** Avvia il trascinamento nativo a partire dall'evento corrente. Falso se l'evento corrente
