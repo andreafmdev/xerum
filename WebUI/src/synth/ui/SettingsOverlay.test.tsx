@@ -106,4 +106,34 @@ describe("SettingsOverlay", () => {
       expect(screen.getByRole("combobox", { name: "MIDI input" })).toHaveTextContent("Tutti gli ingressi");
     });
   });
+
+  // Il ripristino di fabbrica butta via la patch su cui l'utente sta lavorando: un misclick
+  // dentro un pannello di impostazioni non deve poterlo fare da solo, quindi passa sempre
+  // da una conferma esplicita (role="alertdialog") prima di raggiungere il backend.
+  describe("ripristino ai valori di fabbrica", () => {
+    it("il ripristino chiede conferma prima di buttare via la patch", async () => {
+      const backend = new FakeBackend({ audioSettings: standalone });
+      renderWith(backend);
+      await userEvent.click(await screen.findByRole("button", { name: "Ripristina i valori di fabbrica" }));
+      expect(backend.resets).toBe(0);
+      expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    });
+
+    it("confermando, il ripristino arriva al backend", async () => {
+      const backend = new FakeBackend({ audioSettings: standalone });
+      renderWith(backend);
+      await userEvent.click(await screen.findByRole("button", { name: "Ripristina i valori di fabbrica" }));
+      await userEvent.click(screen.getByRole("button", { name: "Ripristina" }));
+      expect(backend.resets).toBe(1);
+    });
+
+    it("annullando, non succede niente", async () => {
+      const backend = new FakeBackend({ audioSettings: standalone });
+      renderWith(backend);
+      await userEvent.click(await screen.findByRole("button", { name: "Ripristina i valori di fabbrica" }));
+      await userEvent.click(screen.getByRole("button", { name: "Annulla" }));
+      expect(backend.resets).toBe(0);
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+  });
 });

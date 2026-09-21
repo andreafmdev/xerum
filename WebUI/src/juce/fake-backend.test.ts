@@ -131,6 +131,15 @@ describe("mask delle note", () => {
   });
 });
 
+describe("resetToDefaults", () => {
+  it("conta le chiamate, per i test di SettingsOverlay", async () => {
+    const b = new FakeBackend();
+    await b.resetToDefaults();
+    await b.resetToDefaults();
+    expect(b.resets).toBe(2);
+  });
+});
+
 describe("note e rotelle", () => {
   it("registra le note suonate dalla UI", async () => {
     const b = new FakeBackend();

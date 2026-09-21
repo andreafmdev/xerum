@@ -76,6 +76,9 @@ export interface Backend {
   setMods(mods: ModAssignment[], origin: string): Promise<void>;
   setArpSteps(steps: number[], origin: string): Promise<void>;
   loadPreset(index: number): Promise<void>;
+  /** Riporta parametri, mod matrix e arpeggiatore ai valori di fabbrica. Nello Standalone
+      cancella anche lo stato salvato: è il motivo per cui il comando esiste. */
+  resetToDefaults(): Promise<void>;
   onStateChanged(cb: (s: BridgeState & { origin: string }) => void): () => void;
   onMeters(cb: (m: MeterFrame) => void): () => void;
   /** Note suonate dentro la UI. Finiscono nel MidiKeyboardState del processor: dal punto di vista

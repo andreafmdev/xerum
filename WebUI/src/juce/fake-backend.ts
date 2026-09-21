@@ -27,6 +27,8 @@ class FakeHandle implements ParamHandle {
 export class FakeBackend implements Backend {
   readonly kind = "fake" as const;
   readonly log: Op[] = [];
+  /** Per i test: quante volte e' stato chiesto il ripristino ai valori di fabbrica. */
+  resets = 0;
   private handles = new Map<ParamId, FakeHandle>();
   private state: BridgeState;
   private stateSubs = new Set<(s: BridgeState & { origin: string }) => void>();
@@ -86,6 +88,7 @@ export class FakeBackend implements Backend {
       this.handles.get(id)!.push(preset.values[id] ?? defaultNormalised(specOf(id)));
     this.emitStateChanged(this.state, "preset");
   }
+  async resetToDefaults() { this.resets++; }
   onStateChanged(cb: (s: BridgeState & { origin: string }) => void) { this.stateSubs.add(cb); return () => { this.stateSubs.delete(cb); }; }
   onMeters(cb: (m: MeterFrame) => void) { this.meterSubs.add(cb); return () => { this.meterSubs.delete(cb); }; }
   emitStateChanged(s: BridgeState, origin: string) { for (const cb of this.stateSubs) cb({ ...structuredClone(s), origin }); }

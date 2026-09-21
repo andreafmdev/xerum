@@ -129,6 +129,7 @@ export async function createJuceBackend(): Promise<Backend> {
     setMods: (mods: ModAssignment[], origin: string) => call("setMods")(JSON.stringify(mods), origin).then(() => {}),
     setArpSteps: (steps: number[], origin: string) => call("setArpSteps")(JSON.stringify(steps), origin).then(() => {}),
     loadPreset: (index: number) => call("loadPreset")(index).then(() => {}),
+    async resetToDefaults() { await call("resetToDefaults")(); },
     onStateChanged,
     onMeters,
     async noteOn(note, velocity) { await call("noteOn")(note, velocity); },

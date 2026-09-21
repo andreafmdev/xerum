@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { m } from "motion/react";
 import { Button, Select, T } from "@xerum/ui";
 import { X } from "lucide-react";
 import { useAudioSettings, useMidiInputs } from "../../juce/hooks";
+import { useBackend } from "../../juce/provider";
 import { Logo } from "./Header";
 
 type Props = { onClose: () => void };
@@ -17,14 +19,24 @@ type Props = { onClose: () => void };
  * niente, senza nessun modo di capire perché.
  */
 export function SettingsOverlay({ onClose }: Props) {
+  const backend = useBackend();
   const { settings, error, setOutput, setSampleRate, setBufferSize } = useAudioSettings();
   const { inputs, select } = useMidiInputs();
+  // Il ripristino butta via la patch su cui si sta lavorando: un misclick non deve poterlo fare
+  // da solo, quindi il bottone apre solo una conferma; il backend lo sente solo da qui.
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   return (
     <m.div
       role="dialog"
       aria-label="Settings"
-      onKeyDown={(e) => e.key === "Escape" && onClose()}
+      onKeyDown={(e) => {
+        if (e.key !== "Escape") return;
+        // Con la conferma aperta, Escape la chiude e basta: chiudere anche il pannello
+        // impostazioni nello stesso colpo sarebbe una seconda azione non richiesta.
+        if (confirmingReset) setConfirmingReset(false);
+        else onClose();
+      }}
       initial={{ opacity: 0, scale: 0.99 }}
       animate={{ opacity: 1, scale: 1, transition: T.layerIn }}
       exit={{ opacity: 0, scale: 0.995, transition: T.layerOut }}
@@ -89,6 +101,40 @@ export function SettingsOverlay({ onClose }: Props) {
       </section>
 
       {error && <p role="alert" className="text-2xs text-destructive">{error}</p>}
+
+      <section className="mt-auto flex flex-col gap-2">
+        <h3 className="text-2xs tracking-wider text-text-dim uppercase">Ripristino</h3>
+        <Button
+          variant="destructive"
+          size="sm"
+          aria-label="Ripristina i valori di fabbrica"
+          onClick={() => setConfirmingReset(true)}
+        >
+          Ripristina i valori di fabbrica
+        </Button>
+      </section>
+
+      {confirmingReset && (
+        <div
+          role="alertdialog"
+          aria-label="Conferma ripristino"
+          aria-describedby="reset-confirm-desc"
+          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 rounded-[14px] bg-background/94 p-4 text-center backdrop-blur-sm"
+        >
+          <p id="reset-confirm-desc" className="max-w-[280px] text-xs text-muted-foreground">
+            Parametri, mod matrix e passi dell'arpeggiatore tornano ai valori di fabbrica. La patch attuale va persa.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setConfirmingReset(false)}>Annulla</Button>
+            <Button
+              variant="destructive"
+              onClick={() => { setConfirmingReset(false); void backend.resetToDefaults(); }}
+            >
+              Ripristina
+            </Button>
+          </div>
+        </div>
+      )}
     </m.div>
   );
 }

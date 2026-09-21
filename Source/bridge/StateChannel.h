@@ -1,14 +1,20 @@
 #pragma once
 
+// audio_devices e audio_utils servono solo per resetToDefaults(): juce_StandaloneFilterWindow.h,
+// incluso nel .cpp sotto #if JucePlugin_Build_Standalone, dà per scontato che chi lo include li
+// abbia già aperti (di solito lo fa il .cpp dello Standalone, non lui). Stesso motivo di
+// MidiDeviceChannel.h/AudioSettingsChannel.h.
+#include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
 
 namespace bridge
 {
 /** Stato non parametrico (mod matrix, arp steps) fra ValueTree APVTS e WebView.
-    Native functions: getState(), setMods(json, origin), setArpSteps(json, origin).
-    Evento verso la UI: "stateChanged" con lo stesso payload di getState. */
+    Native functions: getState(), setMods(json, origin), setArpSteps(json, origin),
+    resetToDefaults(). Evento verso la UI: "stateChanged" con lo stesso payload di getState. */
 class StateChannel final : private juce::ValueTree::Listener,
                            private juce::ChangeListener,
                            private juce::AsyncUpdater
@@ -29,6 +35,16 @@ private:
     /** Scrive i valori del preset indicato via beginChangeGesture/setValueNotifyingHost/
         endChangeGesture: cosi' l'host registra il cambio e l'undo funziona. Sul message thread. */
     void applyPreset (int index);
+    /** Voce "Reset to default state" del vecchio menu Options di JUCE. Non ricrea il plugin come
+        juce_StandaloneFilterWindow.h:766-780 (clearContentComponent()+deletePlugin()): quella
+        chiamata distruggerebbe la WebView da dentro la native function che la WebView stessa sta
+        eseguendo. Riporta invece i valori ai default: stessa cosa vista da fuori, senza smontare
+        niente. Parametri e stato non parametrico valgono anche in AU/VST3; lo stato salvato
+        (filterState) e' solo Standalone, vedi il .cpp. */
+    void resetToDefaults();
+    /** Mod matrix e passi dell'arp ai default, per la stessa via di setMods/setArpSteps: cosi'
+        la UI riceve lo stesso "stateChanged" che gia' sa gestire, non una seconda via di scrittura. */
+    void resetNonParametricState();
     bool isOurs (const juce::ValueTree& tree) const;
 
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
