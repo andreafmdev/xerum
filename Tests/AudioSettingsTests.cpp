@@ -13,9 +13,9 @@ struct AudioSettingsTests final : public juce::UnitTest
         {
             const auto v = bridge::audioSettingsToVar ({});
             expect (! (bool) v["standalone"]);
-            expectEquals (v["outputs"].getArray()->size(), 0);
-            expectEquals (v["sampleRates"].getArray()->size(), 0);
-            expectEquals (v["bufferSizes"].getArray()->size(), 0);
+            expect (v["outputs"].isArray() && v["outputs"].getArray()->isEmpty());
+            expect (v["sampleRates"].isArray() && v["sampleRates"].getArray()->isEmpty());
+            expect (v["bufferSizes"].isArray() && v["bufferSizes"].getArray()->isEmpty());
         }
 
         beginTest ("nello Standalone: device, liste e valori correnti");
@@ -32,9 +32,23 @@ struct AudioSettingsTests final : public juce::UnitTest
             const auto v = bridge::audioSettingsToVar (s);
             expect ((bool) v["standalone"]);
             expectEquals (v["outputs"].getArray()->size(), 2);
+            expectEquals (v["outputs"][0]["id"].toString(), juce::String ("AppleHDA"));
+            expectEquals (v["outputs"][0]["name"].toString(), juce::String ("MacBook Pro Speakers"));
+            expectEquals (v["outputs"][1]["id"].toString(), juce::String ("Scarlett"));
             expectEquals (v["outputs"][1]["name"].toString(), juce::String ("Focusrite 2i2"));
             expectEquals (v["currentOutput"].toString(), juce::String ("Scarlett"));
+
+            const auto* rates = v["sampleRates"].getArray();
+            expect (rates != nullptr && rates->size() == 2);
+            expectEquals ((double) (*rates)[0], 44100.0);
+            expectEquals ((double) (*rates)[1], 48000.0);
             expectEquals ((double) v["currentSampleRate"], 48000.0);
+
+            const auto* sizes = v["bufferSizes"].getArray();
+            expect (sizes != nullptr && sizes->size() == 3);
+            expectEquals ((int) (*sizes)[0], 64);
+            expectEquals ((int) (*sizes)[1], 128);
+            expectEquals ((int) (*sizes)[2], 256);
             expectEquals ((int) v["currentBufferSize"], 128);
         }
 
