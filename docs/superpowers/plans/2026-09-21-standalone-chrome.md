@@ -22,111 +22,19 @@
 
 ---
 
-### Task 1: Spike — il trascinamento nativo regge? (codice da buttare)
+### Task 1: (annullato — vedi ruling)
 
-Decide l'intero Task 7. `WKWebView` consegna i messaggi della JS bridge in modo **asincrono**: quando la native function gira, `[NSApp currentEvent]` potrebbe non essere più il `mousedown`. Se non regge, il Task 7 cambia approccio.
+Era uno spike per decidere se `performWindowDragWithEvent:` regga con `[NSApp currentEvent]`
+dietro la consegna asincrona di `WKWebView`. Verificarlo richiede di trascinare una finestra
+con il mouse e guardarla: non è automatizzabile.
 
-**Files:**
-- Create (temporaneo, da NON committare): `Source/standalone/DragSpike.mm`
-- Modify (temporaneo): `CMakeLists.txt`, `Source/plugin/PluginEditor.cpp`
+**Al suo posto il Task 7 implementa entrambe le strade con un ripiego automatico a runtime**:
+`beginNativeWindowDrag` restituisce `false` quando l'evento corrente non è più il `mousedown`,
+e la pagina passa allora ai delta di `mousemove`. Nessun task resta in attesa di una prova
+manuale, e il codice regge anche se il comportamento di `WKWebView` cambia con una versione
+di macOS.
 
-**Interfaces:**
-- Consumes: niente.
-- Produces: solo una risposta sì/no scritta nel report del task. Nessun codice sopravvive.
-
-- [ ] **Step 1: Scrivere la sonda Objective-C++**
-
-Creare `Source/standalone/DragSpike.mm`:
-
-```objc
-#import <Cocoa/Cocoa.h>
-
-namespace xerum::spike
-{
-/** Vero se l'evento corrente e' ancora il mousedown quando questa funzione gira. */
-bool tryNativeDrag (void* nsViewHandle)
-{
-    NSView* view = (__bridge NSView*) nsViewHandle;
-    NSWindow* window = [view window];
-    NSEvent* event = [NSApp currentEvent];
-
-    NSLog (@"[spike] currentEvent type = %ld", (long) (event == nil ? -1 : (long) event.type));
-
-    if (event == nil || event.type != NSEventTypeLeftMouseDown)
-        return false;
-
-    [window performWindowDragWithEvent: event];
-    return true;
-}
-} // namespace xerum::spike
-```
-
-- [ ] **Step 2: Agganciare la sonda a una native function**
-
-In `Source/plugin/PluginEditor.cpp`, dentro `makeWebOptions`, aggiungere in coda prima di `return options;`:
-
-```cpp
-   #if JUCE_MAC
-    options = options.withNativeFunction (
-        "spikeDrag",
-        [&] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion done)
-        {
-            done (juce::var (false)); // sostituito allo Step 4
-        });
-   #endif
-```
-
-Aggiungere `Source/standalone/DragSpike.mm` a `target_sources(Xerum PRIVATE ...)` in `CMakeLists.txt` (riga ~101).
-
-- [ ] **Step 3: Collegare il view handle**
-
-La lambda ha bisogno dell'`NSView`. In `XerumAudioProcessorEditor`, la WebView è un `juce::Component`: il suo handle nativo si ottiene con `webView_.getWindowHandle()` **dopo** che la finestra è sul desktop. Nella lambda dello Step 2 sostituire il corpo con:
-
-```cpp
-            const bool ok = webView_.getPeer() != nullptr
-                          && xerum::spike::tryNativeDrag (webView_.getPeer()->getNativeHandle());
-            done (juce::var (ok));
-```
-
-e dichiarare in cima al file:
-
-```cpp
-namespace xerum::spike { bool tryNativeDrag (void*); }
-```
-
-Poiché la lambda usa `webView_`, va spostata dalla funzione libera `makeWebOptions` al costruttore dell'editor: aggiungere lì `webView_.setOptions(...)` non esiste in JUCE, quindi per lo spike si può catturare `this` costruendo le Options dentro il costruttore. **È una forzatura accettabile: è codice da buttare.**
-
-- [ ] **Step 4: Chiamarla dalla pagina**
-
-In `WebUI/src/synth/ui/Header.tsx`, aggiungere temporaneamente sull'elemento `<header>`:
-
-```tsx
-onMouseDown={() => {
-  const juce = (window as { __JUCE__?: { backend: unknown } }).__JUCE__;
-  if (!juce) return;
-  void import("juce-framework-frontend-mirror").then((m) =>
-    m.getNativeFunction("spikeDrag")().then((ok: unknown) => console.log("[spike] drag ok =", ok)),
-  );
-}}
-```
-
-- [ ] **Step 5: Provare davvero**
-
-Run: `scripts/dev.sh`
-Poi: premere sull'header e trascinare.
-
-Osservare due cose, e riportarle **entrambe** nel report:
-1. cosa stampa `NSLog` (`[spike] currentEvent type = ...`; `NSEventTypeLeftMouseDown` vale 1);
-2. se la finestra si muove davvero seguendo il mouse.
-
-- [ ] **Step 6: Riportare l'esito e ripulire**
-
-```bash
-git checkout -- CMakeLists.txt Source/plugin/PluginEditor.cpp WebUI/src/synth/ui/Header.tsx
-rm Source/standalone/DragSpike.mm
-```
-
-Nel report scrivere **REGGE** o **NON REGGE**. Se NON REGGE, il Task 7 userà il ripiego descritto lì. Non committare nulla.
+Non c'è niente da implementare in questo task: passare al Task 2.
 
 ---
 
@@ -1299,9 +1207,17 @@ git commit -m "Own the standalone app and drop its native chrome"
 
 **Interfaces:**
 - Consumes: `xerum::beginNativeWindowDrag`, `xerum::toggleWindowZoom`, `xerum::trafficLightWidth` (Task 6); l'esito del Task 1.
-- Produces: `Backend.beginWindowDrag(): Promise<void>`, `Backend.toggleWindowZoom(): Promise<void>`, `Backend.windowChrome(): Promise<{ trafficLightWidth: number }>`.
+- Produces: `Backend.beginWindowDrag(): Promise<boolean>` (vero = il trascinamento nativo è partito), `Backend.moveWindowBy(dx: number, dy: number): Promise<void>`, `Backend.toggleWindowZoom(): Promise<void>`, `Backend.windowChrome(): Promise<{ trafficLightWidth: number }>`.
 
-**Se il Task 1 ha riportato NON REGGE:** `beginWindowDrag` non può usare `performWindowDragWithEvent:`. Il ripiego: la pagina manda `windowDragTo(deltaX, deltaY)` a ogni `mousemove` mentre il tasto è premuto, e il C++ sposta la finestra con `window.setBounds (window.getBounds().translated (dx, dy))`. Stessi test lato UI, stesso punto di aggancio; cambia solo cosa c'è dall'altra parte del bridge. Riportarlo nel commit message.
+**Due strade, scelte a runtime.** `beginWindowDrag` prova il trascinamento nativo e torna `true`
+se è partito. Se torna `false` — l'evento corrente non è più il `mousedown`, perché `WKWebView`
+consegna i messaggi della bridge in modo asincrono — la pagina passa al ripiego: segue i
+`mousemove` e chiama `moveWindowBy(dx, dy)`, che sposta la finestra con
+`window.setBounds (window.getBounds().translated (dx, dy))`.
+
+Il ripiego non è codice morto in attesa di un bug: è la strada che si prende su ogni versione di
+macOS dove l'evento non arriva in tempo, e non sappiamo quali siano. Va scritto e testato come
+l'altra.
 
 - [ ] **Step 1: Scrivere il test che fallisce**
 
