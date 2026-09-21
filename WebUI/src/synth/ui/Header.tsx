@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { Button } from "@xerum/ui";
 import { ChevronLeft, ChevronRight, LayoutGrid, Redo2, Save, Settings, Undo2 } from "lucide-react";
 import { useBackend } from "../../juce/provider";
@@ -36,48 +35,52 @@ export function Header({ preset, dirty, onPrev, onNext, onBrowse, onSettings, sc
   const withDirty = useDirty();   // `dirty` è già la prop del preset
   const toggleBypass = withDirty(() => bypass.set(!bypass.checked));
 
-  // Il ripiego mousemove del trascinamento (vedi backend.beginWindowDrag): tiene l'ultima
-  // posizione nota del puntatore fra un mousemove e l'altro, e i due listener attaccati a
-  // window mentre il ripiego e' attivo, per poterli staccare al mouseup.
-  const lastPointer = useRef<{ x: number; y: number } | null>(null);
-  const dragListeners = useRef<{ move: (e: MouseEvent) => void; up: () => void } | null>(null);
-
-  const stopFallbackDrag = () => {
-    if (!dragListeners.current) return;
-    window.removeEventListener("mousemove", dragListeners.current.move);
-    window.removeEventListener("mouseup", dragListeners.current.up);
-    dragListeners.current = null;
-    lastPointer.current = null;
-  };
-
   const handleMouseDown = (e: React.MouseEvent<HTMLElement>) => {
     if (isInteractive(e.target)) return;
 
-    lastPointer.current = { x: e.clientX, y: e.clientY };
+    let x = e.clientX;
+    let y = e.clientY;
+    let released = false;
+
+    // Osserva il rilascio da SUBITO, non solo dopo che la promise di beginWindowDrag si
+    // risolve: WKWebView consegna i messaggi della bridge in modo asincrono, quindi la risposta
+    // puo' arrivare quando il bottone del mouse e' gia' stato rilasciato (un semplice click e'
+    // mousedown+mouseup, spesso piu' veloce del giro nativo). Senza questo listener immediato,
+    // quel "false" tardivo armerebbe comunque il ripiego, che poi seguirebbe il cursore a
+    // bottone alzato finche' un mouseup qualsiasi, altrove nella pagina, non lo fermasse per
+    // puro caso: e' l'errore critico corretto in questo giro.
+    const markReleased = () => { released = true; };
+    window.addEventListener("mouseup", markReleased, { once: true });
 
     void backend.beginWindowDrag().then((started) => {
-      // Il trascinamento nativo e' partito: AppKit segue lui il puntatore da qui in poi, non
-      // serve nessun listener nostro. Se lastPointer e' gia' nullo il mouseup e' arrivato prima
-      // che la promise si risolvesse (drag brevissimo): niente da avviare.
-      if (started || !lastPointer.current) return;
+      window.removeEventListener("mouseup", markReleased);
 
-      // Il ripiego (vedi backend.beginWindowDrag): WKWebView consegna i messaggi della bridge
-      // in modo asincrono, quindi quando la risposta arriva l'evento di mousedown originale
-      // non e' piu' quello corrente lato nativo, e performWindowDragWithEvent non e' partito.
-      // Seguiamo noi i mousemove e chiediamo lo spostamento a mano, un delta alla volta.
+      // Il trascinamento nativo e' partito (AppKit segue lui il puntatore da qui in poi), oppure
+      // il bottone e' gia' stato rilasciato (vedi sopra): in entrambi i casi non c'e' niente da
+      // avviare.
+      if (started || released) return;
+
+      // Il ripiego (vedi backend.beginWindowDrag): l'evento di mousedown originale non e' piu'
+      // quello corrente lato nativo, e performWindowDragWithEvent non e' partito. Seguiamo noi
+      // i mousemove e chiediamo lo spostamento a mano, un delta alla volta.
       const move = (ev: MouseEvent) => {
-        const last = lastPointer.current;
-        if (!last) return;
-        const dx = ev.clientX - last.x;
-        const dy = ev.clientY - last.y;
-        lastPointer.current = { x: ev.clientX, y: ev.clientY };
+        // Difesa in profondita': se il bottone non e' piu' premuto ma il mouseup non e' ancora
+        // passato di qui (intercettato da un altro elemento, o un ordine di eventi diverso da
+        // quello previsto), fermiamoci comunque piuttosto che inseguire il cursore a vuoto.
+        if (ev.buttons === 0) { stop(); return; }
+        const dx = ev.clientX - x;
+        const dy = ev.clientY - y;
+        x = ev.clientX;
+        y = ev.clientY;
         if (dx !== 0 || dy !== 0) void backend.moveWindowBy(dx, dy);
       };
-      const up = () => stopFallbackDrag();
+      const stop = () => {
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", stop);
+      };
 
-      dragListeners.current = { move, up };
       window.addEventListener("mousemove", move);
-      window.addEventListener("mouseup", up);
+      window.addEventListener("mouseup", stop);
     });
   };
 

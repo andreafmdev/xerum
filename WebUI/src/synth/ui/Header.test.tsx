@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Header } from "./Header";
 import { PRESETS } from "../presets";
@@ -82,6 +82,32 @@ describe("Header", () => {
       { target: header, coords: { clientX: 100, clientY: 100 }, keys: "[MouseLeft>]" },
       { target: header, coords: { clientX: 130, clientY: 84 } },
     ]);
+    expect(backend.moves).toHaveLength(0);
+  });
+
+  it("un rilascio arrivato prima della risposta di beginWindowDrag non arma il ripiego", async () => {
+    // WKWebView consegna i messaggi della bridge in modo asincrono: il round-trip di
+    // beginWindowDrag() puo' rispondere quando il bottone del mouse e' gia' stato rilasciato.
+    // Senza il fix, il "false" tardivo armava comunque i listener del ripiego, che poi
+    // seguivano il cursore a bottone alzato finche' un mouseup qualsiasi, altrove, non li
+    // fermava per caso.
+    const backend = new FakeBackend();
+    const resolveDrag = backend.armPendingDrag();
+    renderHeader(backend);
+    const header = screen.getByRole("banner");
+
+    fireEvent.mouseDown(header, { clientX: 100, clientY: 100, buttons: 1 });
+    fireEvent.mouseUp(window, { clientX: 100, clientY: 100, buttons: 0 });
+
+    // La risposta tardiva: il drag nativo non e' partito.
+    resolveDrag(false);
+    // beginWindowDrag() e' una funzione async che ritorna una promise sospesa: la sua stessa
+    // promise si risolve un giro dopo quella interna, quindi un macrotask (non un microtask
+    // solo) garantisce che il .then() dentro Header sia gia' girato.
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Un mousemove qualsiasi, a bottone rilasciato, non deve muovere la finestra.
+    fireEvent.mouseMove(window, { clientX: 200, clientY: 200, buttons: 0 });
     expect(backend.moves).toHaveLength(0);
   });
 

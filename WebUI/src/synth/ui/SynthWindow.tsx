@@ -103,9 +103,13 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
   const [trafficLightWidth, setTrafficLightWidth] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    void backend.windowChrome().then(({ trafficLightWidth }) => {
-      if (!cancelled) setTrafficLightWidth(trafficLightWidth);
-    });
+    void backend.windowChrome().then(
+      ({ trafficLightWidth }) => { if (!cancelled) setTrafficLightWidth(trafficLightWidth); },
+      // Stessa convenzione dei fetch one-shot in juce/hooks.ts (getState, midiInputs,
+      // audioSettings): senza il secondo argomento un rifiuto diventa una unhandled promise
+      // rejection, non solo un padding mancato.
+      (e) => console.warn("[bridge] windowChrome fallita", e),
+    );
     return () => { cancelled = true; };
   }, [backend]);
 

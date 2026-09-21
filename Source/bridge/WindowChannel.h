@@ -27,7 +27,7 @@ namespace bridge
 class WindowChannel final
 {
 public:
-    explicit WindowChannel (juce::AudioProcessor& processor) noexcept;
+    explicit WindowChannel (juce::AudioProcessor& processor);
 
     /** Registra le native function nelle Options. Va chiamata prima di costruire la WebView. */
     juce::WebBrowserComponent::Options applyTo (juce::WebBrowserComponent::Options options);

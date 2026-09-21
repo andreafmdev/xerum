@@ -6,7 +6,7 @@
 
 namespace bridge
 {
-WindowChannel::WindowChannel (juce::AudioProcessor& processor) noexcept
+WindowChannel::WindowChannel (juce::AudioProcessor& processor)
     : processor_ (processor)
 {
 }

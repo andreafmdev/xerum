@@ -54,6 +54,11 @@ export class FakeBackend implements Backend {
   readonly moves: [number, number][] = [];
   /** Per i test: quante volte la UI ha chiesto lo zoom nativo (doppio clic sull'header). */
   zoomToggles = 0;
+  /** Per i test: se impostata, il prossimo beginWindowDrag() non si risolve da solo, resta in
+      sospeso finche' non si chiama il resolver tornato da armPendingDrag(). Serve a riprodurre
+      il caso reale: WKWebView consegna i messaggi della bridge in modo asincrono, quindi la
+      risposta puo' arrivare quando il bottone del mouse e' gia' stato rilasciato. */
+  private pendingDrag: Promise<boolean> | null = null;
 
   constructor(opts: { demo?: boolean; state?: Partial<BridgeState>; values?: Partial<Record<ParamId, number>>; midiInputs?: MidiInputs; audioSettings?: AudioSettings } = {}) {
     if (opts.midiInputs) this.midi = structuredClone(opts.midiInputs);
@@ -110,9 +115,21 @@ export class FakeBackend implements Backend {
 
   async beginWindowDrag() {
     this.windowDrags++;
+    if (this.pendingDrag) {
+      const p = this.pendingDrag;
+      this.pendingDrag = null;
+      return p;
+    }
     const started = this.nextDragStarts;
     this.nextDragStarts = true;
     return started;
+  }
+  /** Per i test: il prossimo beginWindowDrag() resta sospeso finche' non si chiama la funzione
+      tornata qui. */
+  armPendingDrag(): (started: boolean) => void {
+    let resolve!: (started: boolean) => void;
+    this.pendingDrag = new Promise<boolean>((r) => { resolve = r; });
+    return resolve;
   }
   async moveWindowBy(dx: number, dy: number) { this.moves.push([dx, dy]); }
   async toggleWindowZoom() { this.zoomToggles++; }
