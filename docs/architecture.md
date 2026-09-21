@@ -1,5 +1,9 @@
 # Architecture — Xerum
 
+This document describes the audio side and the layering. The seam between C++ and the React UI —
+relays, native functions, events, the resource provider, the geometry contract — has its own
+document: **[`docs/bridge.md`](bridge.md)**.
+
 ## Principle
 
 **JUCE lives at the boundary.** The real-time synth core (`engine/`, `dsp/`) stays free of UI and host glue so wavetable / mod-matrix work can grow without rewriting the plugin adapter.

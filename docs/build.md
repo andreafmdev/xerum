@@ -1,5 +1,8 @@
 # Build — Xerum
 
+How the two halves of the editor are served (dev server vs embedded bundle) is explained in
+**[`docs/bridge.md`](bridge.md)** → *Serving the page*.
+
 ## Prerequisites (macOS)
 
 - Xcode (Command Line Tools / full IDE), recent enough for C++23 — Apple clang 16 or newer

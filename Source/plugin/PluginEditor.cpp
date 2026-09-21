@@ -9,12 +9,12 @@ namespace
 {
 constexpr const char* kDevServerUrl = "http://localhost:5173";
 
-// Lo chassis della WebUI è 900×680 e si scala per riempire la WebView (SynthWindow.tsx).
+// Lo chassis della WebUI è 900×690 e si scala per riempire la WebView (SynthWindow.tsx).
 // Qui la larghezza della finestra è l'unica variabile libera: da lei derivano la scala e
 // l'altezza della WebView, che è l'intero editor.
 constexpr int kChassisWidth = 900;
-// 680 = H in SynthWindow.tsx (WebUI/src/synth/ui/SynthWindow.tsx): 670 px che i figli dello
-// chassis occupano davvero piu' 10 di respiro in fondo — l'aritmetica sta nel commento di H.
+// 690 = H in SynthWindow.tsx (WebUI/src/synth/ui/SynthWindow.tsx): i figli dello chassis la
+// riempiono esatta, senza avanzi — l'aritmetica sta nel commento di H.
 // Terza copia dello stesso numero, dopo H e la regola .sx-chassis in synth.css: la sorgente di
 // verita' resta H, questa costante la segue.
 constexpr int kChassisHeight = 690;
