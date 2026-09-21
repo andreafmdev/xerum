@@ -7,7 +7,6 @@ import type { ParamId } from "../params.generated";
 import { useSynth, type TabId } from "../useSynth";
 import { BottomStrip } from "./BottomStrip";
 import { consumeFirstBoot } from "./boot";
-import { useMeterConductor } from "./conductor";
 import { Header } from "./Header";
 import { FilterPanel, MasterPanel, OscPanel } from "./Panels";
 import { PresetOverlay } from "./PresetOverlay";
@@ -121,11 +120,6 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
   // conductor.ts) sull'host dell'aurora, non sullo chassis. Una custom property scritta su
   // chassisRef invaliderebbe lo stile dell'intero sottoalbero — Header, WaveDisplay, i tre
   // pannelli, TabArea, BottomStrip, tutto — trenta volte al secondo per un valore che un solo
-  // pseudo-elemento legge davvero. auroraRef punta invece al div .sx-aurora qui sotto: nessuno
-  // stato React, nessun re-render (vedi il commento in conductor.ts), e adesso anche
-  // un'invalidazione di stile bounded al nodo piccolo che consuma --m-out per davvero.
-  const auroraRef = useRef<HTMLDivElement>(null);
-  useMeterConductor(auroraRef);
 
   // Il colpo di luce del caricamento preset: pilotato da WAAPI, non da una regola CSS chiave
   // sul nome del preset. Una regola `[data-wipe]` guarderebbe solo la PRESENZA dell'attributo,
@@ -220,7 +214,7 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
         {/* Host dedicato dell'aurora (solo variante glass, vedi synth.css): un nodo vuoto, non
             lo chassis, cosi' --m-out invalida lo stile di questo div e dei suoi due
             pseudo-elementi, non quello di tutto cio' che segue. */}
-        <div ref={auroraRef} className="sx-aurora" aria-hidden="true" />
+        <div className="sx-aurora" aria-hidden="true" />
         <SynthContext value={ctx}>
           <Header
             preset={s.preset}

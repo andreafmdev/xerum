@@ -285,11 +285,19 @@ export function Knob({
           />
           {GRIP_LINES}
 
-          {/* Indicatore: solco scuro con il fondo lucido sopra. */}
+          {/* Indicatore: solco scuro con il fondo lucido sopra.
+
+              Niente `origin-center` qui, al contrario del cappuccio: l'attributo `transform`
+              porta gia' il proprio centro di rotazione (`rotate(a 20 20)`), e l'attributo SVG
+              e' mappato sulla proprieta' CSS `transform`. Un `transform-origin` in piu' viene
+              applicato *sopra* quella matrice, non al posto suo, e il centro finisce contato
+              due volte: misurato, l'indice usciva a 37 px dal centro di un knob che ha raggio
+              34, cioe' fuori dal cappuccio. L'origine predefinita di un elemento SVG e' 0 0,
+              che e' esattamente cio' che serve quando il centro sta gia' nell'attributo. */}
           <g
             data-part="pointer"
             transform={`rotate(${pointerDeg - 270} ${C} ${C})`}
-            className="origin-center transition-transform duration-(--dur-state) ease-glass group-data-[dragging=true]/knob:transition-none"
+            className="transition-transform duration-(--dur-state) ease-glass group-data-[dragging=true]/knob:transition-none"
           >
             <line
               data-part="pointer-groove"
