@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { FakeBackend } from "./fake-backend";
 import { BridgeProvider } from "./provider";
-import { parseState, useBoolParam, useBridgeState, useChoiceParam, useFloatParam, useIntParam, useMeters } from "./hooks";
+import { parseState, useAudioSettings, useBoolParam, useBridgeState, useChoiceParam, useFloatParam, useIntParam, useMeters } from "./hooks";
 import { ZERO_METERS, type BridgeState } from "./backend";
 
 const wrap = (b: FakeBackend) => ({ children }: { children: ReactNode }) => <BridgeProvider backend={b}>{children}</BridgeProvider>;
@@ -139,5 +139,42 @@ describe("useMeters", () => {
     const afterFirst = result.current.out;
     act(() => b.emitMeters({ ...ZERO_METERS, arpStep: 3 }));   // stesso frame, stesso istante
     expect(result.current.out).toBe(afterFirst);
+  });
+});
+
+describe("useAudioSettings", () => {
+  it("parte da standalone falso e prende la fotografia dal backend", async () => {
+    const backend = new FakeBackend({
+      audioSettings: {
+        standalone: true,
+        outputs: [{ id: "Scarlett", name: "Focusrite 2i2" }],
+        currentOutput: "Scarlett",
+        sampleRates: [44100, 48000], currentSampleRate: 48000,
+        bufferSizes: [64, 128], currentBufferSize: 128,
+        latencyMs: 2.6666666666666665,
+      },
+    });
+    const { result } = renderHook(() => useAudioSettings(), { wrapper: wrap(backend) });
+    await waitFor(() => expect(result.current.settings.standalone).toBe(true));
+    expect(result.current.settings.outputs[0]!.name).toBe("Focusrite 2i2");
+  });
+
+  it("tiene l'errore che la setter restituisce invece di ingoiarlo", async () => {
+    const backend = new FakeBackend({ audioSettings: { standalone: true, outputs: [], currentOutput: "",
+      sampleRates: [], currentSampleRate: 0, bufferSizes: [], currentBufferSize: 0, latencyMs: 0 } });
+    backend.failNextAudioChange("Il device non si apre a 96 kHz");
+    const { result } = renderHook(() => useAudioSettings(), { wrapper: wrap(backend) });
+    await act(async () => { await result.current.setSampleRate(96000); });
+    expect(result.current.error).toBe("Il device non si apre a 96 kHz");
+  });
+
+  it("un cambio dal sistema aggiorna la fotografia", async () => {
+    const backend = new FakeBackend({ audioSettings: { standalone: true, outputs: [], currentOutput: "",
+      sampleRates: [], currentSampleRate: 0, bufferSizes: [], currentBufferSize: 0, latencyMs: 0 } });
+    const { result } = renderHook(() => useAudioSettings(), { wrapper: wrap(backend) });
+    await waitFor(() => expect(result.current.settings.standalone).toBe(true));
+    act(() => backend.emitAudioSettingsChanged({ standalone: true, outputs: [], currentOutput: "MacBook",
+      sampleRates: [], currentSampleRate: 0, bufferSizes: [], currentBufferSize: 0, latencyMs: 0 }));
+    await waitFor(() => expect(result.current.settings.currentOutput).toBe("MacBook"));
   });
 });

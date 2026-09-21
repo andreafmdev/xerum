@@ -91,10 +91,30 @@ export interface Backend {
   /** Abilita o disabilita un ingresso (solo Standalone). */
   setMidiInputEnabled(id: string, enabled: boolean): Promise<void>;
   onMidiInputsChanged(cb: (m: MidiInputs) => void): () => void;
+  /** Il device audio del sistema. `standalone` falso (VST3/AU): lo gestisce l'host. */
+  audioSettings(): Promise<AudioSettings>;
+  /** Le tre setter tornano "" se è andata, altrimenti il messaggio d'errore da mostrare. */
+  setAudioOutput(id: string): Promise<string>;
+  setSampleRate(hz: number): Promise<string>;
+  setBufferSize(samples: number): Promise<string>;
+  onAudioSettingsChanged(cb: (s: AudioSettings) => void): () => void;
 }
 
 export type MidiInputDevice = { id: string; name: string; enabled: boolean };
 export type MidiInputs = { host: boolean; devices: MidiInputDevice[] };
+
+export type AudioOutputDevice = { id: string; name: string };
+/** Lo stato del device audio. `standalone` falso (VST3/AU): lo gestisce l'host, liste vuote. */
+export type AudioSettings = {
+  standalone: boolean;
+  outputs: AudioOutputDevice[];
+  currentOutput: string;
+  sampleRates: number[];
+  currentSampleRate: number;
+  bufferSizes: number[];
+  currentBufferSize: number;
+  latencyMs: number;
+};
 
 /** Default normalizzato di uno spec (float: già 0..1; bool: 0/1; int: mappato; choice: indice mappato). */
 export function defaultNormalised(spec: ParamSpec): number {

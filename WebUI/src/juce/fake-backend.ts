@@ -4,7 +4,7 @@
 
 import { PARAM_IDS, type ParamId } from "../synth/params.generated";
 import { PRESETS } from "../synth/presets.generated";
-import { defaultNormalised, specOf, type Backend, type BridgeState, type MeterFrame, type MidiInputs, type ModAssignment, type ParamHandle } from "./backend";
+import { defaultNormalised, specOf, type AudioSettings, type Backend, type BridgeState, type MeterFrame, type MidiInputs, type ModAssignment, type ParamHandle } from "./backend";
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 type Op = { id: ParamId; op: "begin" | "set" | "end"; v?: number };
@@ -39,9 +39,15 @@ export class FakeBackend implements Backend {
   readonly midiLog: [string, boolean][] = [];
   private midi: MidiInputs = { host: true, devices: [] };
   private midiSubs = new Set<(m: MidiInputs) => void>();
+  /** Nel browser non c'è nessun device: `standalone` falso è anche la verità. */
+  private audio: AudioSettings = { standalone: false, outputs: [], currentOutput: "",
+    sampleRates: [], currentSampleRate: 0, bufferSizes: [], currentBufferSize: 0, latencyMs: 0 };
+  private audioSubs = new Set<(s: AudioSettings) => void>();
+  private nextAudioError = "";
 
-  constructor(opts: { demo?: boolean; state?: Partial<BridgeState>; values?: Partial<Record<ParamId, number>>; midiInputs?: MidiInputs } = {}) {
+  constructor(opts: { demo?: boolean; state?: Partial<BridgeState>; values?: Partial<Record<ParamId, number>>; midiInputs?: MidiInputs; audioSettings?: AudioSettings } = {}) {
     if (opts.midiInputs) this.midi = structuredClone(opts.midiInputs);
+    if (opts.audioSettings) this.audio = structuredClone(opts.audioSettings);
     this.state = { version: 1, mods: [], arpSteps: [0.8, 0, 0.6, 0.9, 0, 0.7, 0, 0.5, 0.8, 0, 0.6, 0, 0.9, 0.4, 0, 0.7], ...opts.state };
     for (const id of PARAM_IDS) this.handles.set(id, new FakeHandle(id, opts.values?.[id] ?? defaultNormalised(specOf(id)), this.log));
     if (opts.demo && typeof requestAnimationFrame === "function") this.startDemo();
@@ -81,6 +87,23 @@ export class FakeBackend implements Backend {
   /** Per i test: la lista cambia "dal sistema". */
   emitMidiInputsChanged(m: MidiInputs) { this.midi = structuredClone(m); for (const cb of this.midiSubs) cb(structuredClone(m)); }
   async setWheel(kind: "pitch" | "mod", value: number) { this.wheels = { ...this.wheels, [kind]: value }; }
+
+  async audioSettings() { return structuredClone(this.audio); }
+  async setAudioOutput(id: string) { return this.applyAudio(() => { this.audio.currentOutput = id; }); }
+  async setSampleRate(hz: number) { return this.applyAudio(() => { this.audio.currentSampleRate = hz; }); }
+  async setBufferSize(samples: number) { return this.applyAudio(() => { this.audio.currentBufferSize = samples; }); }
+  onAudioSettingsChanged(cb: (s: AudioSettings) => void) { this.audioSubs.add(cb); return () => { this.audioSubs.delete(cb); }; }
+  /** Per i test: la prossima modifica fallisce con questo messaggio. */
+  failNextAudioChange(message: string) { this.nextAudioError = message; }
+  /** Per i test: le impostazioni cambiano "dal sistema". */
+  emitAudioSettingsChanged(s: AudioSettings) { this.audio = structuredClone(s); for (const cb of this.audioSubs) cb(structuredClone(s)); }
+
+  private applyAudio(change: () => void): string {
+    if (this.nextAudioError) { const e = this.nextAudioError; this.nextAudioError = ""; return e; }
+    change();
+    this.emitAudioSettingsChanged(this.audio);
+    return "";
+  }
 
   /**
    * Clock finto per browser/Storybook: LFO, meter che respirano, step arp e i livelli delle

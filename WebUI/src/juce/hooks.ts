@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { PARAM_SPECS, type ParamId } from "../synth/params.generated";
 import { formatValue, fromIndex, fromInt, paramLabel, toIndex, toInt } from "../synth/mapping";
-import type { BridgeState, MeterFrame, MidiInputs, ModAssignment, ModSource } from "./backend";
+import type { AudioSettings, BridgeState, MeterFrame, MidiInputs, ModAssignment, ModSource } from "./backend";
 import { meterStore } from "./meters";
 import { useBackend } from "./provider";
 
@@ -148,6 +148,39 @@ export function useMidiInputs() {
     for (const d of devices) if (d.id !== choice) await backend.setMidiInputEnabled(d.id, false);
   }, [backend, inputs.devices]);
   return { inputs, select };
+}
+
+/**
+ * Le impostazioni del device audio e il modo di cambiarle. `standalone` falso finche' il
+ * backend non risponde e nel plugin: il pannello mostra la riga "li gestisce l'host".
+ *
+ * `error` tiene il messaggio che la setter ha restituito: un device che non si apre — sample
+ * rate non supportato, scheda staccata — deve dirlo, non restare in silenzio con la vecchia
+ * impostazione ancora attiva. Si azzera al cambio riuscito successivo.
+ */
+export function useAudioSettings() {
+  const backend = useBackend();
+  const [settings, setSettings] = useState<AudioSettings>({
+    standalone: false, outputs: [], currentOutput: "",
+    sampleRates: [], currentSampleRate: 0, bufferSizes: [], currentBufferSize: 0, latencyMs: 0,
+  });
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    backend.audioSettings().then((s) => { if (alive) setSettings(s); },
+      (e) => console.warn("[bridge] getAudioSettings fallita", e));
+    const off = backend.onAudioSettingsChanged((s) => setSettings(s));
+    return () => { alive = false; off(); };
+  }, [backend]);
+
+  const run = useCallback(async (p: Promise<string>) => { setError(await p); }, []);
+  return {
+    settings,
+    error,
+    setOutput: useCallback((id: string) => run(backend.setAudioOutput(id)), [backend, run]),
+    setSampleRate: useCallback((hz: number) => run(backend.setSampleRate(hz)), [backend, run]),
+    setBufferSize: useCallback((n: number) => run(backend.setBufferSize(n)), [backend, run]),
+  };
 }
 
 /**

@@ -5,7 +5,7 @@
 
 import { PARAM_SPECS, type ParamId } from "../synth/params.generated";
 import { fromIndex, toIndex } from "../synth/mapping";
-import { defaultNormalised, type Backend, type BridgeState, type MeterFrame, type ModAssignment, type ParamHandle, type MidiInputs } from "./backend";
+import { defaultNormalised, type AudioSettings, type Backend, type BridgeState, type MeterFrame, type ModAssignment, type ParamHandle, type MidiInputs } from "./backend";
 import type { getSliderState, getToggleState, getComboBoxState } from "@juce-framework/webview";
 
 /**
@@ -109,6 +109,7 @@ export async function createJuceBackend(): Promise<Backend> {
   const onStateChanged = fanOut<BridgeState & { origin: string }>("stateChanged");
   const onMeters = fanOut<MeterFrame>("meters");
   const onMidiInputsChanged = fanOut<MidiInputs>("midiInputsChanged");
+  const onAudioSettingsChanged = fanOut<AudioSettings>("audioSettingsChanged");
 
   return {
     kind: "juce",
@@ -137,5 +138,10 @@ export async function createJuceBackend(): Promise<Backend> {
     midiInputs: () => call("getMidiInputs")() as Promise<MidiInputs>,
     setMidiInputEnabled: (id: string, enabled: boolean) => call("setMidiInputEnabled")(id, enabled).then(() => {}),
     onMidiInputsChanged,
+    audioSettings: () => call("getAudioSettings")() as Promise<AudioSettings>,
+    setAudioOutput: (id: string) => call("setAudioOutput")(id) as Promise<string>,
+    setSampleRate: (hz: number) => call("setSampleRate")(hz) as Promise<string>,
+    setBufferSize: (samples: number) => call("setBufferSize")(samples) as Promise<string>,
+    onAudioSettingsChanged,
   };
 }
