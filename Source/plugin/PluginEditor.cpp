@@ -18,8 +18,20 @@ constexpr int kChassisWidth = 900;
 // Terza copia dello stesso numero, dopo H e la regola .sx-chassis in synth.css: la sorgente di
 // verita' resta H, questa costante la segue.
 constexpr int kChassisHeight = 680;
+
+// kMinScale e' il pavimento della FINESTRA, non della scala dello chassis: sotto 648x490 la UI
+// non e' piu' leggibile. Non ha un gemello nella WebUI, e non deve averlo — la' sotto il minimo
+// la cosa giusta e' continuare a rimpicciolire, non far traboccare lo chassis fuori dalla
+// WebView. Vedi il commento di fitScale() in SynthWindow.tsx.
 constexpr float kMinScale = 0.72f;
 constexpr float kMaxScale = 1.5f;     // stesso tetto del fit lato web
+
+// I tre numeri qui sopra che la WebUI ricalca — kChassisWidth/kChassisHeight/kMaxScale — sono
+// riletti da questo sorgente dal test "le due formule della scala restano la stessa regola" in
+// WebUI/src/synth/ui/SynthWindow.test.tsx, che poi dimostra su tutte le larghezze 648..1350 che
+// fitScale(w, heightForWidth(w)) == w/kChassisWidth con meno di un pixel di scarto verticale.
+// E' quello a tenere insieme le due copie: cambiare un numero qui e non l'altro la' fa fallire
+// `pnpm test`, non una review.
 
 float scaleForWidth (int width) noexcept
 {

@@ -136,19 +136,27 @@ public:
         juce::JUCEApplicationBase::quit();
     }
 
-    /** L'unico aggancio pubblico da cui accorgersi che macOS ha rimesso lo styleMask com'era.
-        Uscire dal full screen fa scattare windowDidExitFullScreen: ->
-        NSViewComponentPeer::resetWindowPresentation(), che ASSEGNA lo styleMask ricavandolo dai
-        soli flag di JUCE (juce_NSViewComponentPeer_mac.mm:1613-1622, chiamata da riga 2822): fra
-        quei flag NSWindowStyleMaskFullSizeContentView non c'e', quindi la striscia della barra
-        del titolo ricompare e resta fino al riavvio.
+    /** Ogni ridimensionamento ripassa lo stile chromeless. Non e' piu' la difesa principale
+        contro l'uscita dal full screen — quella e' l'osservatore che makeWindowChromeless
+        registra su NSWindowDidExitFullScreenNotification — ma resta come rete: il peer puo'
+        essere ricreato (ResizableWindow::setResizable -> recreateDesktopWindow) e la finestra
+        nuova nasce senza FullSizeContentView.
 
-        Perche' resized() basta: i bounds del peer sono il frame della NSView, cioe' della content
-        view (juce_NSViewComponentPeer_mac.mm:411-428). Togliere FullSizeContentView rimpicciolisce
-        la content view di ~28 pt anche a frame di finestra invariato, la view notifica il cambio
-        (frameChangedSelector -> redirectMovedOrResized) e si arriva qui. Rimetterlo la riallarga e
-        ci ripassa una seconda volta, ma makeWindowChromeless e' idempotente — `|=` sulla maschera —
-        quindi al secondo giro non cambia nulla e la catena si ferma. */
+        La tesi che c'era scritta qui — "togliere FullSizeContentView rimpicciolisce la content
+        view di ~28 pt, la view notifica il cambio e si arriva a resized()" — e' stata misurata
+        eseguendo l'app ed e' FALSA. Sequenza vera (lldb sulla Standalone in Debug, schermo
+        1512x982):
+
+          fresco            frame 900x680   mask 0x800f   content view 900x680
+          in full screen    frame 1512x949  mask 0xc00f   content view 1512x949
+          uscito            frame 900x680   mask 0xf      content view 900x680  <- ancora alta!
+          dopo un resize    frame 648x490   mask 0x800f   content view 648x458  <- 32 pt scoperti
+
+        Uscendo, la content view NON si rimpicciolisce: resta alta quanto la finestra, quindi
+        nessun frameChanged parte e resized() non viene mai chiamata. La barra del titolo resta
+        visibile finche' l'utente non trascina un bordo — ed e' a quel punto che AppKit rifa' il
+        layout con la maschera vecchia, la content view diventa 32 pt piu' bassa della finestra e
+        compare la banda nera. */
     void resized() override
     {
         DocumentWindow::resized();
@@ -200,6 +208,23 @@ public:
         }
 
         window_ = std::make_unique<StandaloneWindow> (getApplicationName(), properties_.getUserSettings());
+
+        // Rimandata di un giro di message loop, e non per pigrizia: la barra dei menu non esiste
+        // ancora qui dentro. JUCEApplication::initialiseApp() chiama initialiseMacMainMenu() DOPO
+        // initialise() (juce_Application.cpp:95-101), ed e' li' che nasce [NSApp mainMenu].
+        // Chiamarla in riga e' stato provato e non succede niente — misurato: ad app avviata il
+        // menu aveva ancora il solo item "Apple". initialiseApp() non e' sovrascrivibile (e'
+        // privata in JUCEApplication), e una callAsync postata prima che il loop parta viene
+        // servita al primo giro, cioe' a initialiseMacMainMenu() gia' fatta.
+        //
+        // Perche' serve: ⌃⌘F su macOS non e' cablata nella NSWindow, e' il key equivalent della
+        // voce standard View > Enter Full Screen. Il menu che JUCE costruisce per lo Standalone ha
+        // il solo menu dell'applicazione (Services, Hide, Show All, Quit): nessuna voce con azione
+        // toggleFullScreen:, quindi la scorciatoia non aveva proprio nulla da colpire — ecco il
+        // "non sembra funzionare" dell'utente. Il semaforo verde invece funzionava gia': il
+        // collectionBehavior letto dalla finestra viva e' 0x80, cioe'
+        // NSWindowCollectionBehaviorFullScreenPrimary.
+        juce::MessageManager::callAsync ([] { xerum::installFullScreenMenuItem(); });
     }
 
     void shutdown() override

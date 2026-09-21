@@ -31,7 +31,10 @@ export type SynthWindowProps = {
   gutter?: number;
 };
 
-const W = 900;
+// La larghezza dello chassis, gemella di kChassisWidth in PluginEditor.cpp. Esportata per la
+// stessa ragione di H: e' questo il numero, non il letterale nel C++, e SynthWindow.test.tsx
+// rilegge il sorgente C++ per impedire che le due copie divergano in silenzio.
+export const W = 900;
 // 680 = i 670 px che i figli dello chassis occupano davvero, piu' 10 px di respiro in fondo.
 //
 // I figli sono tutti `shrink-0` e si sommano: padding verticale 20 + Header 40 + WaveDisplay 110
@@ -54,6 +57,35 @@ const W = 900;
 // divergano), e anche kChassisHeight in PluginEditor.cpp. Esportata perche' e' quella verita',
 // non il testo del CSS, a dover guidare chi la legge.
 export const H = 680;
+
+/** Il tetto della scala, gemello di kMaxScale in PluginEditor.cpp. */
+export const MAX_SCALE = 1.5;
+
+/** La scala con cui lo chassis riempie un contenitore di `width`×`height`, meno `gutter` in
+    totale per lato. E' l'altra meta' della coppia con scaleForWidth() in PluginEditor.cpp, e le
+    due NON sono la stessa formula: il C++ decide quanto grande puo' essere la FINESTRA (jlimit fra
+    kMinScale=0.72 e kMaxScale=1.5, e da li' ricava l'altezza con ceil(H*scala)), questa decide
+    come lo chassis riempie la WebView che quella finestra contiene.
+
+    Il minimo del C++ non ha e non deve avere un gemello qui: sotto il minimo la finestra non ci
+    va, e se ci andasse (browser in sviluppo, host che ignora il constrainer) rimpicciolire
+    ancora e' la cosa giusta — un pavimento a 0.72 farebbe traboccare lo chassis fuori dalla
+    WebView invece che lasciarlo rimpicciolire.
+
+    Cio' che deve valere, e che il test in SynthWindow.test.tsx dimostra su tutto il dominio
+    raggiungibile (larghezze 648..1350), e' questo: per ogni finestra che il ChassisConstrainer
+    sa produrre, fitScale ritorna esattamente width/W e lo scarto verticale resta sotto il
+    pixel — quello che avanza e' solo l'arrotondamento di ceil() nell'altezza della finestra.
+
+    NB: la tesi opposta scritta in findings.md ("sotto i 648 px le due formule divergono e
+    lasciano scoperte delle bande") e' stata verificata ed e' falsa due volte. Primo: il
+    constrainer E' applicato alla finestra — simulando windowWillResize:toSize: sulla NSWindow
+    viva, una proposta di 100x680 torna 648x490 e una di 1600x680 torna 1350x1020. Secondo: le
+    misure di quella tabella (chassis 467x490 a viewport 648x490) non si riproducono — rimisurato
+    con Chromium headless sul dev server, a 648x490 lo chassis e' 648x489.59, cioe' riempie. */
+export function fitScale(width: number, height: number, gutter = 0) {
+  return Math.min((width - gutter) / W, (height - gutter) / H, MAX_SCALE);
+}
 
 // Come si scala lo chassis: `zoom` se il motore lo implementa per bene, altrimenti `transform`.
 //
@@ -165,7 +197,7 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
     const fit = () => {
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) return;
-      setSc(Math.min((r.width - gutter) / W, (r.height - gutter) / H, 1.5));
+      setSc(fitScale(r.width, r.height, gutter));
     };
     fit();
     const ro = new ResizeObserver(fit);

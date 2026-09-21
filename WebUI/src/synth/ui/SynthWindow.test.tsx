@@ -8,7 +8,7 @@ import { FakeBackend } from "../../juce/fake-backend";
 import { ZERO_METERS } from "../../juce/backend";
 import { BridgeProvider } from "../../juce/provider";
 import { resetFirstBoot } from "./boot";
-import { H, SynthWindow } from "./SynthWindow";
+import { fitScale, H, MAX_SCALE, SynthWindow, W } from "./SynthWindow";
 
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement["getContext"];
 
@@ -48,6 +48,56 @@ describe("SynthWindow on the bridge", () => {
     // PluginEditor.cpp deve restare uguale a questo numero: tre posti, una sola sorgente di
     // verita'.
     expect(H).toBe(680);
+  });
+
+  it("le due formule della scala restano la stessa regola: fitScale copre tutto cio' che il constrainer C++ produce", async () => {
+    // La coppia e' fitScale() qui e scaleForWidth()/heightForWidth() in PluginEditor.cpp. Non
+    // possono essere un solo pezzo di codice (C++ e TypeScript), e per questo non basta che oggi
+    // diano gli stessi numeri: serve una prova che continuino a darli. Questo test rilegge il
+    // sorgente C++ — stesso metodo del test su synth.css qui sotto — e verifica l'identita' su
+    // tutto il dominio, non su qualche campione.
+    //
+    // Perche' esiste: la passata visiva dell'utente aveva riportato bande nere stringendo la
+    // finestra, e l'ipotesi era che sotto i 648 px le due formule divergessero. Verificato sulla
+    // NSWindow viva: FALSO. Simulando la strada vera del trascinamento
+    // (windowWillResize:toSize: sulla finestra dello Standalone in Debug) una proposta di 100x680
+    // torna 648x490 e una di 1600x680 torna 1350x1020 — il constrainer c'e' e sotto 648 non si
+    // scende. Le bande venivano dall'uscita dal full screen (vedi XerumStandaloneApp.cpp). Il
+    // test resta perche' la domanda "queste due formule sono ancora la stessa regola?" e' giusta
+    // anche quando la risposta e' si'.
+    const cpp = readFileSync(join(process.cwd(), "../Source/plugin/PluginEditor.cpp"), "utf8");
+    const constant = (name: string) => {
+      const found = cpp.match(new RegExp(`\\b${name}\\s*=\\s*([0-9]+(?:\\.[0-9]+)?)f?\\s*;`));
+      if (!found) throw new Error(`${name} non trovata in PluginEditor.cpp`);
+      return Number(found[1]);
+    };
+
+    // Le tre costanti che hanno un gemello qui. kMinScale no: e' il pavimento della finestra, non
+    // una regola della WebUI — il commento di fitScale spiega perche' non deve averne uno.
+    expect(constant("kChassisWidth")).toBe(W);
+    expect(constant("kChassisHeight")).toBe(H);
+    expect(constant("kMaxScale")).toBe(MAX_SCALE);
+
+    // Il dominio: widthForScale(kMinScale) .. widthForScale(kMaxScale), cioe' 648..1350, le uniche
+    // larghezze che ChassisConstrainer::checkBounds lascia passare.
+    const minWidth = Math.round(W * constant("kMinScale"));
+    const maxWidth = Math.round(W * constant("kMaxScale"));
+    expect([minWidth, maxWidth]).toEqual([648, 1350]);
+
+    for (let width = minWidth; width <= maxWidth; width++) {
+      // heightForWidth() del C++: l'altezza della finestra non e' libera, la decide la larghezza.
+      const height = Math.ceil(H * Math.min(Math.max(width / W, constant("kMinScale")), MAX_SCALE));
+      const scale = fitScale(width, height, 0); // gutter=0: e' quello che l'host JUCE passa
+
+      // Lo chassis riempie la WebView in larghezza, esattamente.
+      expect(scale).toBeCloseTo(width / W, 10);
+      expect(scale * W).toBeCloseTo(width, 10);
+
+      // E in altezza avanza solo l'arrotondamento di ceil(): mai un pixel intero di banda.
+      const slack = height - scale * H;
+      expect(slack).toBeGreaterThanOrEqual(0);
+      expect(slack).toBeLessThan(1);
+    }
   });
 
   it("la regola .sx-chassis in synth.css non diverge da H", async () => {

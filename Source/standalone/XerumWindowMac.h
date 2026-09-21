@@ -11,8 +11,20 @@ namespace xerum
 {
 /** Barra del titolo trasparente e contenuto a tutta altezza: la finestra resta nativa —
     semaforo, full screen, Mission Control e snap continuano a funzionare — ma la barra
-    sparisce alla vista e la UI arriva al bordo superiore. */
+    sparisce alla vista e la UI arriva al bordo superiore.
+
+    Idempotente, e oltre a mettere lo stile lo RIMETTE da sola: la prima chiamata registra un
+    osservatore di NSWindowDidExitFullScreenNotification sulla finestra, perche' uscendo dal full
+    screen JUCE riassegna lo styleMask e butta via FullSizeContentView (misurato: 0x800f -> 0xf).
+    L'osservatore muore con la finestra, quindi non c'e' niente da disfare a mano. */
 void makeWindowChromeless (void* nsViewHandle);
+
+/** Aggiunge alla barra dei menu la voce View > Enter Full Screen (⌃⌘F, azione toggleFullScreen:).
+    Senza di lei ⌃⌘F non fa NIENTE: su macOS quella scorciatoia non e' cablata nella finestra, e'
+    il key equivalent di quella voce di menu, e il menu che JUCE costruisce per lo Standalone ha
+    il solo menu dell'applicazione (misurato: mainMenu con 1 item, nessun toggleFullScreen:).
+    Da chiamare una sola volta, all'avvio dell'app. */
+void installFullScreenMenuItem();
 
 /** Quanto spazio occupa il semaforo, in punti (pt) — AppKit misura i frame in punti, non in
     pixel: su uno schermo Retina i pixel sono il doppio. Misurato sui bottoni veri e non scritto
