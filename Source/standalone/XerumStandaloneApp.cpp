@@ -28,9 +28,6 @@
 
 #include "standalone/XerumWindowMac.h"
 
-#include <cstdio>
-#define XDBG(...) do { std::fprintf (stderr, "XDBG " __VA_ARGS__); std::fprintf (stderr, "\n"); std::fflush (stderr); } while (0)
-
 namespace xerum
 {
 /** La finestra: una DocumentWindow con la native title bar ACCESA — e' lei a portare semaforo,
@@ -97,16 +94,10 @@ public:
         // Il constrainer e' un unique_ptr dentro l'editor, che fra due righe muore: se resta
         // agganciato, ResizableWindow e il peer se lo portano dietro pendente per tutto il resto
         // della distruzione. Staccarlo per primo e' l'unica riga che deve venire prima di tutte.
-        XDBG ("~StandaloneWindow ENTER settings_=%p", (void*) settings_);
         setConstrainer (nullptr);
 
         if (settings_ != nullptr)
-        {
-            const auto state = getWindowStateAsString();
-            XDBG ("~StandaloneWindow state=\"%s\"", state.toRawUTF8());
-            settings_->setValue ("windowState", state);
-            XDBG ("~StandaloneWindow readback=\"%s\"", settings_->getValue ("windowState").toRawUTF8());
-        }
+            settings_->setValue ("windowState", getWindowStateAsString());
 
         // L'ordine e' quello di ~StandaloneFilterWindow (juce_StandaloneFilterWindow.h:750-759):
         // prima si stacca l'AudioProcessorPlayer, poi si smonta la UI. Al contrario, la WebView, i
@@ -120,13 +111,12 @@ public:
         // lo spegnimento dell'audio con un activeEditor pendente.
         if (editor_ != nullptr)
         {
-            /* NEGATIVE CONTROL: editorBeingDeleted deliberately removed */
+            holder_->processor->editorBeingDeleted (editor_);
             editor_ = nullptr;
         }
 
         clearContentComponent();
         holder_ = nullptr;
-        XDBG ("~StandaloneWindow EXIT");
     }
 
     /** Lo stato del plugin non lo salva nessun distruttore: savePluginState() e' chiamata solo
@@ -214,12 +204,8 @@ public:
 
     void shutdown() override
     {
-        XDBG ("shutdown ENTER window_=%p", (void*) window_.get());
         window_ = nullptr;
-        XDBG ("shutdown saveIfNeeded, user=%p", (void*) properties_.getUserSettings());
-        XDBG ("shutdown readback=\"%s\"", properties_.getUserSettings()->getValue ("windowState").toRawUTF8());
         properties_.saveIfNeeded();
-        XDBG ("shutdown EXIT");
     }
 
     /** Ricalcato su StandaloneFilterApp::systemRequestedQuit
@@ -229,14 +215,11 @@ public:
         uscire subito significherebbe distruggerla a meta'. */
     void systemRequestedQuit() override
     {
-        XDBG ("systemRequestedQuit ENTER window_=%p", (void*) window_.get());
-
         if (window_ != nullptr)
             window_->savePluginState();
 
         if (juce::ModalComponentManager::getInstance()->cancelAllModalComponents())
         {
-            XDBG ("systemRequestedQuit -> modal cancelled, retry in 100ms");
             juce::Timer::callAfterDelay (100, []
             {
                 if (auto* app = juce::JUCEApplicationBase::getInstance())
@@ -245,7 +228,6 @@ public:
         }
         else
         {
-            XDBG ("systemRequestedQuit -> quit()");
             quit();
         }
     }
