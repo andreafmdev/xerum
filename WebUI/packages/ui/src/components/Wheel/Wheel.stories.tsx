@@ -16,7 +16,10 @@ type Story = StoryObj<typeof meta>;
 function Controlled(props: WheelProps) {
   const [value, setValue] = useState(props.value);
   return (
-    <div className="h-fader">
+    // `flex` e non solo l'altezza: la rotella e' `flex-1` dentro una colonna ad altezza auto, quindi
+    // in un contenitore a blocco collasserebbe a zero e resterebbe visibile la sola etichetta.
+    // Nella striscia reale (BottomStrip) il genitore e' gia' un flex con altezza definita.
+    <div className="flex h-fader">
       <Wheel {...props} value={value} onChange={setValue} />
     </div>
   );

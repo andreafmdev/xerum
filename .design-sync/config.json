@@ -9,7 +9,8 @@
   "entry": "WebUI/packages/ui/dist/index.js",
   "cssEntry": "dist/ui.css",
   "titleMap": {
-    "Tokens": null
+    "Tokens": null,
+    "Bench": null
   },
   "overrides": {
     "Button": {

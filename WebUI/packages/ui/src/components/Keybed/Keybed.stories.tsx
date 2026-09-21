@@ -18,6 +18,9 @@ const meta: Meta<typeof Keybed> = {
     onNoteOff: () => {},
     onAllNotesOff: () => {},
   },
+  // `layout: "padded"`: con il `centered` globale il canvas si stringe sul contenuto e il
+  // decorator `w-full` collassa, schiacciando la tastiera a una manciata di pixel.
+  parameters: { layout: "padded" },
   decorators: [(Story) => <div className="h-32 w-full"><Story /></div>],
 };
 export default meta;
