@@ -134,11 +134,13 @@ void StateChannel::resetNonParametricState()
     // valueTreePropertyChanged -> triggerAsyncUpdate, non da una seconda strada scritta apposta.
     state::setMods (apvts_.state, juce::var (juce::Array<juce::var>()), apvts_.undoManager);
 
-    // Stessi 16 valori di default di state::ensureChildren e del FakeBackend lato WebUI
-    // (WebUI/src/juce/fake-backend.ts): tre posti, nessun modo di condividerli, quindi se cambia
-    // uno cambiano tutti e tre.
+    // state::kDefaultArpSteps (Source/state/StateTree.h) e' la stessa costante che
+    // state::ensureChildren usa per il pattern di fabbrica: un'unica definizione C++, il
+    // compilatore impedisce che le due divergano. Lato WebUI, FakeBackend (fake-backend.ts) la
+    // rispecchia a mano: due linguaggi, nessun modo di condividere quella, se cambia una cambiano
+    // entrambe.
     juce::Array<juce::var> defaultSteps;
-    for (double v : { 0.8, 0.0, 0.6, 0.9, 0.0, 0.7, 0.0, 0.5, 0.8, 0.0, 0.6, 0.0, 0.9, 0.4, 0.0, 0.7 })
+    for (double v : state::kDefaultArpSteps)
         defaultSteps.add (v);
     state::setArpSteps (apvts_.state, juce::var (defaultSteps), apvts_.undoManager);
 }

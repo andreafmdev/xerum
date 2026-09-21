@@ -34,6 +34,28 @@ struct StateTreeTests final : public juce::UnitTest
             expectEquals (root.getNumChildren(), 2);
         }
 
+        // Guardia contro la regressione per cui questo task e' nato: il pattern di fabbrica
+        // dell'ARP viveva come due letterali C++ separati (uno qui, uno in
+        // Source/bridge/StateChannel.cpp::resetNonParametricState()) che nessun test teneva
+        // allineati. Ora entrambi leggono state::kDefaultArpSteps: questo test verifica che
+        // ensureChildren() costruisca davvero il CSV da quell'array e non da un letterale
+        // riscritto a mano, cosi' un futuro "cambio solo qui" in kDefaultArpSteps si vede subito
+        // anche nell'output di ensureChildren. resetNonParametricState() non e' raggiungibile da
+        // qui (vive in Source/bridge/, che XerumTests non compila: niente JUCE_WEB_BROWSER in
+        // questo target) ma usa lo stesso identificatore, quindi non puo' divergere in valore.
+        beginTest ("ensureChildren costruisce ARP.steps da kDefaultArpSteps, non da un letterale duplicato");
+        {
+            juce::ValueTree root { "PARAMS" };
+            state::ensureChildren (root);
+
+            const auto csv = root.getChildWithName (state::ids::ARP)[state::ids::steps].toString();
+            const auto tokens = juce::StringArray::fromTokens (csv, ",", "");
+            expectEquals (tokens.size(), state::kArpSteps);
+
+            for (int i = 0; i < state::kArpSteps; ++i)
+                expectWithinAbsoluteError (tokens[i].getDoubleValue(), state::kDefaultArpSteps[i], 1.0e-9);
+        }
+
         beginTest ("schemaVersionOf: assente vale 1, presente si legge");
         {
             juce::ValueTree root { "PARAMS" };

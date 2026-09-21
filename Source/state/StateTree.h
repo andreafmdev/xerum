@@ -18,6 +18,13 @@ namespace ids
 inline constexpr int kModsPayloadVersion = 1;
 inline constexpr int kArpSteps = 16;
 
+/** Il pattern di fabbrica del nodo ARP: gli stessi 16 valori con cui ensureChildren() crea ARP la
+    prima volta (stato nuovo o preset vecchio) e con cui Source/bridge/StateChannel.cpp,
+    resetNonParametricState(), riporta l'arp al default per il comando "Reset to default state".
+    Un'unica definizione: prima erano due letterali C++ separati che il compilatore non teneva
+    allineati, solo un commento lo chiedeva. */
+inline constexpr double kDefaultArpSteps[kArpSteps] = { 0.8, 0.0, 0.6, 0.9, 0.0, 0.7, 0.0, 0.5, 0.8, 0.0, 0.6, 0.0, 0.9, 0.4, 0.0, 0.7 };
+
 /**
  * La versione del *formato* dello stato salvato, scritta sulla radice da
  * XerumAudioProcessor::getStateInformation e riletta da setStateInformation.
@@ -69,7 +76,10 @@ inline void ensureChildren (juce::ValueTree& root)
     if (! root.getChildWithName (ids::ARP).isValid())
     {
         juce::ValueTree arp { ids::ARP };
-        arp.setProperty (ids::steps, "0.8,0,0.6,0.9,0,0.7,0,0.5,0.8,0,0.6,0,0.9,0.4,0,0.7", nullptr);
+        juce::StringArray defaultTokens;
+        for (double v : kDefaultArpSteps)
+            defaultTokens.add (juce::String (v));
+        arp.setProperty (ids::steps, defaultTokens.joinIntoString (","), nullptr);
         root.appendChild (arp, nullptr);
     }
 }
