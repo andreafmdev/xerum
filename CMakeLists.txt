@@ -155,6 +155,7 @@ target_sources(XerumTests
         Tests/NoteMaskTests.cpp
         Tests/PluginProcessorTests.cpp
         Tests/MidiDevicesTests.cpp
+        Tests/AudioSettingsTests.cpp
         Tests/DelayTests.cpp
         Tests/FxRackTests.cpp
         # Il processore, senza editor (XERUM_HEADLESS_TESTS): il round-trip dello stato salvato
