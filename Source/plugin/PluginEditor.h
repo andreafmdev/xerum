@@ -3,6 +3,7 @@
 #include "bridge/MeterChannel.h"
 #include "bridge/MidiChannel.h"
 #include "bridge/MidiDeviceChannel.h"
+#include "bridge/AudioSettingsChannel.h"
 #include "bridge/StateChannel.h"
 #include "bridge/WebRelays.h"
 #include "plugin/PluginProcessor.h"
@@ -34,6 +35,9 @@ private:
 
     /** Gli ingressi MIDI del sistema (solo Standalone): anche lui prima di webView_. */
     bridge::MidiDeviceChannel midiDevices_;
+
+    /** Il device audio del sistema (solo Standalone): anche lui prima di webView_. */
+    bridge::AudioSettingsChannel audioSettings_;
 
     juce::WebBrowserComponent webView_;
 

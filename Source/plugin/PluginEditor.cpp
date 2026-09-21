@@ -71,7 +71,8 @@ juce::String withGutterParam (juce::String url)
 juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& relays,
                                                   bridge::StateChannel& stateChannel,
                                                   bridge::MidiChannel& midiChannel,
-                                                  bridge::MidiDeviceChannel& midiDevices)
+                                                  bridge::MidiDeviceChannel& midiDevices,
+                                                  bridge::AudioSettingsChannel& audioSettings)
 {
     auto options = juce::WebBrowserComponent::Options {}
                        .withNativeIntegrationEnabled()
@@ -99,6 +100,10 @@ juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& rela
     // Gli ingressi MIDI del sistema: getMidiInputs / setMidiInputEnabled (solo Standalone).
     options = midiDevices.applyTo (options);
 
+    // Il device audio: getAudioSettings / setAudioOutput / setSampleRate / setBufferSize
+    // (solo Standalone).
+    options = audioSettings.applyTo (options);
+
     return options;
 }
 } // namespace
@@ -110,7 +115,8 @@ XerumAudioProcessorEditor::XerumAudioProcessorEditor (
       stateChannel_ (p.getAPVTS(), p.getStateReplacedBroadcaster()),
       midiChannel_ (p.getKeyboardState(), p),
       midiDevices_ (p),
-      webView_ (makeWebOptions (relays_, stateChannel_, midiChannel_, midiDevices_)),
+      audioSettings_ (p),
+      webView_ (makeWebOptions (relays_, stateChannel_, midiChannel_, midiDevices_, audioSettings_)),
       meters_ (p.getMeters(), webView_),
       constrainer_ (std::make_unique<ChassisConstrainer>())
 {
@@ -118,6 +124,7 @@ XerumAudioProcessorEditor::XerumAudioProcessorEditor (
     relays_.attach (processorRef_.getAPVTS());
     stateChannel_.setWebView (&webView_);
     midiDevices_.setWebView (&webView_);
+    audioSettings_.setWebView (&webView_);
 
     addAndMakeVisible (webView_);
 
@@ -144,6 +151,7 @@ XerumAudioProcessorEditor::~XerumAudioProcessorEditor()
     // stateChannel_ è distrutto dopo webView_ (è dichiarato prima): sgancia il puntatore qui.
     stateChannel_.setWebView (nullptr);
     midiDevices_.setWebView (nullptr);
+    audioSettings_.setWebView (nullptr);
 }
 
 void XerumAudioProcessorEditor::paint (juce::Graphics& g)
