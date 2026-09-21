@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SettingsOverlay } from "./SettingsOverlay";
 import { FakeBackend } from "../../juce/fake-backend";
@@ -50,5 +50,60 @@ describe("SettingsOverlay", () => {
     renderWith(new FakeBackend({ audioSettings: standalone,
       midiInputs: { host: false, devices: [{ id: "k1", name: "Keystation", enabled: true }] } }));
     expect(await screen.findByLabelText("MIDI input")).toBeInTheDocument();
+  });
+
+  // Portati da PerformanceBar.test.tsx (git show 2214483~1): il selettore e' traslocato qui,
+  // e con lui il comportamento reale di select() — midiLog, l'evento midiInputsChanged, la
+  // semantica "un solo device attivo" vs "Tutti gli ingressi" — non solo che il controllo esiste.
+  describe("selettore MIDI nello Standalone", () => {
+    const midiStandalone = () => new FakeBackend({ midiInputs: { host: false, devices: [
+      { id: "id-a", name: "Keystation", enabled: true },
+      { id: "id-b", name: "Launchkey", enabled: false },
+    ] } });
+
+    it("mostra un selettore con l'ingresso attivo al posto della scritta dell'host", async () => {
+      renderWith(midiStandalone());
+      await act(async () => {});
+      expect(screen.queryByTestId("midi-host")).toBeNull();
+      expect(screen.getByRole("combobox", { name: "MIDI input" })).toHaveTextContent("Keystation");
+    });
+
+    it("scegliere un ingresso abilita quello e spegne gli altri", async () => {
+      const b = midiStandalone();
+      renderWith(b);
+      await act(async () => {});
+      await userEvent.click(screen.getByRole("combobox", { name: "MIDI input" }));
+      await userEvent.click(await screen.findByRole("option", { name: "Launchkey" }));
+      expect(b.midiLog).toEqual([["id-b", true], ["id-a", false]]);
+    });
+
+    it("\"Tutti gli ingressi\" li abilita tutti", async () => {
+      const b = midiStandalone();
+      renderWith(b);
+      await act(async () => {});
+      await userEvent.click(screen.getByRole("combobox", { name: "MIDI input" }));
+      await userEvent.click(await screen.findByRole("option", { name: "Tutti gli ingressi" }));
+      expect(b.midiLog).toEqual([["id-a", true], ["id-b", true]]);
+    });
+
+    it("l'evento midiInputsChanged aggiorna lista e selezione", async () => {
+      const b = midiStandalone();
+      renderWith(b);
+      await act(async () => {});
+      act(() => b.emitMidiInputsChanged({ host: false, devices: [
+        { id: "id-a", name: "Keystation", enabled: false },
+        { id: "id-c", name: "nanoKEY", enabled: true },
+      ] }));
+      expect(screen.getByRole("combobox", { name: "MIDI input" })).toHaveTextContent("nanoKEY");
+    });
+
+    it("con piu' ingressi abilitati mostra \"Tutti gli ingressi\"", async () => {
+      renderWith(new FakeBackend({ midiInputs: { host: false, devices: [
+        { id: "id-a", name: "Keystation", enabled: true },
+        { id: "id-b", name: "Launchkey", enabled: true },
+      ] } }));
+      await act(async () => {});
+      expect(screen.getByRole("combobox", { name: "MIDI input" })).toHaveTextContent("Tutti gli ingressi");
+    });
   });
 });
