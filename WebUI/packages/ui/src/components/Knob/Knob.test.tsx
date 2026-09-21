@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Knob } from "./Knob";
+import { Knob, KNOB_ARC_R } from "./Knob";
 
 describe("Knob", () => {
   it("is an accessible slider with normalised range", () => {
@@ -61,10 +61,14 @@ describe("Knob", () => {
   it("draws the value arc from the centre when bipolar", () => {
     const { rerender } = render(<Knob value={0.5} onChange={() => {}} label="Pan" bipolar />);
     const arc = () => screen.getByTestId("knob-value-arc").getAttribute("d") ?? "";
-    // 0.5 bipolar = arco nullo: inizio e fine coincidono in alto (20, 4)
-    expect(arc()).toMatch(/^M 20 4 A 16 16 0 0 1 20 4$/);
+    // 0.5 bipolar = arco nullo: inizio e fine coincidono in alto. Il raggio si legge dal
+    // componente invece di ripeterlo: e' cambiato una volta (16 -> 18.7, per portare l'arco a 5 px
+    // dal cappuccio come nel disegno) e questo test era l'unico posto che lo teneva fermo.
+    // Stesso arrotondamento a tre decimali che fa polar(): 20 - 18.7 in virgola mobile e' 1.3000000000000007.
+    const top = Math.round((20 - KNOB_ARC_R) * 1000) / 1000;
+    expect(arc()).toBe(`M 20 ${top} A ${KNOB_ARC_R} ${KNOB_ARC_R} 0 0 1 20 ${top}`);
     rerender(<Knob value={1} onChange={() => {}} label="Pan" bipolar />);
-    expect(arc().startsWith("M 20 4")).toBe(true);
+    expect(arc().startsWith(`M 20 ${top}`)).toBe(true);
   });
 
   it("blocks input and exposes aria-disabled when disabled", () => {

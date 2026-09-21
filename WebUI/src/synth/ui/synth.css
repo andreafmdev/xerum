@@ -154,84 +154,81 @@
 /* motion-token-block:end */
 
 /* ------------------------------------------------------------------------------------------
-   KNOB — la geometria del design, valida per tutte le varianti.
+   KNOB — il cappuccio del design, per tutte le varianti.
 
-   Nel prototipo il knob e' lo stesso in tutte e cinque: disco di 30/42/64 px dentro una scatola
-   di disco+16, cioe' 46/58/80, e nessuna scala di tacche (l'SVG del design ha solo l'arco della
-   corsa, quello del valore, il cappuccio e l'indice). Qui la scatola e' il token di spacing della
-   libreria; il disco e' il raggio SVG, che in SVG 2 e' una proprieta' CSS.
+   Il `Knob` della libreria disegna il cappuccio come <div> (vedi Knob.tsx): da qui si riveste con
+   tre custom property opzionali — `--cap` il fondo, `--cap-ring` l'anello, `--pointer` l'indice —
+   piu' il token `--shadow-cap` per l'ombra e `--cap-sheen` per il riflesso. Sono gli stessi quattro
+   strati che il prototipo scrive sul suo `.cap`, e le regole qui sotto ne sono la trascrizione.
 
    Le scatole sono all'85% di quelle del design — 38/48/68 invece di 46/58/80 — e non per timidezza:
    misurato in Chromium, con le misure del design i tre pannelli chiedono 976 px dove ce ne sono 860
    (chassis 900 meno padding e gap), e i knob Level e Key trk finiscono fuori dal pannello. La stessa
    aritmetica, risolta per la scatola grande L tenendo le proporzioni fra le tre taglie, dice
-   3L + 7M + 2S <= 628, cioe' L <= 68.1: 68 e' il massimo che entra. Il prototipo del design trabocca
-   davvero, non e' una nostra approssimazione.
-   Quello che NON cambia sono i rapporti disco/scatola del design, ed e' quello che si vede.
-
-   La libreria disegna in un `viewBox 0 0 40 40` scalato sulla scatola, quindi il raggio in unita'
-   di viewBox vale `20 x disco/scatola` — indipendente dalla scatola, appunto. Quel rapporto NON e'
-   costante fra le taglie (0.652 / 0.724 / 0.800): un solo raggio per tutte — quello che c'era prima —
-   rende i `lg` troppo piccoli e i `sm` troppo grandi. Da qui una terna per classe di taglia.
-
-   --knob-u e' l'altra meta' della conversione: quante unita' di viewBox vale un pixel CSS
-   (40/scatola). Serve alle ombre portate e agli spessori piu' sotto, che il design scrive in px
-   assoluti — gli stessi su tutte e tre le taglie — mentre qui vivono dentro il viewBox. */
+   3L + 7M + 2S <= 628, cioe' L <= 68.1: 68 e' il massimo che entra. Il prototipo del design
+   trabocca davvero, non e' una nostra approssimazione. I rapporti disco/scatola, che sono quello
+   che si vede, restano quelli del design e vivono in CAP_RATIO dentro Knob.tsx. */
 .sx-chassis {
   --spacing-knob-sm: 38px;
   --spacing-knob-md: 48px;
   --spacing-knob-lg: 68px;
-}
-.sx-chassis .size-knob-sm { --knob-u: 1.0526; }
-.sx-chassis .size-knob-md { --knob-u: 0.8333; }
-.sx-chassis .size-knob-lg { --knob-u: 0.5882; }
-
-/* Raggi: cap = 20 x disco/scatola; cap-edge, rim e l'ombra di contatto tengono gli scarti
-   della libreria (+0.6, -0.35, +0.7). Senza l'ultimo, l'ombra di contatto resta al raggio
-   predefinito (11.7) e sparisce sotto un cappuccio che ora arriva a 16: il knob perde il suo
-   unico appoggio. */
-.sx-chassis .size-knob-sm [data-part="cap"] { r: 13.043; }
-.sx-chassis .size-knob-sm [data-part="cap-edge"] { r: 13.643; }
-.sx-chassis .size-knob-sm [data-part="rim"] { r: 12.693; }
-.sx-chassis .size-knob-sm [data-part="cap-shadow"] { r: 13.743; }
-.sx-chassis .size-knob-md [data-part="cap"] { r: 14.483; }
-.sx-chassis .size-knob-md [data-part="cap-edge"] { r: 15.083; }
-.sx-chassis .size-knob-md [data-part="rim"] { r: 14.133; }
-.sx-chassis .size-knob-md [data-part="cap-shadow"] { r: 15.183; }
-.sx-chassis .size-knob-lg [data-part="cap"] { r: 16; }
-.sx-chassis .size-knob-lg [data-part="cap-edge"] { r: 16.6; }
-.sx-chassis .size-knob-lg [data-part="rim"] { r: 15.65; }
-.sx-chassis .size-knob-lg [data-part="cap-shadow"] { r: 16.7; }
-
-/* Niente tacche, in nessuna variante: nel design il cappuccio poggia sul pannello nudo. */
-.sx-chassis [data-slot="knob"] [data-part="tick"] {
-  display: none;
-}
-.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="grip"] {
-  display: none;
+  --pointer: #e9ecf5;
 }
 
-/* Le ombre portate sotto il cappuccio. Il design le scrive come box-shadow sul <div> del
-   cappuccio; qui il cappuccio e' un <circle>, e l'unica ombra che un SVG accetta e' una
-   drop-shadow di filtro — stesse lunghezze, convertite in unita' di viewBox con --knob-u.
-   Sono la meta' "sotto" di --shadow-cap: la meta' "dentro" (i due inset di luce e di buio)
-   la fa gia' il gradiente del cappuccio. */
-.sx-chassis [data-slot="knob"] [data-part="cap"] {
-  filter: drop-shadow(0 calc(2px * var(--knob-u)) calc(4px * var(--knob-u)) rgb(0 0 0 / 0.549));
+.sx-chassis[data-variant="deep"] [data-slot="knob"],
+.sx-chassis[data-variant="glow"] [data-slot="knob"] {
+  --cap: radial-gradient(circle at 38% 30%, #4b5268 0, #2b3040 45%, #181b25 100%);
+  --cap-ring: 0 0 0 1px #0a0c12, 0 0 0 2px #3a4052;
+  --pointer: #f2f4fa;
 }
-.sx-chassis[data-variant="deep"] [data-slot="knob"] [data-part="cap"],
-.sx-chassis[data-variant="glow"] [data-slot="knob"] [data-part="cap"] {
-  filter:
-    drop-shadow(0 calc(4px * var(--knob-u)) calc(6px * var(--knob-u)) rgb(0 0 0 / 0.733))
-    drop-shadow(0 calc(10px * var(--knob-u)) calc(18px * var(--knob-u)) rgb(0 0 0 / 0.6));
-}
-.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="cap"] {
-  filter:
-    drop-shadow(0 calc(4px * var(--knob-u)) calc(6px * var(--knob-u)) rgb(0 0 0 / 0.8))
-    drop-shadow(0 calc(10px * var(--knob-u)) calc(20px * var(--knob-u)) rgb(0 0 0 / 0.6));
+
+/* GLASS: disco trasparente che sfoca l'aurora dietro, alone dall'alto, rimbalzo del tono dal basso
+   e un riflesso conico che gira attorno. L'anello e' a tre strati: riga bianca, tono, alone. */
+.sx-chassis[data-variant="glass"] [data-slot="knob"] {
+  --cap:
+    radial-gradient(circle at 50% 30%, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.039) 55%, rgb(255 255 255 / 0.02)),
+    linear-gradient(color-mix(in oklch, var(--tone) 10%, transparent), color-mix(in oklch, var(--tone) 10%, transparent));
+  --cap-sheen:
+    radial-gradient(ellipse at 50% 18%, rgb(255 255 255 / 0.4), transparent 45%),
+    radial-gradient(circle at 50% 100%, color-mix(in oklch, var(--tone) 45%, transparent), transparent 55%),
+    conic-gradient(from 200deg, #0000 0, rgb(255 255 255 / 0.078) 25%, #0000 50%, rgb(255 255 255 / 0.063) 75%, #0000 100%);
+  --cap-ring:
+    0 0 0 1px rgb(255 255 255 / 0.165),
+    0 0 0 2.5px color-mix(in oklch, var(--tone) 55%, transparent),
+    0 0 10px color-mix(in oklch, var(--tone) 35%, transparent);
+  --shadow-cap:
+    inset 0 1px 1px rgb(255 255 255 / 0.333),
+    inset 0 -1px 2px rgb(0 0 0 / 0.4),
+    0 6px 14px rgb(0 0 0 / 0.6);
+  --pointer: #fff;
 }
 .sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="cap"] {
-  filter: drop-shadow(0 calc(6px * var(--knob-u)) calc(14px * var(--knob-u)) rgb(0 0 0 / 0.6));
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="pointer-tip"] {
+  box-shadow: 0 0 6px var(--tone), 0 0 2px #fff;
+}
+
+/* METAL: cappuccio spazzolato vero, il gradiente conico ripetuto del design — su un <circle> non
+   sarebbe stato possibile senza un pattern SVG, su un <div> e' una riga di CSS. */
+.sx-chassis[data-variant="metal"] [data-slot="knob"] {
+  --cap:
+    repeating-conic-gradient(from 0deg, #3b4254 0 1.5deg, #2a2f3d 1.5deg 3deg),
+    linear-gradient(#30364a, #30364a);
+  --cap-sheen:
+    radial-gradient(circle at 50% 25%, rgb(255 255 255 / 0.2), transparent 50%),
+    conic-gradient(from 200deg, #0000 0, rgb(255 255 255 / 0.071) 25%, #0000 50%, rgb(255 255 255 / 0.055) 75%, #0000 100%);
+  --cap-ring: 0 0 0 1px #05060a, 0 0 0 2px #454c5e;
+  --shadow-cap:
+    inset 0 1px 1px rgb(255 255 255 / 0.188),
+    inset 0 -2px 3px rgb(0 0 0 / 0.667),
+    0 4px 6px rgb(0 0 0 / 0.8),
+    0 10px 20px rgb(0 0 0 / 0.6);
+  --pointer: var(--tone);
+}
+.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="pointer-tip"] {
+  box-shadow: 0 0 4px var(--tone);
 }
 
 .sx-chassis[data-variant="glass"] .sx-tabs > :not(.sx-tabbar),
@@ -291,6 +288,12 @@
    GLASS: vetro fumé trasparente sopra un'aurora in movimento, bordi prismatici, cappucci
    di vetro. */
 .sx-chassis[data-variant="glass"] {
+  /* Il raggio delle piastre passa dal token, non da un border-radius con !important: le utility
+     di Tailwind vivono in @layer utilities, e per le dichiarazioni `!important` l'ordine dei layer
+     si ROVESCIA — un `rounded-plate!` dentro il layer batte un `!important` fuori da ogni layer.
+     Misurato: il pannello restava a 8 px mentre la barra dei tab, che non ha quella utility, era
+     gia' a 12. Cambiando il token seguono pannelli, schermo, tab e tastiera tutti insieme. */
+  --radius-plate: 12px;
   --color-cap-hi: rgb(255 255 255 / 0.18);
   --color-cap-lo: rgb(255 255 255 / 0.039);
   --color-cap-rim: rgb(255 255 255 / 0.28);
@@ -369,7 +372,7 @@
   background: linear-gradient(160deg, rgb(255 255 255 / 0.055), rgb(255 255 255 / 0.012) 55%, rgb(255 255 255 / 0.027)) !important;
   backdrop-filter: blur(10px) saturate(1.25);
   -webkit-backdrop-filter: blur(10px) saturate(1.25);
-  border-radius: 12px !important;
+  border-radius: var(--radius-plate);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.149),
     0 14px 40px rgb(0 0 0 / 0.6);
@@ -421,7 +424,6 @@
   background: rgb(5 7 12 / 0.478);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border-radius: 12px;
   box-shadow: var(--sx-well);
 }
 
@@ -477,28 +479,8 @@
   filter: drop-shadow(0 0 6px #5ee6ff88) drop-shadow(0 0 14px #c36cff66);
 }
 
-/* Cappucci di vetro: disco trasparente (i token cap-hi/lo sono gia' bianchi traslucidi),
-   anello luminoso del colore di sezione, indice bianco con alone. */
-/* L'anello del design, dal di fuori verso il dentro: alone di tono, anello di tono da 2.5 px,
-   riga bianca da 1 px, cappuccio. I cerchi disponibili sono due — `cap-edge` (fuori dal disco) e
-   `rim` (dentro) — quindi il tono va su quello esterno e il bianco su quello interno; prima era
-   il contrario, e l'anello luminoso finiva nascosto sotto il bordo del cappuccio.
-   Gli spessori sono in unita' di viewBox: 1 px vale --knob-u, altrimenti l'anello si ingrosserebbe
-   con la taglia del knob invece di restare 1 e 2.5 px su tutte e tre. */
-.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="cap-edge"] {
-  stroke: color-mix(in oklch, var(--tone) 55%, transparent);
-  stroke-width: calc(2.5 * var(--knob-u));
-  filter: drop-shadow(0 0 calc(10px * var(--knob-u)) color-mix(in oklch, var(--tone) 35%, transparent));
-}
-.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="rim"] {
-  stroke: rgb(255 255 255 / 0.165);
-  stroke-width: calc(1 * var(--knob-u));
-  opacity: 1;
-}
-.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="grip"] {
-  stroke: #fff;
-  opacity: 0.18;
-}
+/* Archi e readout di vetro: la corsa è una riga bianca appena visibile, il valore un filo più
+   spesso, il numero bianco pieno quando non si sta trascinando. */
 .sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="track"] {
   stroke: #fff;
   opacity: 0.18;
@@ -506,21 +488,12 @@
 .sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="value"] {
   stroke-width: 2.2;
 }
-.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="pointer-groove"] {
-  stroke: rgb(0 0 0 / 0.45);
-}
-.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="pointer-tip"] {
-  stroke: #fff;
-  filter: drop-shadow(0 0 2px var(--tone));
-}
 .sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="readout"]:not([data-dragging="true"]) {
   color: #fff;
 }
 
 /* Tastiera di vetro: piastre chiare sopra l'aurora, bordo prismatico sui tasti neri. */
 .sx-chassis[data-variant="glass"] [data-slot="keybed"] {
-  border-radius: 8px;
-  overflow: hidden;
   background: rgb(5 7 12 / 0.333);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -593,6 +566,7 @@
 /* ------------------------------------------------------------------------------------------
    METAL: chassis scuro spazzolato, anelli OLED, schermo incassato. */
 .sx-chassis[data-variant="metal"] {
+  --radius-plate: 6px;
   --color-cap-hi: #3b4254;
   --color-cap-lo: #2a2f3d;
   --color-cap-rim: #454c5e;
@@ -622,7 +596,6 @@
   background:
     repeating-linear-gradient(90deg, rgb(255 255 255 / 0.016) 0 1px, transparent 1px 4px),
     linear-gradient(180deg, #242938, #1a1e29) !important;
-  border-radius: 6px !important;
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.102),
     inset 0 -1px 0 #000,
@@ -630,7 +603,6 @@
     0 8px 18px rgb(0 0 0 / 0.6);
 }
 .sx-chassis[data-variant="metal"] .sx-display {
-  border-radius: 6px;
   background: #05060a;
   box-shadow:
     inset 0 4px 12px #000,
@@ -681,35 +653,14 @@
   width: 10px;
   height: 4px;
 }
-/* Cappuccio spazzolato: zigrinatura in evidenza, indice e readout nel colore di sezione.
-   La zigrinatura sta al posto del `repeating-conic-gradient` del design, che su un <circle>
-   servirebbe come pattern SVG e quindi come modifica alla libreria: stesso mestiere (spezzare
-   la luce sul metallo), mezzi diversi. */
-.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="grip"] {
-  opacity: 0.9;
-}
-/* L'anello del design: chiaro fuori (2 px), quasi nero dentro (1 px). Come in `glass`, il tono
-   chiaro va sul cerchio esterno e lo scuro su quello interno; gli spessori in px passano da
-   --knob-u perche' non si ingrossino con la taglia. */
-.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="cap-edge"] {
-  stroke: var(--color-cap-rim);
-  stroke-width: calc(2 * var(--knob-u));
-}
-.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="rim"] {
-  stroke: #05060a;
-  stroke-width: calc(1 * var(--knob-u));
-  opacity: 1;
-}
+/* Anelli OLED: corsa sottile e smorzata, valore ancora piu' fine, readout nel colore di sezione.
+   Il cappuccio spazzolato lo fa --cap piu' su, non piu' una zigrinatura disegnata. */
 .sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="track"] {
   opacity: 0.35;
   stroke-width: 1;
 }
 .sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="value"] {
   stroke-width: 1.6;
-}
-.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="pointer-tip"] {
-  stroke: var(--tone);
-  filter: drop-shadow(0 0 3px var(--tone));
 }
 .sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="readout"] {
   color: var(--tone);

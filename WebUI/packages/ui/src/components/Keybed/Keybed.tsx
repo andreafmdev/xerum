@@ -135,7 +135,9 @@ export function Keybed({
   return (
     <div
       data-slot="keybed"
-      className={cn("relative flex h-full w-full select-none touch-none", className)}
+      // `rounded-plate overflow-hidden`: nel disegno la tastiera e' una piastra con gli angoli
+      // arrotondati come le altre, e i tasti bianchi in fondo devono seguirli invece di uscire.
+      className={cn("relative flex h-full w-full select-none touch-none overflow-hidden rounded-plate", className)}
       // Niente setPointerCapture qui, ed e' una scelta, non una dimenticanza. Il glissando vive
       // sui pointerenter dei singoli tasti, e per la spec Pointer Events finche' un elemento
       // tiene la cattura pointerover/enter/out/leave arrivano SOLO al target della cattura: i

@@ -74,8 +74,12 @@
   --shadow-panel: 0 1px 0 var(--color-edge-light) inset, 0 -1px 0 var(--color-edge-dark) inset,
     0 2px 6px rgb(0 0 0 / 0.35);
 
-  --radius-plate: 4px;
-  --radius-control: 3px;
+  /* I raggi del disegno di riferimento: 8 px per una piastra (pannello, schermo, barra dei tab),
+     5 px per un comando (incasso, selettore, stepper, tasto). Erano 4 e 3, ed e' la ragione per cui
+     le card leggevano squadrate accanto al prototipo. Le varianti dello chassis possono ancora
+     alzarli o abbassarli (il vetro va a 12, il metallo scende a 6). */
+  --radius-plate: 8px;
+  --radius-control: 5px;
 
   --color-osc: #6ee7c5;
   --color-filter: #7aa2ff;

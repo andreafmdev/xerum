@@ -1,4 +1,4 @@
-import { useId, useState, type DragEvent } from "react";
+import { useState, type CSSProperties, type DragEvent } from "react";
 import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import { arcPath, knobAngles, polar, KNOB_START, KNOB_SWEEP } from "@/lib/arc";
@@ -45,11 +45,24 @@ export type KnobMod = {
 export const MOD_DRAG_TYPE = "text/x-mod";
 
 /**
- * Le parti del disegno portano un `data-part` (tick, track, value, cap-shadow, cap-edge, cap, rim, grip, pointer,
- * pointer-groove, pointer-tip, label, readout): e' il contratto con cui una app cambia materiale
- * al knob via CSS (vetro, metallo spazzolato) senza aggiungere prop. I token --color-cap-* restano
- * la via per ricolorare il cappuccio; `data-part` serve per cio' che i token non coprono, come un
- * anello luminoso del colore di sezione o un indice bianco con alone.
+ * Le parti del disegno portano un `data-part` (track, value, cap, cap-sheen, pointer, pointer-tip,
+ * label, readout): e' il contratto con cui una app cambia materiale al knob via CSS (vetro, metallo
+ * spazzolato) senza aggiungere prop. I token --color-cap-* restano la via per ricolorare il
+ * cappuccio; `data-part` serve per cio' che i token non coprono.
+ *
+ * Il cappuccio e' un <div>, non un <circle>. Il disegno di riferimento lo vuole di vetro: gradiente
+ * radiale trasparente, alone interno, `backdrop-filter` che sfoca cio' che sta dietro, e un anello
+ * a tre strati (riga bianca, anello del colore di sezione, alone). Di tutto questo un <circle> SVG
+ * non fa niente — niente box-shadow, niente backdrop-filter, niente gradiente conico — e la resa
+ * restava un disco piatto per quanto si limassero i token. Gli archi (corsa, valore, anelli di
+ * modulazione) restano in SVG, dove stanno bene.
+ *
+ * Tre custom property, opzionali, sono il modo in cui una app riveste il cappuccio senza toccare
+ * la libreria. Non sono token: senza di loro valgono i default qui sotto, costruiti sui token.
+ * - `--cap`       il `background` del cappuccio (default: gradiente fra --color-cap-hi e -lo)
+ * - `--cap-ring`  l'anello attorno (default: bordo scuro fuori, --color-cap-rim dentro)
+ * - `--pointer`   il colore dell'indice (default: --foreground)
+ * `--shadow-cap`, che e' un token, resta l'ombra del cappuccio e si somma sempre a `--cap-ring`.
  */
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -69,35 +82,17 @@ const knobSize = cva("relative shrink-0 rounded-full outline-none select-none to
 
 const defaultFormat = (v: number) => `${Math.round(v * 100)}%`;
 
-// viewBox 40×40, arco a raggio 16
+// viewBox 40×40.
 const C = 20;
-const R = 16;
-const CAP_R = 11;
+// Raggio degli archi. 18.7 non e' una scelta estetica ma aritmetica: il disegno tiene l'arco a 5 px
+// dal bordo del cappuccio, sempre, su tutte e tre le taglie. Cappuccio e scatola crescono insieme
+// (vedi CAP_RATIO), quindi un raggio unico in unita' di viewBox rende quei 5 px su tutte: con le
+// scatole 38/48/68 dell'app vengono 5.4, 5.0 e 4.6 px. Mezzo pixel di scarto, un numero solo.
+export const KNOB_ARC_R = 18.7;
+const R = KNOB_ARC_R;
 
-/** Scala esterna: 11 tacche sui 270°, più lunghe agli estremi e al centro. */
-const TICKS = Array.from({ length: 11 }, (_, i) => {
-  const deg = KNOB_START + (KNOB_SWEEP * i) / 10;
-  const major = i === 0 || i === 5 || i === 10;
-  const [x1, y1] = polar(C, C, major ? 17.6 : 18.4, deg);
-  const [x2, y2] = polar(C, C, 19.5, deg);
-  return { x1, y1, x2, y2, major };
-});
-// JSX costruito una volta: le tacche non hanno prop dinamiche e i knob modulati
-// ri-renderizzano a 30 Hz.
-const TICK_LINES = TICKS.map((t, i) => (
-  <line key={i} data-part="tick" x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} className="stroke-tick" strokeWidth={t.major ? 1.2 : 0.9} />
-));
-
-/** Zigrinatura: 12 intagli sul bordo del cappuccio. */
-const GRIPS = Array.from({ length: 12 }, (_, i) => {
-  const deg = i * 30;
-  const [x1, y1] = polar(C, C, CAP_R - 1.2, deg);
-  const [x2, y2] = polar(C, C, CAP_R - 0.1, deg);
-  return { x1, y1, x2, y2 };
-});
-const GRIP_LINES = GRIPS.map((g, i) => (
-  <line key={i} data-part="grip" x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} className="stroke-edge-dark opacity-60" strokeWidth={0.8} />
-));
+/** Quanto del quadrante occupa il disco del cappuccio, per taglia. */
+const CAP_RATIO = { sm: 0.652, md: 0.724, lg: 0.8 } as const;
 
 export function Knob({
   value,
@@ -144,11 +139,6 @@ export function Knob({
     disabled,
   });
 
-  // Da React 19.1 useId produce "_R_0_" (solo caratteri validi in un selettore CSS), quindi va
-  // bene così com'è dentro url(#…).
-  const uid = useId();
-  const capFill = `knob-cap-${uid}`;
-
   const { start, end } = knobAngles(value, bipolar);
   const text = format(value);
   const pointerDeg = KNOB_START + KNOB_SWEEP * value;
@@ -190,19 +180,14 @@ export function Knob({
           "transition-[box-shadow] duration-(--dur-state) ease-glass",
           disabled && "cursor-not-allowed",
         )}
+        // Il diametro del cappuccio come frazione del lato: lo legge il <div> qui sotto con una
+        // size calcolata, cosi' resta una sola tabella (CAP_RATIO) invece di tre classi per taglia.
+        style={{ "--knob-cap": CAP_RATIO[size] } as CSSProperties}
         {...handlers}
       >
+        {/* Solo gli archi. Niente scala di tacche: il disegno non ne ha, e con l'arco portato a
+            ridosso del bordo (R = 18.7) non ci sarebbe piu' lo spazio dove stavano. */}
         <svg viewBox="0 0 40 40" className={cn("size-full overflow-visible", disabled && "opacity-50")}>
-          <defs>
-            {/* Luce da sopra a sinistra: il cappuccio è un solido tornito, non un disco piatto. */}
-            <radialGradient id={capFill} cx="34%" cy="26%" r="78%">
-              <stop offset="0%" stopColor="var(--color-cap-hi)" />
-              <stop offset="100%" stopColor="var(--color-cap-lo)" />
-            </radialGradient>
-          </defs>
-
-          {TICK_LINES}
-
           <path
             data-part="track"
             d={arcPath(C, C, R, KNOB_START, KNOB_START + KNOB_SWEEP)}
@@ -218,7 +203,7 @@ export function Knob({
                 key={i}
                 data-testid="knob-mod-arc"
                 data-range={`${lo},${hi}`}
-                d={arcPath(C, C, R + 4.5 + i * 2.2, KNOB_START + KNOB_SWEEP * lo, KNOB_START + KNOB_SWEEP * hi)}
+                d={arcPath(C, C, R + 2.4 + i * 2.2, KNOB_START + KNOB_SWEEP * lo, KNOB_START + KNOB_SWEEP * hi)}
                 // `origin-center` risolve al centro del viewBox (20,20 su "0 0 40 40"), che qui
                 // coincide con C: e' il centro geometrico vero del knob, non l'angolo in alto a
                 // sinistra a cui scala() atterrerebbe di default su un elemento SVG. L'animazione
@@ -259,68 +244,50 @@ export function Knob({
             );
           })()}
 
-          {/* Ombra di contatto + cappuccio + rialzo del bordo. L'ombra e' un disco spostato in basso
-              e non un filtro feDropShadow: con ~40 knob a schermo, un filtro per knob pesa in
-              compositing (WebKit) piu' di tutto il resto del disegno. */}
-          <circle data-part="cap-shadow" cx={C} cy={C + 0.9} r={CAP_R + 0.7} className="fill-edge-dark opacity-70" />
-          <circle data-part="cap-edge" cx={C} cy={C} r={CAP_R + 0.6} className="fill-none stroke-edge-dark" strokeWidth={1} />
-          <circle
-            data-part="cap"
-            cx={C}
-            cy={C}
-            r={CAP_R}
-            fill={`url(#${capFill})`}
-            // Il rimbalzo al rilascio vive solo qui, mai sull'arco del valore o sul puntatore:
-            // il cappuccio e' un oggetto fisico che puo' molleggiare, il valore e' un dato che non
-            // deve mai mostrare all'utente un numero diverso da quello che il motore ha davvero.
-            className="origin-center transition-transform duration-(--dur-press) ease-settle group-data-[dragging=true]/knob:scale-[0.985]"
-          />
-          <circle
-            data-part="rim"
-            cx={C}
-            cy={C}
-            r={CAP_R - 0.35}
-            className="fill-none stroke-cap-rim opacity-80"
-            strokeWidth={0.7}
-          />
-          {GRIP_LINES}
-
-          {/* Indicatore: solco scuro con il fondo lucido sopra.
-
-              Niente `origin-center` qui, al contrario del cappuccio: l'attributo `transform`
-              porta gia' il proprio centro di rotazione (`rotate(a 20 20)`), e l'attributo SVG
-              e' mappato sulla proprieta' CSS `transform`. Un `transform-origin` in piu' viene
-              applicato *sopra* quella matrice, non al posto suo, e il centro finisce contato
-              due volte: misurato, l'indice usciva a 37 px dal centro di un knob che ha raggio
-              34, cioe' fuori dal cappuccio. L'origine predefinita di un elemento SVG e' 0 0,
-              che e' esattamente cio' che serve quando il centro sta gia' nell'attributo. */}
-          <g
-            data-part="pointer"
-            transform={`rotate(${pointerDeg - 270} ${C} ${C})`}
-            className="transition-transform duration-(--dur-state) ease-glass group-data-[dragging=true]/knob:transition-none"
-          >
-            <line
-              data-part="pointer-groove"
-              x1={C}
-              y1={C - 4.2}
-              x2={C}
-              y2={C - 10.4}
-              className="stroke-edge-dark"
-              strokeWidth={2.2}
-              strokeLinecap="round"
-            />
-            <line
-              data-part="pointer-tip"
-              x1={C}
-              y1={C - 4.8}
-              x2={C}
-              y2={C - 10}
-              className="stroke-foreground"
-              strokeWidth={1.2}
-              strokeLinecap="round"
-            />
-          </g>
         </svg>
+
+        {/* Il cappuccio. Un <div> centrato sul quadrante, largo CAP_RATIO del lato: da qui in giu'
+            e' tutto CSS, che e' il punto — gradienti, backdrop-filter e anelli a piu' strati sono
+            cio' che un <circle> non sa fare.
+
+            Il rimbalzo al rilascio vive solo qui, mai sull'arco del valore o sull'indice: il
+            cappuccio e' un oggetto fisico che puo' molleggiare, il valore e' un dato che non deve
+            mai mostrare un numero diverso da quello che il motore ha davvero. */}
+        <div
+          data-part="cap"
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute top-1/2 left-1/2 rounded-full",
+            "size-[calc(var(--knob-cap)*100%)] -translate-x-1/2 -translate-y-1/2",
+            "[background:var(--cap,radial-gradient(circle_at_34%_26%,var(--color-cap-hi),var(--color-cap-lo)))]",
+            "[box-shadow:var(--shadow-cap),var(--cap-ring,0_0_0_1px_var(--color-edge-dark),inset_0_0_0_1px_var(--color-cap-rim))]",
+            "transition-transform duration-(--dur-press) ease-settle group-data-[dragging=true]/knob:scale-[0.985]",
+            disabled && "opacity-50",
+          )}
+        >
+          {/* Il riflesso: un secondo strato sopra il fondo, cosi' una app puo' cambiare l'uno
+              senza riscrivere l'altro. */}
+          <span
+            data-part="cap-sheen"
+            className="pointer-events-none absolute inset-0 rounded-full [background:var(--cap-sheen,radial-gradient(circle_at_50%_20%,var(--color-cap-sheen),transparent_55%))]"
+          />
+          {/* Indice. L'elemento sale dal centro (bottom-1/2 + origin-bottom), quindi a rotazione 0
+              punta in alto e l'angolo e' lo stesso che aveva la versione SVG: pointerDeg - 270.
+              Il segno visibile non parte dal centro ne' arriva al bordo — sta fra il 25% e il 56%
+              del raggio, come nel disegno. La' quelle due misure sono in px assoluti (8 e 18) e su
+              un knob `sm` il segno usciva dal cappuccio; in frazioni la proporzione del knob grande
+              vale per tutte e tre. */}
+          <span
+            data-part="pointer"
+            className="absolute bottom-1/2 left-1/2 h-1/2 w-0.5 origin-bottom transition-transform duration-(--dur-state) ease-glass group-data-[dragging=true]/knob:transition-none"
+            style={{ transform: `translateX(-50%) rotate(${pointerDeg - 270}deg)` }}
+          >
+            <span
+              data-part="pointer-tip"
+              className="absolute inset-x-0 bottom-[25%] h-[31%] rounded-full shadow-[0_0_2px_#000] [background:var(--pointer,var(--foreground))]"
+            />
+          </span>
+        </div>
       </div>
 
       <div className="flex flex-col items-center">
