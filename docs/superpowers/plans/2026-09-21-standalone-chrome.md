@@ -1450,3 +1450,163 @@ In `docs/build.md`, sezione "Bridge checklist", aggiungere le voci:
 git add docs/
 git commit -m "Document the chromeless standalone window"
 ```
+
+---
+
+### Task 9: il ripristino ai valori di fabbrica
+
+Aggiunto il 2026-09-21 su richiesta dell'utente: il menu Options di JUCE aveva una voce
+*"Reset to default state"* che, togliendo il menu, non esiste più da nessuna parte.
+
+**Non si trasporta l'implementazione di JUCE.** `StandaloneFilterWindow::resetToDefaultState()`
+(`juce_StandaloneFilterWindow.h:766-780`) fa `clearContentComponent()` e `deletePlugin()`, poi
+ricrea tutto: distruggerebbe **la WebView da dentro la native function che la WebView sta
+eseguendo**. Qui il ripristino si fa senza smontare niente — si riportano i valori ai default,
+che per questo synth è la stessa cosa osservabile:
+
+1. ogni parametro dell'APVTS al proprio `defaultValue`;
+2. lo stato non parametrico (mod matrix e passi dell'arpeggiatore) ai default, con la stessa
+   strada che usa `StateChannel`;
+3. `filterState` rimosso dalle impostazioni, perché è la ragione per cui esiste il comando:
+   senza, la prossima apertura ricaricherebbe lo stato vecchio.
+
+Il punto 3 è l'unico che riguarda solo lo Standalone; i primi due valgono anche in AU/VST3, e
+lì il comando resta utile.
+
+**Files:**
+- Modify: `Source/bridge/StateChannel.h`, `Source/bridge/StateChannel.cpp`
+- Modify: `WebUI/src/juce/backend.ts`, `WebUI/src/juce/juce-backend.ts`, `WebUI/src/juce/fake-backend.ts`
+- Modify: `WebUI/src/synth/ui/SettingsOverlay.tsx`
+- Test: `WebUI/src/synth/ui/SettingsOverlay.test.tsx`, `WebUI/src/juce/fake-backend.test.ts`
+
+**Interfaces:**
+- Consumes: `StateChannel` (esistente), `SettingsOverlay` (Task 5).
+- Produces: native function `resetToDefaults()`; `Backend.resetToDefaults(): Promise<void>`.
+
+- [ ] **Step 1: Scrivere i test che falliscono**
+
+In `WebUI/src/synth/ui/SettingsOverlay.test.tsx`:
+
+```tsx
+it("il ripristino chiede conferma prima di buttare via la patch", async () => {
+  const backend = new FakeBackend({ audioSettings: standalone });
+  renderWith(backend);
+  await userEvent.click(await screen.findByRole("button", { name: "Ripristina i valori di fabbrica" }));
+  expect(backend.resets).toBe(0);
+  expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+});
+
+it("confermando, il ripristino arriva al backend", async () => {
+  const backend = new FakeBackend({ audioSettings: standalone });
+  renderWith(backend);
+  await userEvent.click(await screen.findByRole("button", { name: "Ripristina i valori di fabbrica" }));
+  await userEvent.click(screen.getByRole("button", { name: "Ripristina" }));
+  expect(backend.resets).toBe(1);
+});
+
+it("annullando, non succede niente", async () => {
+  const backend = new FakeBackend({ audioSettings: standalone });
+  renderWith(backend);
+  await userEvent.click(await screen.findByRole("button", { name: "Ripristina i valori di fabbrica" }));
+  await userEvent.click(screen.getByRole("button", { name: "Annulla" }));
+  expect(backend.resets).toBe(0);
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+});
+```
+
+La conferma non è un vezzo: il comando butta via il suono su cui l'utente sta lavorando, e un
+click accidentale su un bottone dentro un pannello di impostazioni non deve poterlo fare.
+
+- [ ] **Step 2: Verificare che falliscano**
+
+Run: `cd WebUI && pnpm vitest run src/synth/ui/SettingsOverlay.test.tsx`
+Expected: FAIL — il bottone non esiste.
+
+- [ ] **Step 3: La native function**
+
+In `StateChannel`, aggiungere alla catena di `applyTo`:
+
+```cpp
+        .withNativeFunction ("resetToDefaults",
+                             [this] (const juce::Array<juce::var>&,
+                                     juce::WebBrowserComponent::NativeFunctionCompletion done)
+                             {
+                                 resetToDefaults();
+                                 done (juce::var());
+                             })
+```
+
+e il metodo, che riporta i parametri ai default e lo stato non parametrico con esso:
+
+```cpp
+void StateChannel::resetToDefaults()
+{
+    // Non si ricrea il plugin come fa JUCE (juce_StandaloneFilterWindow.h:766-780): quel codice
+    // chiama clearContentComponent(), che distruggerebbe la WebView mentre sta eseguendo la
+    // native function da cui siamo arrivati qui. Si riportano i valori ai default, che per
+    // questo strumento e' la stessa cosa vista da fuori.
+    for (auto* p : apvts_.processor.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
+        {
+            ranged->beginChangeGesture();
+            ranged->setValueNotifyingHost (ranged->getDefaultValue());
+            ranged->endChangeGesture();
+        }
+
+    resetNonParametricState();
+}
+```
+
+`resetNonParametricState()` azzera mod matrix e passi dell'arpeggiatore usando la stessa strada
+di `setMods`/`setArpSteps`, così la UI riceve lo `stateChanged` che già sa gestire. Leggere
+come quei due scrivono nello state tree e seguirli: non inventare una seconda via.
+
+Nello Standalone, rimuovere anche lo stato salvato:
+
+```cpp
+   #if JucePlugin_Build_Standalone
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+        if (auto* props = holder->settings.get())
+            props->removeValue ("filterState");
+   #endif
+```
+
+- [ ] **Step 4: Il backend TypeScript**
+
+`backend.ts`:
+
+```ts
+  /** Riporta parametri, mod matrix e arpeggiatore ai valori di fabbrica. Nello Standalone
+      cancella anche lo stato salvato: è il motivo per cui il comando esiste. */
+  resetToDefaults(): Promise<void>;
+```
+
+`juce-backend.ts`: `async resetToDefaults() { await call("resetToDefaults")(); },`
+
+`fake-backend.ts`:
+
+```ts
+  /** Per i test: quante volte è stato chiesto il ripristino. */
+  resets = 0;
+  async resetToDefaults() { this.resets++; }
+```
+
+- [ ] **Step 5: Il bottone e la conferma**
+
+In `SettingsOverlay.tsx`, una sezione in fondo con il bottone
+`aria-label="Ripristina i valori di fabbrica"` e, al click, una conferma con
+`role="alertdialog"` che offre "Ripristina" e "Annulla". Riusare i componenti di `@xerum/ui`
+già in uso nel pannello; non introdurre una libreria di dialog per tre bottoni.
+
+- [ ] **Step 6: Verificare**
+
+Run: `cd WebUI && pnpm test && pnpm typecheck`
+Run: `cmake --build --preset macos-debug --target Xerum_Standalone` (due volte) e
+`cmake --build --preset macos-debug --target XerumTests && ctest --preset macos-debug`
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add Source/bridge/StateChannel.h Source/bridge/StateChannel.cpp WebUI/src/
+git commit -m "Bring back the factory reset that Options used to offer"
+```
