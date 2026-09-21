@@ -123,3 +123,10 @@ Manual checks in a DAW after touching `Source/bridge/` or the WebUI parameter/st
 4. Release Standalone opens with the embedded UI, without Vite running.
 5. `processBlock` CPU is the same with the editor open and closed (`MeterChannel` only runs while the editor/WebView is alive).
 6. Double-click a knob and confirm it returns to its default, not to zero.
+7. Lo Standalone si apre senza barra del titolo, ma il semaforo c'è e i tre bottoni funzionano.
+8. L'header trascina la finestra; una manopola no. Doppio clic sull'header: la finestra si ingrandisce.
+9. Il ridimensionamento rispetta ancora il vincolo altezza/larghezza del constrainer.
+10. Cambio di device e di buffer size mentre una nota suona: nessun crash, nessuna nota appesa.
+11. Interfaccia audio staccata a caldo: il pannello si aggiorna da solo.
+12. Riaperta l'app, device audio e ingresso MIDI scelti sono quelli di prima.
+13. Il ripristino di fabbrica chiede conferma prima di agire.
