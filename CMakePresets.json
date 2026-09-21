@@ -37,6 +37,17 @@
       }
     },
     {
+      "name": "release",
+      "displayName": "Release (Makefiles, per misurare)",
+      "binaryDir": "${sourceDir}/build/release",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "XERUM_COPY_PLUGIN": "OFF",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
       "name": "default",
       "displayName": "Default (alias of macos-debug)",
       "inherits": "macos-debug"
@@ -56,6 +67,11 @@
     {
       "name": "ninja-debug",
       "configurePreset": "ninja-debug"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "jobs": 8
     },
     {
       "name": "default",

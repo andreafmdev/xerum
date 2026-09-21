@@ -13,6 +13,12 @@
       "skillPath": "skills/build-systems/cmake/SKILL.md",
       "computedHash": "ca5d2b6e4df8cc503ac624a44d61bf5d823abba1eb1fbc0de0d6969eba351db6"
     },
+    "cpu-cache-opt": {
+      "source": "mohitmishra786/low-level-dev-skills",
+      "sourceType": "github",
+      "skillPath": "skills/low-level-programming/cpu-cache-opt/SKILL.md",
+      "computedHash": "7758cd624f2e08324bf36c635430d6ff09f9cb72f68dc549928ccc3e7b0de466"
+    },
     "dsp": {
       "source": "shortwavlabs/agent-skills",
       "sourceType": "github",
@@ -36,6 +42,12 @@
       "sourceType": "github",
       "skillPath": "skills/juce-plugin/SKILL.md",
       "computedHash": "ed52d906ec17959d3549c44c52e974e8523acb578c440368d601d659127ab506"
+    },
+    "simd-intrinsics": {
+      "source": "mohitmishra786/low-level-dev-skills",
+      "sourceType": "github",
+      "skillPath": "skills/low-level-programming/simd-intrinsics/SKILL.md",
+      "computedHash": "8ea3239cbdf4d6fc88f5db6208a1aaca23cac21648fcc3de1f0f144e706deaff"
     },
     "vercel-react-best-practices": {
       "source": "vercel-labs/agent-skills",

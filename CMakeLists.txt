@@ -192,6 +192,34 @@ target_link_libraries(XerumTests
 enable_testing()
 add_test(NAME XerumTests COMMAND XerumTests)
 
+# --- Banco di misura ------------------------------------------------------
+# Console app come i test, ma fuori da ctest: non asserisce niente, misura. Ha senso solo in
+# Release (in Debug i numeri dicono quanto costa il codice non ottimizzato, che non interessa
+# a nessuno), e per questo non dipende da nulla che la build di Debug debba costruire.
+juce_add_console_app(XerumBench PRODUCT_NAME "XerumBench")
+
+target_sources(XerumBench PRIVATE Tests/bench/BenchMain.cpp)
+
+target_compile_definitions(XerumBench
+    PRIVATE
+        JUCE_STANDALONE_APPLICATION=1
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        XERUM_HEADLESS_TESTS=1
+        "JucePlugin_Name=\"Xerum\"")
+
+xerum_set_warnings(XerumBench)
+
+# Gli stessi flag del plugin, LTO compresa: misurare con una ricetta di compilazione diversa da
+# quella che viene spedita darebbe numeri di un binario che nessuno usa.
+target_link_libraries(XerumBench
+    PRIVATE
+        XerumCore
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags)
+
 # --- Web UI bundle ---------------------------------------------------------
 # `webui` ricostruisce WebUI/dist quando cambiano i sorgenti web; in Release WebUIAssets ne
 # dipende, cosi' il binario incorpora sempre l'ultima UI.
