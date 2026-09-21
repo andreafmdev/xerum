@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence } from "motion/react";
 import { useBoolParam, useBridgeState } from "../../juce/hooks";
+import { useBackend } from "../../juce/provider";
 import type { ModSource } from "../../juce/backend";
 import type { ParamId } from "../params.generated";
 import { useSynth, type TabId } from "../useSynth";
@@ -92,6 +93,21 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
   // (wtpos/warp/level/wtIndex) invece cambiano a ogni pointermove e vivono dentro WaveDisplay,
   // altrimenti un drag sul knob ridisegnerebbe tutta la finestra, tastiera compresa.
   const bypass = useBoolParam("bypass");
+
+  // Lo spazio per il semaforo (solo Standalone macOS, vedi backend.windowChrome): letto una
+  // volta al mount, non a ogni render — WindowChannel non ha nessun ChangeListener, il semaforo
+  // non cambia larghezza mentre l'app gira. 0 come valore iniziale: fuori dallo Standalone resta
+  // cosi' per sempre, e anche dentro, finche' la risposta non arriva, l'header non lascia
+  // nessun padding di troppo.
+  const backend = useBackend();
+  const [trafficLightWidth, setTrafficLightWidth] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    void backend.windowChrome().then(({ trafficLightWidth }) => {
+      if (!cancelled) setTrafficLightWidth(trafficLightWidth);
+    });
+    return () => { cancelled = true; };
+  }, [backend]);
 
   // useBridgeState ricrea addMod/setDepth/removeMod a ogni render: le avvolgiamo
   // dietro un ref per esporre callback stabili e non ricalcolare il contesto.
@@ -190,6 +206,8 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
             onPrev={() => s.stepPreset(-1)}
             onNext={() => s.stepPreset(1)}
             onSettings={() => s.setSettings(true)}
+            scale={sc}
+            trafficLightWidth={trafficLightWidth}
           />
           <WaveDisplay scale={sc} />
           <div className="flex h-56 shrink-0 gap-2">

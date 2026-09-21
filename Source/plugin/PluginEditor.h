@@ -4,6 +4,7 @@
 #include "bridge/MidiChannel.h"
 #include "bridge/MidiDeviceChannel.h"
 #include "bridge/AudioSettingsChannel.h"
+#include "bridge/WindowChannel.h"
 #include "bridge/StateChannel.h"
 #include "bridge/WebRelays.h"
 #include "plugin/PluginProcessor.h"
@@ -38,6 +39,10 @@ private:
 
     /** Il device audio del sistema (solo Standalone): anche lui prima di webView_. */
     bridge::AudioSettingsChannel audioSettings_;
+
+    /** Trascinamento, doppio clic per lo zoom e lo spazio per il semaforo (solo Standalone
+        macOS): anche lui prima di webView_. */
+    bridge::WindowChannel window_;
 
     juce::WebBrowserComponent webView_;
 

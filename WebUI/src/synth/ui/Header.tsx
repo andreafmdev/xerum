@@ -1,5 +1,7 @@
+import { useRef } from "react";
 import { Button } from "@xerum/ui";
 import { ChevronLeft, ChevronRight, LayoutGrid, Redo2, Save, Settings, Undo2 } from "lucide-react";
+import { useBackend } from "../../juce/provider";
 import { useBoolParam } from "../../juce/hooks";
 import type { Preset } from "../presets";
 import { useDirty } from "./SynthContext";
@@ -12,16 +14,87 @@ type Props = {
   onNext: () => void;
   onBrowse: () => void;
   onSettings: () => void;
+  /** Scala corrente dello chassis (SynthWindow): serve a convertire trafficLightWidth, che
+      arriva in px di finestra, nei px CSS che il padding dell'header deve occupare. */
+  scale: number;
+  /** Spazio da lasciare al semaforo, in px di finestra. 0 fuori dallo Standalone: niente
+      padding, i bottoni non ci sono. */
+  trafficLightWidth: number;
 };
 
 const iconBtn = "sx-hbtn size-6.5! rounded-control! text-muted-foreground hover:text-foreground [&_svg]:size-3.5";
 
-export function Header({ preset, dirty, onPrev, onNext, onBrowse, onSettings }: Props) {
+/** Un mousedown/doppio clic su questi elementi non deve trascinare né ingrandire la finestra:
+    altrimenti girare una manopola o premere un bottone dell'header sposterebbe la finestra
+    invece di agire sul controllo — l'errore che renderebbe la UI inusabile. */
+const isInteractive = (target: EventTarget | null) =>
+  target instanceof HTMLElement && target.closest("button, input, select, [role='slider']") !== null;
+
+export function Header({ preset, dirty, onPrev, onNext, onBrowse, onSettings, scale, trafficLightWidth }: Props) {
+  const backend = useBackend();
   const bypass = useBoolParam("bypass");
   const withDirty = useDirty();   // `dirty` è già la prop del preset
   const toggleBypass = withDirty(() => bypass.set(!bypass.checked));
+
+  // Il ripiego mousemove del trascinamento (vedi backend.beginWindowDrag): tiene l'ultima
+  // posizione nota del puntatore fra un mousemove e l'altro, e i due listener attaccati a
+  // window mentre il ripiego e' attivo, per poterli staccare al mouseup.
+  const lastPointer = useRef<{ x: number; y: number } | null>(null);
+  const dragListeners = useRef<{ move: (e: MouseEvent) => void; up: () => void } | null>(null);
+
+  const stopFallbackDrag = () => {
+    if (!dragListeners.current) return;
+    window.removeEventListener("mousemove", dragListeners.current.move);
+    window.removeEventListener("mouseup", dragListeners.current.up);
+    dragListeners.current = null;
+    lastPointer.current = null;
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLElement>) => {
+    if (isInteractive(e.target)) return;
+
+    lastPointer.current = { x: e.clientX, y: e.clientY };
+
+    void backend.beginWindowDrag().then((started) => {
+      // Il trascinamento nativo e' partito: AppKit segue lui il puntatore da qui in poi, non
+      // serve nessun listener nostro. Se lastPointer e' gia' nullo il mouseup e' arrivato prima
+      // che la promise si risolvesse (drag brevissimo): niente da avviare.
+      if (started || !lastPointer.current) return;
+
+      // Il ripiego (vedi backend.beginWindowDrag): WKWebView consegna i messaggi della bridge
+      // in modo asincrono, quindi quando la risposta arriva l'evento di mousedown originale
+      // non e' piu' quello corrente lato nativo, e performWindowDragWithEvent non e' partito.
+      // Seguiamo noi i mousemove e chiediamo lo spostamento a mano, un delta alla volta.
+      const move = (ev: MouseEvent) => {
+        const last = lastPointer.current;
+        if (!last) return;
+        const dx = ev.clientX - last.x;
+        const dy = ev.clientY - last.y;
+        lastPointer.current = { x: ev.clientX, y: ev.clientY };
+        if (dx !== 0 || dy !== 0) void backend.moveWindowBy(dx, dy);
+      };
+      const up = () => stopFallbackDrag();
+
+      dragListeners.current = { move, up };
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
+    });
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent<HTMLElement>) => {
+    if (isInteractive(e.target)) return;
+    void backend.toggleWindowZoom();
+  };
+
   return (
-    <header className="flex h-10 shrink-0 items-center gap-2.5 px-1">
+    <header
+      className="flex h-10 shrink-0 items-center gap-2.5 px-1"
+      // Sempre un valore esplicito, mai `undefined`: a 0 il padding e' comunque "0px", non
+      // l'assenza della proprieta' — la differenza conta per chi legge lo stile calcolato.
+      style={{ paddingLeft: `${Math.round(trafficLightWidth / scale)}px` }}
+      onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
+    >
       <Logo />
       <Button variant="secondary" size="icon-xs" aria-label="Undo" className={iconBtn}><Undo2 /></Button>
       <Button variant="secondary" size="icon-xs" aria-label="Redo" className={iconBtn}><Redo2 /></Button>

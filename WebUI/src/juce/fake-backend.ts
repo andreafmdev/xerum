@@ -44,6 +44,16 @@ export class FakeBackend implements Backend {
     sampleRates: [], currentSampleRate: 0, bufferSizes: [], currentBufferSize: 0, latencyMs: 0 };
   private audioSubs = new Set<(s: AudioSettings) => void>();
   private nextAudioError = "";
+  /** Per i test: quante volte la UI ha chiesto il trascinamento nativo. */
+  windowDrags = 0;
+  /** Per i test: se il prossimo beginWindowDrag() "non parte" (come quando l'evento non e' piu'
+      il mousedown), cosi' si puo' simulare il ripiego mousemove. Di default parte sempre, come
+      nello Standalone reale con un evento ancora valido. Un solo colpo: si rialza da sola. */
+  nextDragStarts = true;
+  /** Per i test: la sequenza di spostamenti chiesti dal ripiego mousemove, in ordine. */
+  readonly moves: [number, number][] = [];
+  /** Per i test: quante volte la UI ha chiesto lo zoom nativo (doppio clic sull'header). */
+  zoomToggles = 0;
 
   constructor(opts: { demo?: boolean; state?: Partial<BridgeState>; values?: Partial<Record<ParamId, number>>; midiInputs?: MidiInputs; audioSettings?: AudioSettings } = {}) {
     if (opts.midiInputs) this.midi = structuredClone(opts.midiInputs);
@@ -97,6 +107,16 @@ export class FakeBackend implements Backend {
   failNextAudioChange(message: string) { this.nextAudioError = message; }
   /** Per i test: le impostazioni cambiano "dal sistema". */
   emitAudioSettingsChanged(s: AudioSettings) { this.audio = structuredClone(s); for (const cb of this.audioSubs) cb(structuredClone(s)); }
+
+  async beginWindowDrag() {
+    this.windowDrags++;
+    const started = this.nextDragStarts;
+    this.nextDragStarts = true;
+    return started;
+  }
+  async moveWindowBy(dx: number, dy: number) { this.moves.push([dx, dy]); }
+  async toggleWindowZoom() { this.zoomToggles++; }
+  async windowChrome() { return { trafficLightWidth: 0 }; }
 
   private applyAudio(change: () => void): string {
     if (this.nextAudioError) { const e = this.nextAudioError; this.nextAudioError = ""; return e; }

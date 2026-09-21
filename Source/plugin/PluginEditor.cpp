@@ -72,7 +72,8 @@ juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& rela
                                                   bridge::StateChannel& stateChannel,
                                                   bridge::MidiChannel& midiChannel,
                                                   bridge::MidiDeviceChannel& midiDevices,
-                                                  bridge::AudioSettingsChannel& audioSettings)
+                                                  bridge::AudioSettingsChannel& audioSettings,
+                                                  bridge::WindowChannel& window)
 {
     auto options = juce::WebBrowserComponent::Options {}
                        .withNativeIntegrationEnabled()
@@ -104,6 +105,10 @@ juce::WebBrowserComponent::Options makeWebOptions (const bridge::WebRelays& rela
     // (solo Standalone).
     options = audioSettings.applyTo (options);
 
+    // Trascinamento, zoom e spazio per il semaforo: getWindowChrome / beginWindowDrag /
+    // moveWindowBy / toggleWindowZoom (solo Standalone macOS).
+    options = window.applyTo (options);
+
     return options;
 }
 } // namespace
@@ -116,7 +121,8 @@ XerumAudioProcessorEditor::XerumAudioProcessorEditor (
       midiChannel_ (p.getKeyboardState(), p),
       midiDevices_ (p),
       audioSettings_ (p),
-      webView_ (makeWebOptions (relays_, stateChannel_, midiChannel_, midiDevices_, audioSettings_)),
+      window_ (p),
+      webView_ (makeWebOptions (relays_, stateChannel_, midiChannel_, midiDevices_, audioSettings_, window_)),
       meters_ (p.getMeters(), webView_),
       constrainer_ (std::make_unique<ChassisConstrainer>())
 {
@@ -125,6 +131,7 @@ XerumAudioProcessorEditor::XerumAudioProcessorEditor (
     stateChannel_.setWebView (&webView_);
     midiDevices_.setWebView (&webView_);
     audioSettings_.setWebView (&webView_);
+    window_.setWebView (&webView_);
 
     addAndMakeVisible (webView_);
 
@@ -152,6 +159,7 @@ XerumAudioProcessorEditor::~XerumAudioProcessorEditor()
     stateChannel_.setWebView (nullptr);
     midiDevices_.setWebView (nullptr);
     audioSettings_.setWebView (nullptr);
+    window_.setWebView (nullptr);
 }
 
 void XerumAudioProcessorEditor::paint (juce::Graphics& g)

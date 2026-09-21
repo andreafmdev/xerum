@@ -143,5 +143,9 @@ export async function createJuceBackend(): Promise<Backend> {
     setSampleRate: (hz: number) => call("setSampleRate")(hz) as Promise<string>,
     setBufferSize: (samples: number) => call("setBufferSize")(samples) as Promise<string>,
     onAudioSettingsChanged,
+    beginWindowDrag: () => call("beginWindowDrag")() as Promise<boolean>,
+    async moveWindowBy(dx, dy) { await call("moveWindowBy")(dx, dy); },
+    async toggleWindowZoom() { await call("toggleWindowZoom")(); },
+    windowChrome: () => call("getWindowChrome")() as Promise<{ trafficLightWidth: number }>,
   };
 }

@@ -106,6 +106,7 @@ target_sources(Xerum
         Source/bridge/MidiChannel.cpp
         Source/bridge/MidiDeviceChannel.cpp
         Source/bridge/AudioSettingsChannel.cpp
+        Source/bridge/WindowChannel.cpp
         Source/bridge/WebAssets.cpp
 )
 

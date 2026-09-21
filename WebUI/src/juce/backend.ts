@@ -98,6 +98,22 @@ export interface Backend {
   setSampleRate(hz: number): Promise<string>;
   setBufferSize(samples: number): Promise<string>;
   onAudioSettingsChanged(cb: (s: AudioSettings) => void): () => void;
+  /**
+   * Solo Standalone macOS. Da chiamare sul mousedown della fascia di trascinamento: prova il
+   * trascinamento nativo a partire dall'evento corrente e torna vero se e' partito. Falso fuori
+   * dallo Standalone, e anche dentro — perché WKWebView consegna i messaggi della bridge in modo
+   * asincrono, l'evento corrente puo' non essere piu' il mousedown. In quel caso chi chiama deve
+   * seguire da solo i mousemove e chiamare moveWindowBy: non è un ripiego per un bug, è la strada
+   * presa su ogni versione di macOS dove l'evento non arriva in tempo.
+   */
+  beginWindowDrag(): Promise<boolean>;
+  /** Il ripiego di beginWindowDrag quando non parte: sposta la finestra di (dx, dy) px di
+      finestra. No-op fuori dallo Standalone. */
+  moveWindowBy(dx: number, dy: number): Promise<void>;
+  /** Quello che fa il doppio clic sulla barra del titolo nativa. No-op fuori dallo Standalone. */
+  toggleWindowZoom(): Promise<void>;
+  /** Quanto spazio lasciare libero per il semaforo, in px di finestra. 0 fuori dallo Standalone. */
+  windowChrome(): Promise<{ trafficLightWidth: number }>;
 }
 
 export type MidiInputDevice = { id: string; name: string; enabled: boolean };
