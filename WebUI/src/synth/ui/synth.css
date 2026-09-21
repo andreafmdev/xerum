@@ -62,7 +62,6 @@
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  /* Riposo: senza motore collegato (o prima del primo frame) l'aurora deve restare corretta. */
 }
 
 /* soft = token di libreria così come sono. */
@@ -659,34 +658,3 @@
   .sx-chassis[data-boot] { animation: none; }
 }
 
-/* ------------------------------------------------------------------------------------------
-   CARICAMENTO PRESET (Task 14, corretto al round 1): un preset cambia ~40 parametri in un
-   colpo solo — animare quaranta knob sarebbe quaranta animazioni e un frame perso, quindi un
-   solo colpo di luce attraversa lo chassis invece.
-
-   Elemento dedicato (.sx-wipe, un div vero in SynthWindow.tsx), non lo pseudo-elemento ::after
-   dello chassis come nella bozza originale del piano: la variante glass possiede gia' quel
-   ::after per l'aurora (vedi ambient-loop-block qui sopra), stessa specificita' di un'eventuale
-   `.sx-chassis[data-wipe]::after` — lo stesso file che vince l'`animation` per ultimo in
-   cascata avrebbe azzerato l'aurora a 26 s per tutta la vita del componente. Il div dedicato
-   evita la collisione senza toccare l'aurora.
-
-   Solo la geometria di riposo vive qui: l'animazione la pilota WAAPI da SynthWindow.tsx
-   (element.animate, chiave su s.preset.name), non piu' una regola CSS chiave sull'attributo
-   data-wipe. Quella regola guardava solo la PRESENZA dell'attributo — sempre vera dal primo
-   render — quindi non ripartiva mai a un cambio di valore (verificato con un browser vero,
-   Chromium headless via CDP: qui `css: false` in vitest.config.ts non esegue mai CSS, e non
-   avrebbe potuto dirlo). element.animate() invece riparte a ogni chiamata, senza bisogno del
-   trucco a due fasi (azzera l'attributo, forza un reflow, rimettilo) che una regola CSS
-   richiederebbe. Un solo meccanismo per l'effetto, non due che divergono: niente @keyframes
-   sx-wipe ne' regola [data-wipe] qui. */
-.sx-wipe {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 10;
-  opacity: 0;
-  background: linear-gradient(100deg, transparent 30%, var(--color-osc) 50%, transparent 70%);
-  mix-blend-mode: screen;
-}

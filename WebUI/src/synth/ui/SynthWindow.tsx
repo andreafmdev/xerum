@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence } from "motion/react";
-import { DUR, EASE, bezier } from "@xerum/ui";
 import { useBoolParam, useBridgeState } from "../../juce/hooks";
 import type { ModSource } from "../../juce/backend";
 import type { ParamId } from "../params.generated";
@@ -121,39 +120,6 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
   // chassisRef invaliderebbe lo stile dell'intero sottoalbero — Header, WaveDisplay, i tre
   // pannelli, TabArea, BottomStrip, tutto — trenta volte al secondo per un valore che un solo
 
-  // Il colpo di luce del caricamento preset: pilotato da WAAPI, non da una regola CSS chiave
-  // sul nome del preset. Una regola `[data-wipe]` guarderebbe solo la PRESENZA dell'attributo,
-  // sempre vera dal primissimo render, quindi non riparte mai a un cambio di valore (verificato
-  // con un browser vero — vedi il report del task). `element.animate()` invece riparte a ogni
-  // chiamata, senza bisogno del trucco "azzera l'attributo, forza un reflow, rimettilo" — che è
-  // esattamente il tipo di codice che il prossimo che legge scambia per un errore e "ripulisce",
-  // portandosi via l'effetto insieme.
-  const wipeRef = useRef<HTMLDivElement>(null);
-  // Il primo giro di questo effect e' il preset gia' in piedi al mount (quello che l'host ha
-  // ripristinato, non una scelta fatta qui): l'apertura (data-boot sopra) possiede gia' quel
-  // momento, e sovrapporci anche il wipe darebbe un doppio lampo. Si anima solo dal secondo
-  // giro in poi, cioe' da un vero cambio di preset — e ricaricare lo STESSO preset non fa
-  // ripartire l'effect perche' la sua dipendenza qui sotto e' `s.preset.name`, una stringa: e'
-  // identica a se stessa fra un render e l'altro (es. "Init" prima e dopo), quindi e' il
-  // confronto delle dipendenze di questo useEffect a saltare il giro, non un bail-out di React
-  // sull'identita' dell'oggetto preset (che pure succede, ma piu' a monte, in useSynth.ts).
-  const firstPresetRef = useRef(true);
-  useEffect(() => {
-    if (firstPresetRef.current) {
-      firstPresetRef.current = false;
-      return;
-    }
-    const el = wipeRef.current;
-    if (!el) return;
-    // Letta ORA, non una volta sola all'avvio del modulo: chi tiene aperto il plugin puo'
-    // cambiare questa preferenza di sistema mentre la finestra e' li'. Una @media
-    // (prefers-reduced-motion) nel foglio di stile non basterebbe: non copre le animazioni
-    // create in JavaScript, solo quelle dichiarate in CSS.
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    // Nessun fill-mode: l'ultimo keyframe (opacity 0) e' gia' il riposo di .sx-wipe in
-    // synth.css, quindi a fine animazione il controllo torna alla cascata senza scatti.
-    el.animate([{ opacity: 0.45 }, { opacity: 0 }], { duration: DUR.scene, easing: bezier(EASE.exit) });
-  }, [s.preset.name]);
   const [sc, setSc] = useState(fixedScale ?? 1);
   const [mode, setMode] = useState<ScaleMode>("zoom");
   // La verifica dello zoom, dopo il layout: una sola volta, alla prima scala diversa da 1.
@@ -241,11 +207,6 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
             {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
           </AnimatePresence>
         </SynthContext>
-        {/* Il colpo di luce del caricamento preset: un elemento dedicato, non lo pseudo-elemento
-            ::after dello chassis, perche' la variante glass lo occupa gia' per l'aurora (vedi
-            synth.css). Il suo `opacity` e' animato via WAAPI (vedi l'effect qui sopra), non da
-            una regola CSS chiave sul preset: niente `data-wipe` da leggere, quindi. */}
-        <div ref={wipeRef} className="sx-wipe" data-testid="wipe" aria-hidden="true" />
       </div>
     </div>
   );
