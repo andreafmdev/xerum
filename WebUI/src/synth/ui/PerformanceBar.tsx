@@ -1,6 +1,6 @@
-import { Button, Meter, Select, Stepper } from "@xerum/ui";
+import { Button, Meter, Stepper } from "@xerum/ui";
 import { noteMaskOf } from "../../juce/backend";
-import { useMeterValue, useMidiInputs } from "../../juce/hooks";
+import { useMeterValue } from "../../juce/hooks";
 
 export type PerformanceBarProps = {
   /** Nota MIDI del primo tasto visibile. */
@@ -23,9 +23,9 @@ const noteName = (n: number) => `${NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
  * Ha preso il posto del Footer, che portava anche VOICES e CPU: erano numeri inventati — lo
  * diceva il commento del file stesso — e sono spariti invece di essere trasportati.
  *
- * La sorgente MIDI: nel plugin la scritta "HOST" (il MIDI arriva dall'host), nello Standalone un
- * selettore degli ingressi del sistema (MidiSource); accanto, una spia di attivita' presa dal mask
- * delle note.
+ * Il selettore degli ingressi MIDI e' traslocato in SettingsOverlay, dietro l'ingranaggio: qui
+ * resta solo la spia di attivita', presa dal mask delle note — non serve aprire le impostazioni
+ * per vedere che qualcosa sta suonando.
  *
  * I meter arrivano a 30 Hz: li leggono solo i due figli qui sotto, con un selettore, cosi'
  * bottoni e stepper non ri-renderizzano mai per un frame e la spia solo quando cambia stato.
@@ -54,7 +54,6 @@ export function PerformanceBar({
 
       <span className="flex-1" />
 
-      <MidiSource />
       <MidiActivity />
 
       <span className="flex-1" />
@@ -63,26 +62,6 @@ export function PerformanceBar({
       <IoMeters />
       <span>OUT</span>
     </div>
-  );
-}
-
-/**
- * "MIDI HOST" nel plugin; nello Standalone il selettore degli ingressi: "Tutti gli ingressi" li
- * abilita tutti, un device abilita solo lui. Mostra il device quando e' l'unico acceso, altrimenti
- * "Tutti gli ingressi": e' la lettura piu' onesta di un insieme che l'AudioDeviceManager tiene
- * per device.
- */
-function MidiSource() {
-  const { inputs, select } = useMidiInputs();
-  if (inputs.host) return <span data-testid="midi-source">MIDI HOST</span>;
-  const enabled = inputs.devices.filter((d) => d.enabled);
-  const value = enabled.length === 1 ? enabled[0]!.id : "all";
-  const options = [{ value: "all", label: "Tutti gli ingressi" }, ...inputs.devices.map((d) => ({ value: d.id, label: d.name }))];
-  return (
-    <span className="flex items-center gap-1.5">
-      <span>MIDI</span>
-      <Select label="MIDI input" value={value} onChange={(v) => void select(v)} options={options} className="h-5 min-w-28 text-2xs" />
-    </span>
   );
 }
 

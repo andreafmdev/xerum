@@ -11,11 +11,12 @@ type Props = {
   onPrev: () => void;
   onNext: () => void;
   onBrowse: () => void;
+  onSettings: () => void;
 };
 
 const iconBtn = "sx-hbtn size-6.5! rounded-control! text-muted-foreground hover:text-foreground [&_svg]:size-3.5";
 
-export function Header({ preset, dirty, onPrev, onNext, onBrowse }: Props) {
+export function Header({ preset, dirty, onPrev, onNext, onBrowse, onSettings }: Props) {
   const bypass = useBoolParam("bypass");
   const withDirty = useDirty();   // `dirty` è già la prop del preset
   const toggleBypass = withDirty(() => bypass.set(!bypass.checked));
@@ -51,7 +52,7 @@ export function Header({ preset, dirty, onPrev, onNext, onBrowse }: Props) {
       >
         Bypass
       </Button>
-      <Button variant="secondary" size="icon-xs" aria-label="Settings" className={iconBtn}><Settings /></Button>
+      <Button variant="secondary" size="icon-xs" aria-label="Settings" className={iconBtn} onClick={onSettings}><Settings /></Button>
     </header>
   );
 }

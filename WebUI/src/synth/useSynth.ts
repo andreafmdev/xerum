@@ -20,6 +20,7 @@ export function useSynth(initialTab: TabId) {
   // lo sovrascriverebbe.
   const [preset, setPreset] = useState<Preset>(INITIAL_PRESET);
   const [browse, setBrowse] = useState(false);
+  const [settings, setSettings] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   /** Prima scrittura di un parametro dopo un preset: il nome mostra l'asterisco. */
@@ -44,5 +45,5 @@ export function useSynth(initialTab: TabId) {
     [pick, preset.name],
   );
 
-  return { tab, setTab, preset, pick, stepPreset, browse, setBrowse, dirty, markDirty };
+  return { tab, setTab, preset, pick, stepPreset, browse, setBrowse, settings, setSettings, dirty, markDirty };
 }

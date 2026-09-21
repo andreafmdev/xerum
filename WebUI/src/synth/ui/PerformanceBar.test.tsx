@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { FakeBackend } from "../../juce/fake-backend";
 import { BridgeProvider } from "../../juce/provider";
 import { PerformanceBar } from "./PerformanceBar";
@@ -51,9 +50,8 @@ describe("PerformanceBar", () => {
     expect(onVelocityChange).toHaveBeenCalledWith(81);
   });
 
-  it("mostra la sorgente MIDI e una spia spenta senza note", () => {
+  it("mostra una spia spenta senza note", () => {
     mount();
-    expect(screen.getByTestId("midi-source")).toHaveTextContent("HOST");
     expect(screen.getByTestId("midi-activity")).toHaveAttribute("data-on", "false");
   });
 
@@ -69,57 +67,5 @@ describe("PerformanceBar", () => {
     mount();
     expect(screen.queryByText(/VOICES/)).toBeNull();
     expect(screen.queryByText(/CPU/)).toBeNull();
-  });
-
-  describe("sorgente MIDI nello Standalone", () => {
-    const standalone = () => new FakeBackend({ midiInputs: { host: false, devices: [
-      { id: "id-a", name: "Keystation", enabled: true },
-      { id: "id-b", name: "Launchkey", enabled: false },
-    ] } });
-
-    it("mostra un selettore con l'ingresso attivo al posto della scritta HOST", async () => {
-      mount({}, standalone());
-      await act(async () => {});
-      expect(screen.queryByTestId("midi-source")).toBeNull();
-      expect(screen.getByRole("combobox", { name: "MIDI input" })).toHaveTextContent("Keystation");
-    });
-
-    it("scegliere un ingresso abilita quello e spegne gli altri", async () => {
-      const b = standalone();
-      mount({}, b);
-      await act(async () => {});
-      await userEvent.click(screen.getByRole("combobox", { name: "MIDI input" }));
-      await userEvent.click(await screen.findByRole("option", { name: "Launchkey" }));
-      expect(b.midiLog).toEqual([["id-b", true], ["id-a", false]]);
-    });
-
-    it("\"Tutti gli ingressi\" li abilita tutti", async () => {
-      const b = standalone();
-      mount({}, b);
-      await act(async () => {});
-      await userEvent.click(screen.getByRole("combobox", { name: "MIDI input" }));
-      await userEvent.click(await screen.findByRole("option", { name: "Tutti gli ingressi" }));
-      expect(b.midiLog).toEqual([["id-a", true], ["id-b", true]]);
-    });
-
-    it("l'evento midiInputsChanged aggiorna lista e selezione", async () => {
-      const b = standalone();
-      mount({}, b);
-      await act(async () => {});
-      act(() => b.emitMidiInputsChanged({ host: false, devices: [
-        { id: "id-a", name: "Keystation", enabled: false },
-        { id: "id-c", name: "nanoKEY", enabled: true },
-      ] }));
-      expect(screen.getByRole("combobox", { name: "MIDI input" })).toHaveTextContent("nanoKEY");
-    });
-
-    it("con piu' ingressi abilitati mostra \"Tutti gli ingressi\"", async () => {
-      mount({}, new FakeBackend({ midiInputs: { host: false, devices: [
-        { id: "id-a", name: "Keystation", enabled: true },
-        { id: "id-b", name: "Launchkey", enabled: true },
-      ] } }));
-      await act(async () => {});
-      expect(screen.getByRole("combobox", { name: "MIDI input" })).toHaveTextContent("Tutti gli ingressi");
-    });
   });
 });

@@ -9,6 +9,7 @@ import { consumeFirstBoot } from "./boot";
 import { Header } from "./Header";
 import { FilterPanel, MasterPanel, OscPanel } from "./Panels";
 import { PresetOverlay } from "./PresetOverlay";
+import { SettingsOverlay } from "./SettingsOverlay";
 import { SynthContext, type SynthCtx } from "./SynthContext";
 import { ArpTab, EnvTab, FxTab, LfoTab, ModTab, TabArea } from "./Tabs";
 import { WaveDisplay } from "./WaveDisplay";
@@ -188,6 +189,7 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
             onBrowse={() => s.setBrowse(true)}
             onPrev={() => s.stepPreset(-1)}
             onNext={() => s.stepPreset(1)}
+            onSettings={() => s.setSettings(true)}
           />
           <WaveDisplay scale={sc} />
           <div className="flex h-56 shrink-0 gap-2">
@@ -205,6 +207,7 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
           <BottomStrip />
           <AnimatePresence>
             {s.browse && <PresetOverlay current={s.preset} onPick={s.pick} onClose={() => s.setBrowse(false)} />}
+            {s.settings && <SettingsOverlay onClose={() => s.setSettings(false)} />}
           </AnimatePresence>
         </SynthContext>
       </div>
