@@ -17,7 +17,7 @@ constexpr int kChassisWidth = 900;
 // chassis occupano davvero piu' 10 di respiro in fondo — l'aritmetica sta nel commento di H.
 // Terza copia dello stesso numero, dopo H e la regola .sx-chassis in synth.css: la sorgente di
 // verita' resta H, questa costante la segue.
-constexpr int kChassisHeight = 680;
+constexpr int kChassisHeight = 690;
 
 // kMinScale e' il pavimento della FINESTRA, non della scala dello chassis: sotto 648x490 la UI
 // non e' piu' leggibile. Non ha un gemello nella WebUI, e non deve averlo — la' sotto il minimo

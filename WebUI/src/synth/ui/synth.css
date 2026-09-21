@@ -1,4 +1,4 @@
-/* Finestra plugin: chassis 900×680 scalato nel contenitore, cinque varianti di materiale.
+/* Finestra plugin: chassis 900×690 scalato nel contenitore, cinque varianti di materiale.
    Le varianti ridefiniscono i token hardware di @xerum/ui sul chassis, così ogni
    primitiva (Knob, Segmented, Button…) cambia pelle senza prop aggiuntive.
 
@@ -21,22 +21,22 @@
 
 .sx-chassis {
   width: 900px;
-  /* 680 = H in SynthWindow.tsx (670 px di contenuto piu' 10 di respiro; l'aritmetica sta la').
+  /* 690 = H in SynthWindow.tsx (l'aritmetica dei figli sta la', e la riempie esatta).
      Le due copie non devono divergere: la sorgente di verita' e' H, questo valore la segue e
-     SynthWindow.test.tsx controlla che lo faccia davvero. */
-  height: 680px;
+     SynthWindow.test.tsx controlla che lo faccia davvero — gap compreso. */
+  height: 690px;
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 10px 12px;
   border-radius: 14px;
   background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface-0));
   box-shadow:
     0 0 0 1px var(--color-edge-dark),
     inset 0 1px 0 var(--color-edge-light),
-    0 30px 60px rgb(0 0 0 / 0.75),
-    0 8px 16px rgb(0 0 0 / 0.55);
+    0 30px 60px rgb(0 0 0 / 0.8),
+    0 8px 16px rgb(0 0 0 / 0.6);
   transform-origin: center;
   /* 200ms (il token layer) invece di 150 a mano: un fade di ingresso leggermente più
      lento è impercettibile, e la durata resta nel vocabolario. */
@@ -71,21 +71,21 @@
   --color-cap-hi: #4b5268;
   --color-cap-lo: #181b25;
   --color-cap-rim: #3a4052;
-  --color-cap-sheen: rgb(255 255 255 / 0.16);
+  --color-cap-sheen: rgb(255 255 255 / 0.102);
   --shadow-cap:
     inset 0 1px 1px rgb(255 255 255 / 0.18),
     inset 0 -2px 3px rgb(0 0 0 / 0.6),
-    0 4px 6px rgb(0 0 0 / 0.7),
-    0 10px 18px rgb(0 0 0 / 0.55);
+    0 4px 6px rgb(0 0 0 / 0.733),
+    0 10px 18px rgb(0 0 0 / 0.6);
   --shadow-panel:
-    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    inset 0 1px 0 rgb(255 255 255 / 0.078),
     inset 0 -1px 0 #000,
-    0 6px 14px rgb(0 0 0 / 0.65),
+    0 6px 14px rgb(0 0 0 / 0.667),
     0 1px 2px #000;
   --shadow-well:
-    inset 0 2px 6px rgb(0 0 0 / 0.85),
+    inset 0 2px 6px rgb(0 0 0 / 0.867),
     inset 0 0 0 1px #000,
-    inset 0 -1px 0 rgb(255 255 255 / 0.04);
+    inset 0 -1px 0 rgb(255 255 255 / 0.039);
 }
 
 .sx-chassis[data-variant="glow"] {
@@ -96,6 +96,15 @@
 /* Piastre: gradiente verticale sopra la superficie della card di libreria. */
 .sx-plate {
   background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface-1)) !important;
+}
+
+/* Chip delle sorgenti: nel design l'anello e' del colore della sorgente, non del bordo scuro
+   generico — e' quello che rende riconoscibile un chip a colpo d'occhio prima di leggerlo. */
+.sx-chip {
+  border-color: transparent;
+  box-shadow:
+    var(--shadow-cap),
+    inset 0 0 0 1px color-mix(in oklch, var(--tone) 40%, transparent);
 }
 
 /* Range della mod matrix: nativo, colorato di sezione. */
@@ -144,39 +153,91 @@
 }
 /* motion-token-block:end */
 
-/* Knob come nel design: cappuccio grande (lg 64, md 42, sm 30 px di disco dentro una scatola
-   di +16), niente scala di tacche. La scatola si allarga con i token di spacing; il disco con
-   le proprieta' geometriche SVG (`r` e' una proprieta' CSS in SVG 2). */
-.sx-chassis[data-variant="glass"],
-.sx-chassis[data-variant="metal"] {
-  /* Il design usa 46/58/80 e con quelle misure trabocca (nel prototipo il knob Level
-     dell'oscillatore esce dal pannello): queste sono le piu' grandi che stanno nei 900 px
-     tenendo le stesse proporzioni disco/scatola. */
+/* ------------------------------------------------------------------------------------------
+   KNOB — la geometria del design, valida per tutte le varianti.
+
+   Nel prototipo il knob e' lo stesso in tutte e cinque: disco di 30/42/64 px dentro una scatola
+   di disco+16, cioe' 46/58/80, e nessuna scala di tacche (l'SVG del design ha solo l'arco della
+   corsa, quello del valore, il cappuccio e l'indice). Qui la scatola e' il token di spacing della
+   libreria; il disco e' il raggio SVG, che in SVG 2 e' una proprieta' CSS.
+
+   Le scatole sono all'85% di quelle del design — 38/48/68 invece di 46/58/80 — e non per timidezza:
+   misurato in Chromium, con le misure del design i tre pannelli chiedono 976 px dove ce ne sono 860
+   (chassis 900 meno padding e gap), e i knob Level e Key trk finiscono fuori dal pannello. La stessa
+   aritmetica, risolta per la scatola grande L tenendo le proporzioni fra le tre taglie, dice
+   3L + 7M + 2S <= 628, cioe' L <= 68.1: 68 e' il massimo che entra. Il prototipo del design trabocca
+   davvero, non e' una nostra approssimazione.
+   Quello che NON cambia sono i rapporti disco/scatola del design, ed e' quello che si vede.
+
+   La libreria disegna in un `viewBox 0 0 40 40` scalato sulla scatola, quindi il raggio in unita'
+   di viewBox vale `20 x disco/scatola` — indipendente dalla scatola, appunto. Quel rapporto NON e'
+   costante fra le taglie (0.652 / 0.724 / 0.800): un solo raggio per tutte — quello che c'era prima —
+   rende i `lg` troppo piccoli e i `sm` troppo grandi. Da qui una terna per classe di taglia.
+
+   --knob-u e' l'altra meta' della conversione: quante unita' di viewBox vale un pixel CSS
+   (40/scatola). Serve alle ombre portate e agli spessori piu' sotto, che il design scrive in px
+   assoluti — gli stessi su tutte e tre le taglie — mentre qui vivono dentro il viewBox. */
+.sx-chassis {
   --spacing-knob-sm: 38px;
   --spacing-knob-md: 48px;
   --spacing-knob-lg: 68px;
 }
+.sx-chassis .size-knob-sm { --knob-u: 1.0526; }
+.sx-chassis .size-knob-md { --knob-u: 0.8333; }
+.sx-chassis .size-knob-lg { --knob-u: 0.5882; }
+
+/* Raggi: cap = 20 x disco/scatola; cap-edge, rim e l'ombra di contatto tengono gli scarti
+   della libreria (+0.6, -0.35, +0.7). Senza l'ultimo, l'ombra di contatto resta al raggio
+   predefinito (11.7) e sparisce sotto un cappuccio che ora arriva a 16: il knob perde il suo
+   unico appoggio. */
+.sx-chassis .size-knob-sm [data-part="cap"] { r: 13.043; }
+.sx-chassis .size-knob-sm [data-part="cap-edge"] { r: 13.643; }
+.sx-chassis .size-knob-sm [data-part="rim"] { r: 12.693; }
+.sx-chassis .size-knob-sm [data-part="cap-shadow"] { r: 13.743; }
+.sx-chassis .size-knob-md [data-part="cap"] { r: 14.483; }
+.sx-chassis .size-knob-md [data-part="cap-edge"] { r: 15.083; }
+.sx-chassis .size-knob-md [data-part="rim"] { r: 14.133; }
+.sx-chassis .size-knob-md [data-part="cap-shadow"] { r: 15.183; }
+.sx-chassis .size-knob-lg [data-part="cap"] { r: 16; }
+.sx-chassis .size-knob-lg [data-part="cap-edge"] { r: 16.6; }
+.sx-chassis .size-knob-lg [data-part="rim"] { r: 15.65; }
+.sx-chassis .size-knob-lg [data-part="cap-shadow"] { r: 16.7; }
+
+/* Niente tacche, in nessuna variante: nel design il cappuccio poggia sul pannello nudo. */
+.sx-chassis [data-slot="knob"] [data-part="tick"] {
+  display: none;
+}
+.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="grip"] {
+  display: none;
+}
+
+/* Le ombre portate sotto il cappuccio. Il design le scrive come box-shadow sul <div> del
+   cappuccio; qui il cappuccio e' un <circle>, e l'unica ombra che un SVG accetta e' una
+   drop-shadow di filtro — stesse lunghezze, convertite in unita' di viewBox con --knob-u.
+   Sono la meta' "sotto" di --shadow-cap: la meta' "dentro" (i due inset di luce e di buio)
+   la fa gia' il gradiente del cappuccio. */
+.sx-chassis [data-slot="knob"] [data-part="cap"] {
+  filter: drop-shadow(0 calc(2px * var(--knob-u)) calc(4px * var(--knob-u)) rgb(0 0 0 / 0.549));
+}
+.sx-chassis[data-variant="deep"] [data-slot="knob"] [data-part="cap"],
+.sx-chassis[data-variant="glow"] [data-slot="knob"] [data-part="cap"] {
+  filter:
+    drop-shadow(0 calc(4px * var(--knob-u)) calc(6px * var(--knob-u)) rgb(0 0 0 / 0.733))
+    drop-shadow(0 calc(10px * var(--knob-u)) calc(18px * var(--knob-u)) rgb(0 0 0 / 0.6));
+}
+.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="cap"] {
+  filter:
+    drop-shadow(0 calc(4px * var(--knob-u)) calc(6px * var(--knob-u)) rgb(0 0 0 / 0.8))
+    drop-shadow(0 calc(10px * var(--knob-u)) calc(20px * var(--knob-u)) rgb(0 0 0 / 0.6));
+}
+.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="cap"] {
+  filter: drop-shadow(0 calc(6px * var(--knob-u)) calc(14px * var(--knob-u)) rgb(0 0 0 / 0.6));
+}
+
 .sx-chassis[data-variant="glass"] .sx-tabs > :not(.sx-tabbar),
 .sx-chassis[data-variant="metal"] .sx-tabs > :not(.sx-tabbar) {
   padding-top: 2px;
   padding-bottom: 2px;
-}
-.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="tick"],
-.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="tick"],
-.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="grip"] {
-  display: none;
-}
-.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="cap"],
-.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="cap"] {
-  r: 14.6;
-}
-.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="cap-edge"],
-.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="cap-edge"] {
-  r: 15.3;
-}
-.sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="rim"],
-.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="rim"] {
-  r: 14.2;
 }
 /* Intestazioni dei pannelli senza la riga incisa: LED, titolo, spazio, azioni. */
 .sx-chassis[data-variant="glass"] [data-slot="section-header"] > span[aria-hidden]:not(:first-child) > span,
@@ -204,7 +265,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(180deg, rgb(255 255 255 / 0.04) 0 1px, transparent 1px 5px);
+  background: repeating-linear-gradient(180deg, rgb(255 255 255 / 0.039) 0 1px, transparent 1px 5px);
 }
 .sx-chassis[data-variant="glass"] [data-slot="wheel"] [data-part="fill"],
 .sx-chassis[data-variant="metal"] [data-slot="wheel"] [data-part="fill"] {
@@ -230,14 +291,20 @@
    GLASS: vetro fumé trasparente sopra un'aurora in movimento, bordi prismatici, cappucci
    di vetro. */
 .sx-chassis[data-variant="glass"] {
-  --color-cap-hi: rgb(255 255 255 / 0.2);
-  --color-cap-lo: rgb(255 255 255 / 0.04);
+  --color-cap-hi: rgb(255 255 255 / 0.18);
+  --color-cap-lo: rgb(255 255 255 / 0.039);
   --color-cap-rim: rgb(255 255 255 / 0.28);
-  --color-cap-sheen: rgb(255 255 255 / 0.3);
+  --color-cap-sheen: rgb(255 255 255 / 0.4);
+  /* L'incasso del design ha due strati, non uno: la riga di luce di 1 px sul bordo E un'ombra
+     interna vera che scende dall'alto. Senza la seconda le superfici incassate restano piatte —
+     era esattamente la profondita' che mancava rispetto al prototipo. */
+  --sx-well:
+    inset 0 0 0 1px rgb(255 255 255 / 0.078),
+    inset 0 2px 8px rgb(0 0 0 / 0.6);
   background: #0a0c16;
   box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.1),
-    0 30px 70px rgb(0 0 0 / 0.85),
+    0 0 0 1px rgb(255 255 255 / 0.102),
+    0 30px 70px rgb(0 0 0 / 0.867),
     0 0 90px color-mix(in oklch, #6f9cff 14%, transparent);
   overflow: hidden;
   isolation: isolate;
@@ -269,8 +336,11 @@
   /* Luminosità fissa. L'aurora ha respirato con l'uscita audio per un giorno: all'ascolto
      il pulsare dava fastidio mentre si suona, che è esattamente il momento in cui lo si
      guarda. Era anche l'unica cosa in tutta la UI a costare qualcosa a ogni frame dentro il
-     processo dell'host. Tolta: il fondo resta vivo per conto suo, con la rotazione lenta. */
-  opacity: 0.35;
+     processo dell'host. Tolta: il fondo resta vivo per conto suo, con la rotazione lenta.
+     Il valore, invece, è tornato quello del design (0.55 sullo strato davanti, 0.35 su quello
+     dietro): era stato pareggiato a 0.35 insieme al respiro, ma le due cose sono indipendenti —
+     a togliere il pulsare bastava fissare l'opacità, non anche abbassarla. */
+  opacity: 0.55;
 }
 .sx-chassis[data-variant="glass"] .sx-aurora::after {
   animation-duration: 37s;
@@ -301,8 +371,8 @@
   -webkit-backdrop-filter: blur(10px) saturate(1.25);
   border-radius: 12px !important;
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.15),
-    0 14px 40px rgb(0 0 0 / 0.55);
+    inset 0 1px 0 rgb(255 255 255 / 0.149),
+    0 14px 40px rgb(0 0 0 / 0.6);
 }
 /* Bordo prismatico: lo stesso anello di 1 px su plate, display, anteprima e tasti neri; i tasti
    neri cambiano solo angolo e opacita' del gradiente, piu' sotto. */
@@ -329,7 +399,7 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: linear-gradient(115deg, transparent 38%, rgb(255 255 255 / 0.07) 48%, transparent 58%);
+  background: linear-gradient(115deg, transparent 38%, rgb(255 255 255 / 0.071) 48%, transparent 58%);
   z-index: 1;
 }
 .sx-chassis[data-variant="glass"] [data-slot="section-header"] > span:not([aria-hidden]) {
@@ -339,23 +409,24 @@
 
 /* Barra dei tab e tab acceso. */
 .sx-chassis[data-variant="glass"] .sx-tabbar {
-  background: rgb(0 0 0 / 0.15);
-  box-shadow: inset 0 -1px 0 rgb(255 255 255 / 0.08);
+  background: rgb(0 0 0 / 0.149);
+  box-shadow: inset 0 -1px 0 rgb(255 255 255 / 0.078);
 }
 .sx-chassis[data-variant="glass"] .sx-tabbar [role="tab"]:is([data-active]:not([data-active="false"]), [data-state="active"]) {
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.02));
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.078), rgb(255 255 255 / 0.02));
 }
 
-/* Schermo dell'onda: vetro scuro che lascia intravedere l'aurora. */
+/* Schermo dell'onda: vetro scuro che lascia intravedere l'aurora, incassato come tutto il resto. */
 .sx-chassis[data-variant="glass"] .sx-display {
-  background: rgb(5 7 12 / 0.48);
+  background: rgb(5 7 12 / 0.478);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border-radius: 12px;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  box-shadow: var(--sx-well);
 }
 
-/* Incassi: slot dei preset, selettori, stepper, interruttori, rotelle. */
+/* Incassi: slot dei preset, selettori, stepper, interruttori, rotelle.
+   Lo strato di --sx-well e' dichiarato sul chassis, piu' in alto. */
 .sx-chassis[data-variant="glass"] .sx-preset,
 .sx-chassis[data-variant="glass"] .sx-search,
 .sx-chassis[data-variant="glass"] .sx-well,
@@ -364,11 +435,9 @@
 .sx-chassis[data-variant="glass"] [data-slot="stepper"],
 .sx-chassis[data-variant="glass"] [data-slot="switch"],
 .sx-chassis[data-variant="glass"] [data-slot="wheel"] [role="slider"] {
-  background: rgb(0 0 0 / 0.3);
+  background: rgb(0 0 0 / 0.302);
   background-image: none;
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.1),
-    inset 0 1px 0 rgb(255 255 255 / 0.06);
+  box-shadow: var(--sx-well);
 }
 .sx-chassis[data-variant="glass"] [data-slot="segmented"] [role="radio"][aria-checked="true"] {
   border-color: transparent;
@@ -383,11 +452,11 @@
 .sx-chassis[data-variant="glass"] .sx-hbtn,
 .sx-chassis[data-variant="glass"] [data-slot="button"] {
   border-color: transparent;
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.11), rgb(255 255 255 / 0.03));
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.11), rgb(255 255 255 / 0.031));
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.25),
+    inset 0 1px 0 rgb(255 255 255 / 0.251),
     inset 0 0 0 1px rgb(255 255 255 / 0.11),
-    0 4px 10px rgb(0 0 0 / 0.5);
+    0 4px 10px rgb(0 0 0 / 0.533);
 }
 .sx-chassis[data-variant="glass"] .sx-chip {
   border-color: transparent;
@@ -396,13 +465,13 @@
   -webkit-backdrop-filter: blur(6px);
   box-shadow:
     inset 0 0 0 1px color-mix(in oklch, var(--tone) 60%, transparent),
-    inset 0 1px 0 rgb(255 255 255 / 0.19);
+    inset 0 1px 0 rgb(255 255 255 / 0.188);
 }
 .sx-chassis[data-variant="glass"] .sx-fxslot {
   background: rgb(0 0 0 / 0.2);
   box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.08),
-    inset 0 1px 0 rgb(255 255 255 / 0.05);
+    inset 0 0 0 1px rgb(255 255 255 / 0.078),
+    inset 0 1px 0 rgb(255 255 255 / 0.047);
 }
 .sx-chassis[data-variant="glass"] .sx-mark {
   filter: drop-shadow(0 0 6px #5ee6ff88) drop-shadow(0 0 14px #c36cff66);
@@ -410,14 +479,21 @@
 
 /* Cappucci di vetro: disco trasparente (i token cap-hi/lo sono gia' bianchi traslucidi),
    anello luminoso del colore di sezione, indice bianco con alone. */
+/* L'anello del design, dal di fuori verso il dentro: alone di tono, anello di tono da 2.5 px,
+   riga bianca da 1 px, cappuccio. I cerchi disponibili sono due — `cap-edge` (fuori dal disco) e
+   `rim` (dentro) — quindi il tono va su quello esterno e il bianco su quello interno; prima era
+   il contrario, e l'anello luminoso finiva nascosto sotto il bordo del cappuccio.
+   Gli spessori sono in unita' di viewBox: 1 px vale --knob-u, altrimenti l'anello si ingrosserebbe
+   con la taglia del knob invece di restare 1 e 2.5 px su tutte e tre. */
 .sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="cap-edge"] {
-  stroke: rgb(255 255 255 / 0.16);
+  stroke: color-mix(in oklch, var(--tone) 55%, transparent);
+  stroke-width: calc(2.5 * var(--knob-u));
+  filter: drop-shadow(0 0 calc(10px * var(--knob-u)) color-mix(in oklch, var(--tone) 35%, transparent));
 }
 .sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="rim"] {
-  stroke: color-mix(in oklch, var(--tone) 55%, transparent);
-  stroke-width: 1.3;
+  stroke: rgb(255 255 255 / 0.165);
+  stroke-width: calc(1 * var(--knob-u));
   opacity: 1;
-  filter: drop-shadow(0 0 2px color-mix(in oklch, var(--tone) 60%, transparent));
 }
 .sx-chassis[data-variant="glass"] [data-slot="knob"] [data-part="grip"] {
   stroke: #fff;
@@ -445,18 +521,18 @@
 .sx-chassis[data-variant="glass"] [data-slot="keybed"] {
   border-radius: 8px;
   overflow: hidden;
-  background: rgb(5 7 12 / 0.33);
+  background: rgb(5 7 12 / 0.333);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.078);
 }
 .sx-chassis[data-variant="glass"] [data-key="white"] {
   border-color: transparent;
-  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.04) 70%, rgb(255 255 255 / 0.08));
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.102), rgb(255 255 255 / 0.039) 70%, rgb(255 255 255 / 0.078));
   box-shadow:
-    inset -1px 0 0 rgb(255 255 255 / 0.1),
-    inset 1px 0 0 rgb(0 0 0 / 0.33),
-    inset 0 1px 0 rgb(255 255 255 / 0.19);
+    inset -1px 0 0 rgb(255 255 255 / 0.102),
+    inset 1px 0 0 rgb(0 0 0 / 0.333),
+    inset 0 1px 0 rgb(255 255 255 / 0.188);
 }
 .sx-chassis[data-variant="glass"] [data-part="key-label"] {
   color: rgb(255 255 255 / 0.4);
@@ -468,8 +544,8 @@
     0 0 18px color-mix(in oklch, var(--color-osc) 50%, transparent);
 }
 .sx-chassis[data-variant="glass"] [data-key="black"] {
-  background-image: linear-gradient(180deg, rgb(10 12 22 / 0.9), rgb(5 6 10 / 0.85));
-  box-shadow: 0 4px 10px rgb(0 0 0 / 0.75);
+  background-image: linear-gradient(180deg, rgb(10 12 22 / 0.902), rgb(5 6 10 / 0.851));
+  box-shadow: 0 4px 10px rgb(0 0 0 / 0.8);
 }
 .sx-chassis[data-variant="glass"] [data-key="black"]::before {
   background: conic-gradient(from 200deg, #5ee6ff99, #ffffff40 25%, #c36cff90 50%, #ffffff30 70%, #e26fd680 85%, #5ee6ff99);
@@ -483,18 +559,18 @@
 
 /* Browser dei preset: vetro chiaro sopra l'aurora. */
 .sx-chassis[data-variant="glass"] .sx-ovl {
-  background: rgb(7 9 18 / 0.66);
+  background: rgb(7 9 18 / 0.659);
   backdrop-filter: blur(18px) saturate(1.3);
   -webkit-backdrop-filter: blur(18px) saturate(1.3);
 }
 .sx-chassis[data-variant="glass"] .sx-card {
-  background: linear-gradient(160deg, rgb(255 255 255 / 0.063), rgb(255 255 255 / 0.016) 60%, rgb(255 255 255 / 0.03));
+  background: linear-gradient(160deg, rgb(255 255 255 / 0.063), rgb(255 255 255 / 0.016) 60%, rgb(255 255 255 / 0.031));
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.13),
-    inset 0 0 0 1px rgb(255 255 255 / 0.08),
-    0 8px 24px rgb(0 0 0 / 0.45);
+    inset 0 1px 0 rgb(255 255 255 / 0.133),
+    inset 0 0 0 1px rgb(255 255 255 / 0.078),
+    0 8px 24px rgb(0 0 0 / 0.467);
 }
 .sx-chassis[data-variant="glass"] .sx-card[data-selected="true"] {
   box-shadow:
@@ -504,14 +580,14 @@
 }
 .sx-chassis[data-variant="glass"] .sx-card .sx-wv,
 .sx-chassis[data-variant="glass"] .sx-prev .sx-wv {
-  background: rgb(5 7 12 / 0.5);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+  background: rgb(5 7 12 / 0.502);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.071);
 }
 .sx-chassis[data-variant="glass"] .sx-cat[data-on="true"] {
   background: linear-gradient(180deg, rgb(255 255 255 / 0.086), rgb(255 255 255 / 0.024));
   box-shadow:
     inset 0 0 0 1px rgb(255 255 255 / 0.11),
-    inset 0 1px 0 rgb(255 255 255 / 0.15);
+    inset 0 1px 0 rgb(255 255 255 / 0.149);
 }
 
 /* ------------------------------------------------------------------------------------------
@@ -521,16 +597,26 @@
   --color-cap-lo: #2a2f3d;
   --color-cap-rim: #454c5e;
   --color-cap-sheen: rgb(255 255 255 / 0.2);
+  /* Gli inset del cappuccio del design: la luce sul bordo alto e il buio sotto. Le due ombre
+     portate della stessa dichiarazione non stanno qui ma nel filtro del <circle>, piu' sopra —
+     un SVG non prende box-shadow. */
+  --shadow-cap:
+    inset 0 1px 1px rgb(255 255 255 / 0.188),
+    inset 0 -2px 3px rgb(0 0 0 / 0.667);
+  --sx-well:
+    inset 0 3px 8px rgb(0 0 0 / 0.933),
+    inset 0 0 0 1px #000,
+    inset 0 -1px 0 rgb(255 255 255 / 0.063);
   background:
     repeating-linear-gradient(90deg, rgb(255 255 255 / 0.02) 0 1px, transparent 1px 3px),
     linear-gradient(180deg, #2a2f3b, #171a22 40%, #10121a);
   border-radius: 10px;
   box-shadow:
     0 0 0 1px #000,
-    inset 0 1px 0 rgb(255 255 255 / 0.15),
+    inset 0 1px 0 rgb(255 255 255 / 0.149),
     inset 0 -1px 0 #000,
-    0 30px 60px rgb(0 0 0 / 0.85),
-    0 8px 16px rgb(0 0 0 / 0.65);
+    0 30px 60px rgb(0 0 0 / 0.867),
+    0 8px 16px rgb(0 0 0 / 0.667);
 }
 .sx-chassis[data-variant="metal"] .sx-plate {
   background:
@@ -538,10 +624,10 @@
     linear-gradient(180deg, #242938, #1a1e29) !important;
   border-radius: 6px !important;
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.1),
+    inset 0 1px 0 rgb(255 255 255 / 0.102),
     inset 0 -1px 0 #000,
-    0 2px 4px rgb(0 0 0 / 0.75),
-    0 8px 18px rgb(0 0 0 / 0.55);
+    0 2px 4px rgb(0 0 0 / 0.8),
+    0 8px 18px rgb(0 0 0 / 0.6);
 }
 .sx-chassis[data-variant="metal"] .sx-display {
   border-radius: 6px;
@@ -550,13 +636,13 @@
     inset 0 4px 12px #000,
     inset 0 0 0 1px #000,
     inset 0 0 0 3px #0c0e14,
-    0 1px 0 rgb(255 255 255 / 0.08);
+    0 1px 0 rgb(255 255 255 / 0.078);
 }
 .sx-chassis[data-variant="metal"] .sx-tabbar {
   background: #0c0e14;
   box-shadow:
     inset 0 -1px 0 #000,
-    inset 0 1px 0 rgb(255 255 255 / 0.04);
+    inset 0 1px 0 rgb(255 255 255 / 0.039);
 }
 .sx-chassis[data-variant="metal"] .sx-tabbar [role="tab"]:is([data-active]:not([data-active="false"]), [data-state="active"]) {
   background: linear-gradient(180deg, #242938, #1a1e29);
@@ -566,28 +652,27 @@
   border-color: transparent;
   background: linear-gradient(180deg, #3a4152, #252a37);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.15),
-    0 2px 4px rgb(0 0 0 / 0.75),
+    inset 0 1px 0 rgb(255 255 255 / 0.149),
+    0 2px 4px rgb(0 0 0 / 0.8),
     0 0 0 1px #000;
 }
 .sx-chassis[data-variant="metal"] [data-slot="segmented"] [role="radio"][aria-checked="true"] {
   border-color: transparent;
   background: linear-gradient(180deg, #3a4152, #252a37);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.13),
-    0 1px 2px rgb(0 0 0 / 0.75);
+    inset 0 1px 0 rgb(255 255 255 / 0.133),
+    0 1px 2px rgb(0 0 0 / 0.8);
   color: var(--tone);
 }
 .sx-chassis[data-variant="metal"] .sx-preset,
+.sx-chassis[data-variant="metal"] .sx-search,
 .sx-chassis[data-variant="metal"] .sx-well,
 .sx-chassis[data-variant="metal"] .sx-arp,
 .sx-chassis[data-variant="metal"] [data-slot="segmented"],
 .sx-chassis[data-variant="metal"] [data-slot="stepper"],
-.sx-chassis[data-variant="metal"] [data-slot="switch"] {
-  box-shadow:
-    inset 0 3px 8px rgb(0 0 0 / 0.9),
-    inset 0 0 0 1px #000,
-    inset 0 -1px 0 rgb(255 255 255 / 0.06);
+.sx-chassis[data-variant="metal"] [data-slot="switch"],
+.sx-chassis[data-variant="metal"] [data-slot="wheel"] [role="slider"] {
+  box-shadow: var(--sx-well);
 }
 /* LED rettangolari, come su un rack. */
 .sx-chassis[data-variant="metal"] [data-slot="section-header"] > span[aria-hidden]:first-child,
@@ -596,9 +681,24 @@
   width: 10px;
   height: 4px;
 }
-/* Cappuccio spazzolato: zigrinatura in evidenza, indice e readout nel colore di sezione. */
+/* Cappuccio spazzolato: zigrinatura in evidenza, indice e readout nel colore di sezione.
+   La zigrinatura sta al posto del `repeating-conic-gradient` del design, che su un <circle>
+   servirebbe come pattern SVG e quindi come modifica alla libreria: stesso mestiere (spezzare
+   la luce sul metallo), mezzi diversi. */
 .sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="grip"] {
   opacity: 0.9;
+}
+/* L'anello del design: chiaro fuori (2 px), quasi nero dentro (1 px). Come in `glass`, il tono
+   chiaro va sul cerchio esterno e lo scuro su quello interno; gli spessori in px passano da
+   --knob-u perche' non si ingrossino con la taglia. */
+.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="cap-edge"] {
+  stroke: var(--color-cap-rim);
+  stroke-width: calc(2 * var(--knob-u));
+}
+.sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="rim"] {
+  stroke: #05060a;
+  stroke-width: calc(1 * var(--knob-u));
+  opacity: 1;
 }
 .sx-chassis[data-variant="metal"] [data-slot="knob"] [data-part="track"] {
   opacity: 0.35;

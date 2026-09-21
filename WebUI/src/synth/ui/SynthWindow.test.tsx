@@ -35,19 +35,18 @@ describe("SynthWindow on the bridge", () => {
     expect(screen.getByTestId("chassis")).toHaveAttribute("data-attached");
   });
 
-  it("H è 680: i 670 px dei figli più 10 di respiro, il numero che PluginEditor.cpp deve ricalcare", async () => {
+  it("H è 690, l'altezza del design, e i figli la riempiono esatta", async () => {
     // Non un numero nel test: H e' il valore che guida davvero la scala dello chassis. I figli
-    // in flusso sono tutti shrink-0 e si sommano a 670 (padding 20 + Header 40 + WaveDisplay 130
-    // + pannelli 224 + TabArea 124 + BottomStrip 108 + quattro gap da 6): l'aritmetica sta nel
-    // commento di H in SynthWindow.tsx. Il 708 di prima veniva da "600 di pannello invariato piu'
-    // 108 di striscia", ma quei 600 contenevano gia' il Footer da 28 che BottomStrip ha
-    // sostituito, e lasciavano 38 px vuoti in fondo.
+    // in flusso sono tutti shrink-0 e si sommano a 690 senza avanzi: padding 20 + Header 40 +
+    // WaveDisplay 118 + pannelli 228 + TabArea 144 + BottomStrip 108 + quattro gap da 8.
+    // L'aritmetica, e il perche' di ogni addendo, stanno nel commento di H in SynthWindow.tsx.
     //
     // Un fix precedente controllava solo il testo del CSS — cambiare H e lasciare synth.css
     // intatto avrebbe fatto passare quel test con una UI rotta. Anche kChassisHeight in
     // PluginEditor.cpp deve restare uguale a questo numero: tre posti, una sola sorgente di
     // verita'.
-    expect(H).toBe(680);
+    expect(H).toBe(690);
+    expect(20 + 40 + 118 + 228 + 144 + 108 + 4 * 8).toBe(H);
   });
 
   it("le due formule della scala restano la stessa regola: fitScale copre tutto cio' che il constrainer C++ produce", async () => {
@@ -109,6 +108,22 @@ describe("SynthWindow on the bridge", () => {
     const css = readFileSync(join(process.cwd(), "src/synth/ui/synth.css"), "utf8");
     const chassisRule = css.match(/\.sx-chassis\s*\{[^}]*\}/)?.[0] ?? "";
     expect(chassisRule).toMatch(new RegExp(`height:\\s*${H}px`));
+    // Il gap fa parte della stessa aritmetica: 690 sta in piedi solo con quattro gap da 8. Se
+    // qualcuno lo riporta a 6 senza toccare H, i figli smettono di riempire e tornano i 10 px
+    // vuoti in fondo che questa revisione ha chiuso — un difetto che si vede solo nell'host.
+    expect(chassisRule).toMatch(/gap:\s*8px/);
+  });
+
+  it("le altezze dei figli, scritte nelle classi, sono quelle dell'aritmetica di H", async () => {
+    // Stesso metodo del test qui sopra e di quello su PluginEditor.cpp: le misure vivono in
+    // classi Tailwind dentro il JSX, e jsdom con `css: false` non le vede. Si leggono quindi dai
+    // sorgenti. Sono i quattro addendi che, con Header (h-10) e BottomStrip (h-[108px]), fanno H.
+    const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
+    expect(read("src/synth/ui/SynthWindow.tsx")).toContain('className="flex h-57 shrink-0 gap-2"'); // pannelli 228
+    expect(read("src/synth/ui/WaveDisplay.tsx")).toContain("sx-display relative h-29.5 shrink-0"); // display 118
+    expect(read("src/synth/ui/Tabs.tsx")).toContain("sx-plate sx-tabs flex h-36 shrink-0"); // tab 144
+    expect(read("src/synth/ui/BottomStrip.tsx")).toContain('className="flex h-[108px] shrink-0 gap-2"');
+    expect(read("src/synth/ui/Header.tsx")).toContain('className="flex h-10 shrink-0 items-center');
   });
 
   it("monta la striscia bassa al posto del footer", async () => {

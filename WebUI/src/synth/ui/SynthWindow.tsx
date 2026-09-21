@@ -35,28 +35,30 @@ export type SynthWindowProps = {
 // stessa ragione di H: e' questo il numero, non il letterale nel C++, e SynthWindow.test.tsx
 // rilegge il sorgente C++ per impedire che le due copie divergano in silenzio.
 export const W = 900;
-// 680 = i 670 px che i figli dello chassis occupano davvero, piu' 10 px di respiro in fondo.
+// 690 = l'altezza dello chassis nel design ("Synth Window", .sx-chassis { height: 690px }), e qui
+// la somma dei figli la riempie esattamente — niente respiro in fondo e niente compressione.
 //
-// I figli sono tutti `shrink-0` e si sommano: padding verticale 20 + Header 40 + WaveDisplay 110
-// + i tre pannelli 224 + TabArea 144 + BottomStrip 108 + quattro gap da 6 = 670. Gli stessi 10 px
-// di respiro c'erano prima della striscia bassa, quando la somma faceva 590 dentro una scatola
-// da 600.
+// I figli sono tutti `shrink-0` e si sommano: padding verticale 20 + Header 40 + WaveDisplay 118
+// + i tre pannelli 228 + TabArea 144 + BottomStrip 108 + quattro gap da 8 = 690.
 //
-// I venti px passati dal WaveDisplay alla TabArea sono della tab FX, che e' la sola a impilare
-// due righe in uno slot: un knob `sm` alto 76 px sotto un'intestazione da 16 non stava nei 92
-// che il plate da 124 lasciava, e il readout finiva sotto l'overflow-hidden. Misurato, non
-// stimato. Il WaveDisplay li cede senza perdere niente: e' una forma d'onda, non una griglia.
+// Da dove viene ogni numero: Header (40), riga dei pannelli (228) e gap (8) sono quelli del design.
+// BottomStrip (108) sta al posto del Footer da 32 piu' la tastiera da 82 del prototipo, che sommati
+// al loro gap farebbero 122: la striscia unica costa 14 px in meno perche' mette le rotelle di fianco
+// ai tasti invece che i meter su una riga a parte.
 //
-// Il primo numero scelto era 708, giustificato come "600 di pannello invariato piu' 108 di
-// striscia": premessa falsa, perche' quei 600 contenevano gia' il Footer da 28 px che
-// BottomStrip ha sostituito. 708 lasciava 38 px vuoti in fondo, e la finestra del plugin
-// ereditava l'errore a ogni scala.
+// La TabArea resta 144 e NON scende ai 126 del design: la tab FX e' la sola a impilare
+// un'intestazione sopra un knob dentro uno slot, e con i knob riportati alle misure del design
+// (scatola `sm` da 46 px invece di 38) serve piu' spazio di prima, non meno. Misurato, non stimato.
+//
+// Il WaveDisplay prende quel che avanza: 690 - 20 - 32 - 40 - 228 - 144 - 108 = 118. Sono 20 px in
+// meno dei 138 del design, ed e' esattamente il prestito che la tab FX aveva gia' chiesto quando
+// l'altezza era 680; una forma d'onda li cede senza perdere niente, una griglia di controlli no.
 //
 // E' il numero da cui dipende tutta la geometria dell'editor: la regola .sx-chassis in synth.css
 // deve restare uguale a questo valore (il test in SynthWindow.test.tsx controlla che non
 // divergano), e anche kChassisHeight in PluginEditor.cpp. Esportata perche' e' quella verita',
 // non il testo del CSS, a dover guidare chi la legge.
-export const H = 680;
+export const H = 690;
 
 /** Il tetto della scala, gemello di kMaxScale in PluginEditor.cpp. */
 export const MAX_SCALE = 1.5;
@@ -246,7 +248,7 @@ export function SynthWindow({ variant = "glass", initialTab = "env", scale: fixe
             trafficLightWidth={trafficLightWidth}
           />
           <WaveDisplay scale={sc} />
-          <div className="flex h-56 shrink-0 gap-2">
+          <div className="flex h-57 shrink-0 gap-2">
             <OscPanel />
             <FilterPanel />
             <MasterPanel />

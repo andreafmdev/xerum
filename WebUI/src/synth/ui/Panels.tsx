@@ -12,7 +12,11 @@ import { ParamKnob } from "./ParamKnob";
 import { useDirty, useSynthCtx } from "./SynthContext";
 
 const plate = "sx-plate min-w-0 gap-1.5 pt-1.5";
-const body = "flex flex-1 items-end justify-between gap-1 px-2.5 pb-2.5";
+// Niente padding qui: CardContent di Panel ne mette gia' 12 px per lato e 12 in fondo, e il
+// px-2.5/pb-2.5 che c'era li raddoppiava a 22 — venti px di pannello buttati per lato, che e'
+// buona parte del motivo per cui i knob del design non entravano. Il design dà al pannello
+// `padding: 8px 10px 10px`: i 12 della libreria sono quelli, non ventidue.
+const body = "flex flex-1 items-end justify-between gap-1";
 
 export function OscPanel() {
   const oscOn = useBoolParam("oscOn");
@@ -64,7 +68,11 @@ export function OscPanel() {
 }
 
 const CURVE_W = 236;
-const CURVE_H = 58;
+// 56, non 58: il pannello da 228 si chiude cosi' al pixel — 12 di padding alto, 24 di
+// intestazione, 6 di gap, poi 56 di curva, 12 di gap, 106 di knob e 12 di padding basso.
+// Misurato in Chromium; a 58 il pannello traboccava di 2 px e la riga bassa dei readout
+// finiva sotto l'overflow-hidden della piastra.
+const CURVE_H = 56;
 
 /**
  * Risposta del filtro, in un componente a parte: è l'unica cosa del pannello che
@@ -75,7 +83,7 @@ function FilterCurve({ cutoff, res, type }: { cutoff: number; res: number; type:
   const cutLive = useLiveValue(cutoff, modsFor(mods, "cutoff"));
   const d = useMemo(() => filterPath(cutLive, res, type, CURVE_W, CURVE_H), [cutLive, res, type]);
   return (
-    <div className="sx-well mx-2.5 overflow-hidden rounded-control bg-well shadow-well" style={{ height: CURVE_H }}>
+    <div className="sx-well overflow-hidden rounded-control bg-well shadow-well" style={{ height: CURVE_H }}>
       <svg width="100%" height={CURVE_H} viewBox={`0 0 ${CURVE_W} ${CURVE_H}`} preserveAspectRatio="none" className="block">
         {[0.25, 0.5, 0.75].map((x) => (
           <line key={x} x1={x * CURVE_W} x2={x * CURVE_W} y1="0" y2={CURVE_H} className="stroke-line-strong" opacity={0.3} />
@@ -121,9 +129,13 @@ export function FilterPanel() {
 export function MasterPanel() {
   const voiceMode = useChoiceParam("voiceMode");
   const dirty = useDirty();
+  // 176 px, non i 200 del design: sono esattamente quelli che il contenuto occupa (due knob `sm`
+  // affiancati, il knob `lg` del volume, gap e padding), e i 24 di differenza servono al Filter,
+  // che con le etichette lunghe ("Resonance") ne chiede 252 dei 254 che restano. Misurato in
+  // Chromium: a 200 il Filter trabocca di 22 px.
   return (
     <Panel title="Master" tone="master" className={`${plate} flex-[0_0_176px]`}>
-      <div className="px-2.5">
+      <div>
         <Segmented label="Voice mode" value={voiceMode.value} onChange={dirty(voiceMode.set)} options={voiceMode.options} />
       </div>
       <div className={`${body} justify-around`}>
