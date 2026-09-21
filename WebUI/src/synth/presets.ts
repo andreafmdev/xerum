@@ -5,7 +5,7 @@ import { PARAM_SPECS } from "./params.generated";
 import type { Preset } from "./presets.generated";
 import { WAVETABLES } from "./wavetables.generated";
 
-export const CATEGORIES = ["All", "Bass", "Lead", "Pad", "Keys", "Pluck", "FX", "User"];
+export const CATEGORIES = ["All", "Bass", "Lead", "Pad", "Keys", "Pluck", "Seq", "FX", "User"];
 
 /** Tutti i preset sono di fabbrica: una banca e un autore soli, non nomi inventati. */
 export const BANK = "Factory";
@@ -18,6 +18,7 @@ export const DESCRIPTIONS: Record<string, string> = {
   Pad: "Pad evolutivo: attacco lungo, chorus e riverbero ampio, movimento lento del filtro.",
   Keys: "Timbro percussivo e definito, decadimento naturale, poco effetto.",
   Pluck: "Pluck corto con envelope rapida sul cutoff; ideale per arpeggi.",
+  Seq: "Linea sequenziata: arpeggiatore acceso, envelope corta, sustain quasi a zero.",
   FX: "Texture in movimento, pensata per transizioni e riser.",
   User: "Patch iniziale: oscillatore singolo, filtro aperto, nessun effetto.",
 };

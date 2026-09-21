@@ -53,7 +53,7 @@ The front panel is `SynthWindow` (`WebUI/src/synth/ui/`): a fixed 900×680 chass
 - Brand assets live once in `Resources/branding` (regenerable with `build.mjs`): the header mark and wordmark come from there through the `@branding` Vite alias, the favicon from `index.html`, and the Standalone/bundle icons through `ICON_BIG` / `ICON_SMALL` in `CMakeLists.txt`.
 - Every control is an `@xerum/ui` primitive (Knob with modulation rings and drop target, Segmented, Stepper, Meter, Tabs `bar`, Toggle, Panel, Button). Displays specific to the window (filter response, envelope, LFO scope, wavetable stack + spectrum) are app-level canvases/SVGs.
 - **Known divergence:** `WaveDisplay` (`WebUI/src/synth/ui/WaveDisplay.tsx`) draws a procedural curve from `WebUI/src/synth/curves.ts`, not the real `.xwt` table data — deliberate, not an oversight.
-- **Known gap:** the twelve factory presets (`Source/parameters/presets.json`) have been recalibrated against the current gain staging — each one now states `level`, `drive` and `volume` explicitly, the three that decide whether it clips — but they still have not been auditioned by ear, and the preset browser (`PresetOverlay`) has not been clicked through end to end in the Standalone.
+- **Known gap:** the forty-seven factory presets (twelve in `Source/parameters/presets.json`, thirty-five generated into `Source/parameters/presets.pack.json`) have been recalibrated against the current gain staging — each one now states `level`, `drive` and `volume` explicitly, the three that decide whether it clips — but they still have not been auditioned by ear, and the preset browser (`PresetOverlay`) has not been clicked through end to end in the Standalone.
 
 ## Motion
 
@@ -205,7 +205,7 @@ That peak is still the instrument's loudest source of transient level: the outpu
 
 **Output soft clipper** (`SynthEngine::process`). After the master gain, both channels pass through a soft clipper that is bit-transparent below `kSoftClipThreshold = 0.95f` and asymptotes to 1.0 above it. It exists because the per-voice gain is a constant: a dense chord, a high master volume or a route on `res` can still exceed full scale, and without it the host would receive hard-truncated samples. Its derivative is 1 at the threshold, so there is no corner where it engages, and it never fires during ordinary playing (see the gain-staging test above). `Tests/EngineParamsTests.cpp`, "il soft clipper d'uscita non tocca il segnale sotto soglia", pins the transparency: doubling the master gain must double the peak exactly.
 
-The threshold was 0.8 and moved up to 0.95 with an earlier headroom rise, for the opposite reason to the obvious one: not because less signal arrives but because more does, and at 0.8 an ordinary four-note chord would have engaged it, turning the net into a permanent distortion stage. At 0.95 the chord passes untouched with **1.5 dB** to spare, and so do all twelve factory presets — the hottest of them is now *Init*, the default patch itself, at 0.828 on four notes, with 1.20 dB of margin.
+The threshold was 0.8 and moved up to 0.95 with an earlier headroom rise, for the opposite reason to the obvious one: not because less signal arrives but because more does, and at 0.8 an ordinary four-note chord would have engaged it, turning the net into a permanent distortion stage. At 0.95 the chord passes untouched with **1.5 dB** to spare, and so do all forty-seven factory presets — the hottest of them is now *Init*, the default patch itself, at 0.828 on four notes, with 1.20 dB of margin.
 
 **It stayed at 0.95 through the joint retune, and that was a measured decision rather than an omission.** Raising it is a real lever — the chord margin is `threshold / chord peak`, so a higher threshold allows a higher per-voice gain at constant margin — but a small one: 0.95 → 0.97 buys **0.18 dB** of instrument level, 0.95 → 0.98 buys 0.27 dB. What it costs is the knee, and the usual way of describing that cost turns out to be wrong. **The slope at an input of 1.0 is 0.25 whatever the threshold is**: the curve is `T + (1-T)·u/(1+u)` with `u = (x-T)/(1-T)`, so at `x = 1` we always have `u = 1` and a slope of `1/(1+u)² = 0.25`. What a higher threshold actually does is squeeze everything above it into a narrower output range — at an input of 1.05, `T = 0.95` maps the excess into 0.033 of output and `T = 0.97` into 0.012 — so it flattens harder while touching fewer samples. A fifth of a decibel is not worth that, so the threshold stays.
 
@@ -386,15 +386,58 @@ generazione se non esiste.
 
 ## Presets
 
-`Source/parameters/presets.json` is the single source of truth for the twelve factory presets. `scripts/gen-params.mjs` reads it, together with `parameters.json`, and emits four generated files: `Source/parameters/ParameterTable.h`, `WebUI/src/synth/params.generated.ts`, `Source/parameters/PresetTable.h`, `WebUI/src/synth/presets.generated.ts`.
+`Source/parameters/presets.json` holds the twelve hand-written factory presets; `Source/parameters/presets.pack.json` holds the thirty-five generated from the Serum pack (see below). `scripts/gen-params.mjs` concatenates the two — hand-written first, a repeated name failing the generation rather than producing two indistinguishable menu entries — reads them together with `parameters.json`, and emits four generated files: `Source/parameters/ParameterTable.h`, `WebUI/src/synth/params.generated.ts`, `Source/parameters/PresetTable.h`, `WebUI/src/synth/presets.generated.ts`.
 
 `StateChannel::applyPreset` (`Source/bridge/StateChannel.cpp`) applies a preset on the message thread: for every spec in `params::kTable` it looks up a value in the preset's value list and falls back to the parameter's spec default (`spec.def`) when the preset doesn't mention it — this is what stops a preset from inheriting fragments of whatever sound was active before it was picked. Each parameter is set through `beginChangeGesture` / `setValueNotifyingHost` / `endChangeGesture`, so host automation and undo see the change like any other parameter edit.
 
 **Every preset is tuned against the gain staging**, which is why each one spells out `level`, `drive` and `volume` explicitly instead of inheriting them: those three decide whether it clips. Two of the twelve have been trimmed for that reason. *Reese Wide* went from `level` 0.8 to 0.6 when `kVoiceHeadroomGain` rose from -8 dB to -3 dB and a four-note chord took it past full scale. *Acid Line* went from 0.9 to 0.8 in the joint retune, because it was the one preset measurably hotter than the default patch — 1.035 at the clipper's input on four notes, dry, which means it *was* engaging the clipper while this document claimed it reached 0.84 (that figure came from the analytic inversion, not from a measurement of the input). Leaving it there would have cost every other preset a decibel of level, since the per-voice constant is global and one preset was setting it.
 
-`Tests/PresetGainStagingTests.cpp`, "nessun preset di fabbrica accende il clipper su un accordo di quattro note", now plays all twelve through the real `collectEngineParams` and measures both states — effects on, as the user finds them, and dry — requiring at least 1 dB of margin under the 0.95 threshold in both. Measured dry: *Init* 0.828 (the hottest, which is as it should be — it is the only patch nobody has trimmed), *Sub Pulse* 0.735, *Reese Wide* 0.707, *Neon Lead* 0.703, *Acid Line* 0.816, *Solid Saw* 0.646, *Wire Pluck* 0.640, *Cold Sweep* 0.656, *Bell Tower* 0.519, *Velvet Keys* 0.362, *Glass Pad* 0.234, *Dust Choir* 0.205. With the effects at factory settings every one of them is the same or lower, by up to 1.4 dB. The test also asserts that no preset is hotter than *Init*: a preset above the default patch is a preset that will set the instrument's headroom for everybody.
+`Tests/PresetGainStagingTests.cpp`, "nessun preset di fabbrica accende il clipper su un accordo di quattro note", now plays all forty-seven through the real `collectEngineParams` and measures both states — effects on, as the user finds them, and dry — requiring at least 1 dB of margin under the 0.95 threshold in both. Measured dry: *Init* 0.828 (the hottest, which is as it should be — it is the only patch nobody has trimmed), *Sub Pulse* 0.735, *Reese Wide* 0.707, *Neon Lead* 0.703, *Acid Line* 0.816, *Solid Saw* 0.646, *Wire Pluck* 0.640, *Cold Sweep* 0.656, *Bell Tower* 0.519, *Velvet Keys* 0.362, *Glass Pad* 0.234, *Dust Choir* 0.205. With the effects at factory settings every one of them is the same or lower, by up to 1.4 dB. The test also asserts that no preset is hotter than *Init*: a preset above the default patch is a preset that will set the instrument's headroom for everybody.
 
 The same default-fallback rule is implemented twice — once here, once in `WebUI/src/juce/fake-backend.ts`'s `loadPreset` — because the web UI needs it without a JUCE host attached. Only the TypeScript side has a test (`WebUI/src/juce/fake-backend.test.ts`): `XerumTests` does not compile `Source/bridge/*`, so the two implementations can drift without either test suite noticing.
+
+
+### Da dove vengono i preset del pack
+
+Trentacinque dei quarantasette preset di fabbrica sono generati dal pack *Retro Synthwave
+Pack 2* con `scripts/import-serum-presets.mjs`, e il file che scrive
+(`Source/parameters/presets.pack.json`) si rigenera per intero a ogni giro: non va modificato a
+mano.
+
+**Dal `.fxp` vengono tre cose sole**: il nome che Serum scrive nell'header FPCh, la categoria
+(dal prefisso del nome file — `BS` → Bass, `LD` → Lead, `PD` → Pad, `KY` → Keys, `PL` → Pluck,
+`SQ` → Seq, `FX`/`DR` → FX, `SUB` → Bass, `INIT` → User) e la wavetable incorporata,
+riconosciuta per sha1 dello stream grezzo con `classifyTable` di
+`import-serum-wavetables.mjs`. **Lo stato Serum non viene letto**: è uno struct opaco di 33 872
+byte, non documentato, di uno strumento con due oscillatori, tre inviluppi, quattro LFO e dieci
+slot FX. Tradurlo sarebbe lossy per costruzione, e non è quel che questo script fa. Questi non
+sono i preset di Serum: sono preset di Xerum col nome e la tavola del pack.
+
+I valori vengono da un modello per categoria (`TEMPLATES`, ricalcato sui dodici scritti a mano)
+più uno scarto deterministico ricavato dal nome (xorshift32 seminato con lo sha1,
+`seededUnits`). Lo scarto serve perché senza di esso tredici preset della stessa categoria con
+la stessa tavola sarebbero identici salvo il nome; è deterministico perché rilanciare
+l'importatore non deve cambiare un preset già spedito.
+
+**Dei 171 file del pack ne restano 35.** Gli altri 136 non portano una tavola fra quelle
+importate: citano per nome tavole di fabbrica Xfer che non abbiamo, e un preset che punta alla
+tavola sbagliata è peggio di nessun preset. I due duplicati noti (`retro-spindizzy`,
+`retro-uridium`) puntano alla tavola davvero spedita.
+
+**Il `level` si scala per la tavola, non solo per la categoria.** Le tavole del pack sono molto
+più calde delle sei AKWF — `retro-racing` ha 4,2 dB di RMS in più di `saws` — e i modelli sono
+tarati sui preset scritti a mano, che quelle tavole non le usano. Senza correzione otto preset
+generati accendevano il soft clipper su un accordo di quattro note, e
+`Tests/PresetGainStagingTests.cpp` li ha fermati. `levelScalesFrom` misura l'RMS di ogni `.xwt`
+al momento dell'import e scala il livello rispetto a `saws`: cambiare una tavola e rilanciare
+l'importatore ritara da solo i preset che la usano. `level`, `drive` e `volume` sono gli unici
+tre valori che lo scarto per nome non tocca mai, per la stessa ragione.
+
+Rilanciare: `node scripts/import-serum-presets.mjs <cartella-fxp>`, poi
+`node scripts/gen-params.mjs`.
+
+**Licenza.** Il pack è di terzi (autore `zak235`): la nota di `Resources/wavetables/CREDITS.md`
+vale ora anche per i nomi dei preset, non solo per le tavole.
 
 ## Roadmap
 

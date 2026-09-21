@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generatePresets } from "./gen-params.mjs";
+import { generatePresets, mergePresets } from "./gen-params.mjs";
 
 const params = {
   params: [
@@ -45,4 +45,21 @@ test("un float non puo' essere una stringa", () => {
 test("la TypeScript generata porta il numero, non il nome", () => {
   const { ts } = generatePresets({ presets: [{ name: "P", cat: "Bass", values: { wtIndex: "saws" } }] }, params);
   assert.match(ts, /"wtIndex":0\.5/);
+});
+
+test("mergePresets mette i preset del pack dopo quelli scritti a mano", () => {
+  const hand = { presets: [{ name: "Init", cat: "User", values: {} }] };
+  const pack = { presets: [{ name: "Uridium 1", cat: "Pad", values: {} }] };
+  assert.deepEqual(mergePresets(hand, pack).presets.map((p) => p.name), ["Init", "Uridium 1"]);
+});
+
+test("mergePresets regge l'assenza del file del pack", () => {
+  const hand = { presets: [{ name: "Init", cat: "User", values: {} }] };
+  assert.deepEqual(mergePresets(hand, null).presets.map((p) => p.name), ["Init"]);
+});
+
+test("mergePresets rifiuta un nome che il pack ruba a un preset scritto a mano", () => {
+  const hand = { presets: [{ name: "Glass Pad", cat: "Pad", values: {} }] };
+  const pack = { presets: [{ name: "Glass Pad", cat: "Pad", values: {} }] };
+  assert.throws(() => mergePresets(hand, pack), /Glass Pad/);
 });

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Genera ParameterTable.h, params.generated.ts, PresetTable.h e presets.generated.ts
-// da Source/parameters/parameters.json e Source/parameters/presets.json.
+// da Source/parameters/parameters.json, Source/parameters/presets.json e, se c'e',
+// Source/parameters/presets.pack.json (generato da scripts/import-serum-presets.mjs).
 // Uso: node scripts/gen-params.mjs   (oppure: cd WebUI && pnpm gen:params)
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -297,6 +298,23 @@ export function generatePresets(presetsJson, paramsJson) {
   return { header, ts };
 }
 
+/**
+ * Unisce i preset scritti a mano (presets.json) e quelli generati dal pack
+ * (presets.pack.json, che `scripts/import-serum-presets.mjs` riscrive per intero). I primi
+ * restano davanti, nell'ordine in cui sono: il menu li mostra in questa sequenza. Un nome
+ * ripetuto fa fallire la generazione invece di lasciare due voci indistinguibili nel menu.
+ */
+export function mergePresets(handJson, packJson) {
+  const hand = handJson.presets;
+  const pack = packJson?.presets ?? [];
+
+  const taken = new Set(hand.map((p) => p.name));
+  for (const p of pack)
+    if (taken.has(p.name)) throw new Error(`il preset "${p.name}" del pack ha lo stesso nome di uno scritto a mano`);
+
+  return { ...handJson, presets: [...hand, ...pack] };
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const json = JSON.parse(readFileSync(resolve(root, "Source/parameters/parameters.json"), "utf8"));
@@ -305,7 +323,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   writeFileSync(resolve(root, "WebUI/src/synth/params.generated.ts"), ts);
   console.log(`gen-params: ${json.params.length} parametri → ParameterTable.h, params.generated.ts`);
 
-  const presetsJson = JSON.parse(readFileSync(resolve(root, "Source/parameters/presets.json"), "utf8"));
+  const handJson = JSON.parse(readFileSync(resolve(root, "Source/parameters/presets.json"), "utf8"));
+  const packPath = resolve(root, "Source/parameters/presets.pack.json");
+  const packJson = existsSync(packPath) ? JSON.parse(readFileSync(packPath, "utf8")) : null;
+  const presetsJson = mergePresets(handJson, packJson);
   const { header: presetHeader, ts: presetTs } = generatePresets(presetsJson, json);
   writeFileSync(resolve(root, "Source/parameters/PresetTable.h"), presetHeader);
   writeFileSync(resolve(root, "WebUI/src/synth/presets.generated.ts"), presetTs);

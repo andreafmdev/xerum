@@ -67,6 +67,13 @@ stanno qui per la build personale; **non possono essere ridistribuite in un Xeru
 senza permesso scritto dell'autore. Se il permesso non arriva, vanno rimosse insieme alle loro
 opzioni in `parameters.json` e alle voci in `kWavetableFiles`.
 
+**Lo stesso vincolo vale per i nomi dei preset.** Dal 2026-09-21
+`Source/parameters/presets.pack.json` contiene trentacinque preset generati da
+`scripts/import-serum-presets.mjs`, che dal pack prendono il nome e la categoria oltre alla
+tavola (i valori no: vengono da un modello per categoria — vedi `docs/architecture.md`, "Da
+dove vengono i preset del pack"). Se il permesso non arriva, quel file va cancellato insieme
+alle tavole: `gen-params.mjs` regge la sua assenza e rigenera i dodici preset scritti a mano.
+
 | tavola | frame sorgente | origine |
 |---|---|---|
 | `retro-racing` | 256 frame | 13 preset, es. `BS-RacingDestructionKit5` |

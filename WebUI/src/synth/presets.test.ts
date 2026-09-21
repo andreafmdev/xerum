@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PRESETS, CATEGORIES, filterPresets, presetWave, step } from "./presets";
+import { PRESETS, CATEGORIES, DESCRIPTIONS, filterPresets, presetWave, step } from "./presets";
 import { PARAM_SPECS, type ParamId } from "./params.generated";
 import { WAVETABLES } from "./wavetables.generated";
 
@@ -29,6 +29,15 @@ describe("presets", () => {
         expect(value).toBeGreaterThanOrEqual(0);
         expect(value).toBeLessThanOrEqual(1);
       }
+    }
+  });
+
+  it("ogni categoria usata da un preset e' filtrabile e ha una descrizione", () => {
+    // Un preset in una categoria che non sta in CATEGORIES non e' raggiungibile dal menu:
+    // resta solo sotto "All". I preset generati dal pack ne hanno portata una nuova (Seq).
+    for (const cat of new Set(PRESETS.map((p) => p.cat))) {
+      expect(CATEGORIES, `categoria non filtrabile: ${cat}`).toContain(cat);
+      expect(DESCRIPTIONS[cat], `categoria senza descrizione: ${cat}`).toBeTruthy();
     }
   });
 
